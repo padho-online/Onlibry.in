@@ -1,23 +1,42 @@
 @import "tailwindcss";
 
-/* Dark mode custom properties */
+/* =========================
+   THEME VARIABLES
+========================= */
 :root {
   --background: #ffffff;
   --foreground: #171717;
 }
 
+/* Dark mode */
 .dark {
   --background: #0a0a0a;
   --foreground: #ededed;
 }
 
-body {
-  background-color: var(--background);
-  color: var(--foreground);
-  transition: background-color 0.3s ease, color 0.3s ease;
+/* =========================
+   BASE LAYER (IMPORTANT)
+========================= */
+@layer base {
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
+
+  /* Force consistent text inheritance */
+  * {
+    color: inherit;
+  }
+
+  a {
+    color: inherit;
+  }
 }
 
-/* Custom scrollbar */
+/* =========================
+   SCROLLBAR (LIGHT MODE)
+========================= */
 ::-webkit-scrollbar {
   width: 8px;
 }
@@ -35,8 +54,11 @@ body {
   background: #555;
 }
 
+/* =========================
+   SCROLLBAR (DARK MODE)
+========================= */
 .dark ::-webkit-scrollbar-track {
-  background: #2a2a2a;
+  background: #1e1e1e;
 }
 
 .dark ::-webkit-scrollbar-thumb {
@@ -45,4 +67,28 @@ body {
 
 .dark ::-webkit-scrollbar-thumb:hover {
   background: #777;
+}
+
+/* =========================
+   OPTIONAL: SELECTION UX
+========================= */
+::selection {
+  background: #2563eb;
+  color: white;
+}
+
+.text-4xl{
+color: orange;
+-webkit-text-stroke-color:orange 2px ;
+
+}
+
+.py-16{
+
+  color: #ffffff;
+  background-color: #1e1e1e;
+}
+
+h1{
+  color: orange;
 }
