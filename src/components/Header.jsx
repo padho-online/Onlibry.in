@@ -27,7 +27,7 @@ function Header() {
           {/* Logo */}
           <Link to="/" className="flex items-center space-x-2">
             <img 
-              src="https://onlibry.in/logo transparent.png" 
+              src="https://onlibry.in/assests/logo transparent.png" 
               alt="Onlibry" 
               className="h-10 w-auto"
             />
