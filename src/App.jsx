@@ -3,10 +3,11 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider } from './contexts/AuthContext';
 import MainLayout from './layouts/MainLayout';
-import ProtectedRoute from './components/ProtectedRoute';
 import AdminGuard from './components/AdminGuard';
 
-// Pages
+// =====================
+// PUBLIC PAGES
+// =====================
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import PricingPage from './pages/PricingPage';
@@ -17,9 +18,22 @@ import ExamPage from './pages/ExamPage';
 import ExamResultsPage from './pages/ExamResultsPage';
 import NotFoundPage from './pages/NotFoundPage';
 
-// Admin Pages
+// =====================
+// VIEWER PAGE (NEW)
+// =====================
+import ViewerPage from './pages/ViewerPage';
+
+// =====================
+// ADMIN PAGES
+// =====================
 import AdminDashboard from './pages/admin/AdminDashboard';
 import PaymentLogs from './pages/admin/PaymentLogs';
+
+// NEW ADMIN MODULES
+import UsersManagement from './pages/admin/UsersManagement';
+import SubscriptionsManagement from './pages/admin/SubscriptionsManagement';
+import PlansEditor from './pages/admin/PlansEditor';
+import FilesManager from './pages/admin/FilesManager';
 
 function App() {
   return (
@@ -28,7 +42,10 @@ function App() {
         <Router>
           <MainLayout>
             <Routes>
-              {/* Public Routes */}
+
+              {/* ===================== */}
+              {/* PUBLIC ROUTES */}
+              {/* ===================== */}
               <Route path="/" element={<HomePage />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/pricing" element={<PricingPage />} />
@@ -37,31 +54,42 @@ function App() {
               <Route path="/mock-tests" element={<MockTestsPage />} />
               <Route path="/mock-test/:examName" element={<ExamPage />} />
               <Route path="/mock-test-results" element={<ExamResultsPage />} />
-              
-              {/* Admin Routes */}
-              <Route path="/admin" element={
-                <AdminGuard>
-                  <AdminDashboard />
-                </AdminGuard>
-              }>
+
+              {/* ===================== */}
+              {/* 🔥 VIEWER ROUTES (NEW STEP 4) */}
+              {/* ===================== */}
+              <Route path="/viewer/:fileId" element={<ViewerPage />} />
+              <Route path="/viewer" element={<ViewerPage />} />
+
+              {/* ===================== */}
+              {/* ADMIN ROUTES */}
+              {/* ===================== */}
+              <Route
+                path="/admin"
+                element={
+                  <AdminGuard>
+                    <AdminDashboard />
+                  </AdminGuard>
+                }
+              >
+                {/* default admin page */}
                 <Route index element={<PaymentLogs />} />
+
+                {/* logs */}
                 <Route path="logs" element={<PaymentLogs />} />
-                <Route path="users" element={
-                  <div className="text-center py-20 text-gray-500">Users Management (Coming Soon)</div>
-                } />
-                <Route path="subscriptions" element={
-                  <div className="text-center py-20 text-gray-500">Subscriptions Management (Coming Soon)</div>
-                } />
-                <Route path="plans" element={
-                  <div className="text-center py-20 text-gray-500">Plans Editor (Coming Soon)</div>
-                } />
-                <Route path="files" element={
-                  <div className="text-center py-20 text-gray-500">Files Manager (Coming Soon)</div>
-                } />
+
+                {/* modules */}
+                <Route path="users" element={<UsersManagement />} />
+                <Route path="subscriptions" element={<SubscriptionsManagement />} />
+                <Route path="plans" element={<PlansEditor />} />
+                <Route path="files" element={<FilesManager />} />
               </Route>
-              
-              {/* 404 Route */}
+
+              {/* ===================== */}
+              {/* 404 */}
+              {/* ===================== */}
               <Route path="*" element={<NotFoundPage />} />
+
             </Routes>
           </MainLayout>
         </Router>
