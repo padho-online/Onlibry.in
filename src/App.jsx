@@ -15,6 +15,7 @@ import FoldersPage from './pages/FoldersPage';
 import MockTestsPage from './pages/MockTestsPage';
 import ExamPage from './pages/ExamPage';
 import ExamResultsPage from './pages/ExamResultsPage';
+import NotFoundPage from './pages/NotFoundPage';
 
 // Admin Pages
 import AdminDashboard from './pages/admin/AdminDashboard';
@@ -72,6 +73,7 @@ function App() {
               <Route path="/folders" element={<FoldersPage />} />
               <Route path="/mock-tests" element={<MockTestsPage />} />
               <Route path="/mock-test/:examName" element={<ExamPage />} />
+              <Route path="*" element={<NotFoundPage />} />
               <Route
                 path="/mock-test-results"
                 element={<ExamResultsPage />}
