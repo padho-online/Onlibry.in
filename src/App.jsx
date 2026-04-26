@@ -6,7 +6,7 @@ import MainLayout from './layouts/MainLayout';
 import ProtectedRoute from './components/ProtectedRoute';
 import AdminGuard from './components/AdminGuard';
 
-// Public Pages
+// Pages
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import PricingPage from './pages/PricingPage';
@@ -20,43 +20,6 @@ import NotFoundPage from './pages/NotFoundPage';
 // Admin Pages
 import AdminDashboard from './pages/admin/AdminDashboard';
 import PaymentLogs from './pages/admin/PaymentLogs';
-
-// Temporary Pages
-const QuizPage = () => (
-  <div className="text-center py-20">
-    <h2 className="text-2xl">Quiz (Coming Soon)</h2>
-  </div>
-);
-
-const DashboardPage = () => (
-  <div className="text-center py-20">
-    <h2 className="text-2xl">Dashboard (Coming Soon)</h2>
-  </div>
-);
-
-const UsersManagementPage = () => (
-  <div className="text-center py-20">
-    <h2 className="text-2xl">Users Management (Coming Soon)</h2>
-  </div>
-);
-
-const SubscriptionsPage = () => (
-  <div className="text-center py-20">
-    <h2 className="text-2xl">Subscriptions Management (Coming Soon)</h2>
-  </div>
-);
-
-const PlansEditorPage = () => (
-  <div className="text-center py-20">
-    <h2 className="text-2xl">Plans Editor (Coming Soon)</h2>
-  </div>
-);
-
-const FilesManagerPage = () => (
-  <div className="text-center py-20">
-    <h2 className="text-2xl">Files Manager (Coming Soon)</h2>
-  </div>
-);
 
 function App() {
   return (
@@ -73,42 +36,32 @@ function App() {
               <Route path="/folders" element={<FoldersPage />} />
               <Route path="/mock-tests" element={<MockTestsPage />} />
               <Route path="/mock-test/:examName" element={<ExamPage />} />
-              <Route path="*" element={<NotFoundPage />} />
-              <Route
-                path="/mock-test-results"
-                element={<ExamResultsPage />}
-              />
-              <Route path="/quiz" element={<QuizPage />} />
-
-              {/* Protected User Route */}
-              <Route
-                path="/dashboard"
-                element={
-                  <ProtectedRoute>
-                    <DashboardPage />
-                  </ProtectedRoute>
-                }
-              />
-
+              <Route path="/mock-test-results" element={<ExamResultsPage />} />
+              
               {/* Admin Routes */}
-              <Route
-                path="/admin"
-                element={
-                  <AdminGuard>
-                    <AdminDashboard />
-                  </AdminGuard>
-                }
-              >
+              <Route path="/admin" element={
+                <AdminGuard>
+                  <AdminDashboard />
+                </AdminGuard>
+              }>
                 <Route index element={<PaymentLogs />} />
                 <Route path="logs" element={<PaymentLogs />} />
-                <Route path="users" element={<UsersManagementPage />} />
-                <Route
-                  path="subscriptions"
-                  element={<SubscriptionsPage />}
-                />
-                <Route path="plans" element={<PlansEditorPage />} />
-                <Route path="files" element={<FilesManagerPage />} />
+                <Route path="users" element={
+                  <div className="text-center py-20 text-gray-500">Users Management (Coming Soon)</div>
+                } />
+                <Route path="subscriptions" element={
+                  <div className="text-center py-20 text-gray-500">Subscriptions Management (Coming Soon)</div>
+                } />
+                <Route path="plans" element={
+                  <div className="text-center py-20 text-gray-500">Plans Editor (Coming Soon)</div>
+                } />
+                <Route path="files" element={
+                  <div className="text-center py-20 text-gray-500">Files Manager (Coming Soon)</div>
+                } />
               </Route>
+              
+              {/* 404 Route */}
+              <Route path="*" element={<NotFoundPage />} />
             </Routes>
           </MainLayout>
         </Router>
