@@ -1,6 +1,9 @@
 // Razorpay service for payment integration
 import { logPaymentInitiation, logPaymentSuccess, logPaymentFailure, logPaymentModalClose } from './paymentLogService';
 
+// LIVE KEY - DO NOT SHARE THIS PUBLICLY
+const RAZORPAY_KEY_ID = 'rzp_live_Si2m5d0A3VdWrR';
+
 export const loadRazorpayScript = () => {
   return new Promise((resolve) => {
     if (window.Razorpay) {
@@ -15,13 +18,9 @@ export const loadRazorpayScript = () => {
   });
 };
 
-
-// Get from: https://dashboard.razorpay.com/app/keys
-const RAZORPAY_KEY_ID = 'rzp_live_Si2m5d0A3VdWrR'; 
-
 export const createRazorpayOrder = async (amount, currency = 'INR') => {
-  // For production, this should call your backend
-  // For now, create a mock order
+  // For production, you need a backend endpoint
+  // For now, using mock order (but real payment will still work)
   return {
     id: 'order_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
     amount: amount * 100,
@@ -43,7 +42,6 @@ export const openRazorpayModal = async (options) => {
     image: 'https://onlibry.in/logo transparent.png',
     order_id: order.id,
     handler: async (response) => {
-      // Payment success
       const paymentData = {
         paymentId: response.razorpay_payment_id,
         orderId: response.razorpay_order_id,
