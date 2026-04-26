@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
+import logo from '../assets/logo.png';
 
 function Header() {
   const { user, logout, isSubscribed, subscriptionType } = useAuth();
@@ -27,7 +28,7 @@ function Header() {
           {/* Logo */}
           <Link to="/" className="flex items-center space-x-2">
             <img 
-              src="./assests/logo.png" 
+              src={logo} 
               alt="Onlibry" 
               className="h-10 w-auto"
             />
