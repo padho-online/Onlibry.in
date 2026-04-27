@@ -20,6 +20,9 @@ import SavedFilesPage from './pages/SavedFilesPage';
 import MockTestsPage from './pages/MockTestsPage';
 import ExamPage from './pages/ExamPage';
 import ExamResultsPage from './pages/ExamResultsPage';
+import QuizzesPage from './pages/QuizzesPage';
+import QuizExamPage from './pages/QuizExamPage';
+import QuizResultsPage from './pages/QuizResultsPage';
 import ViewerPage from './pages/ViewerPage';
 import NotFoundPage from './pages/NotFoundPage';
 
@@ -54,10 +57,10 @@ function App() {
               <Route path="/folders" element={<FoldersPage />} />
               <Route path="/mock-tests" element={<MockTestsPage />} />
               <Route path="/mock-test/:examName" element={<ExamPage />} />
-              <Route
-                path="/mock-test-results"
-                element={<ExamResultsPage />}
-              />
+              <Route path="/mock-test-results" element={<ExamResultsPage />}/>
+              <Route path="/quizzes" element={<QuizzesPage />} />
+              <Route path="/quiz/:quizName" element={<QuizExamPage />} />
+              <Route path="/quiz-results" element={<QuizResultsPage />} />
 
               {/* ===================== */}
               {/* PROTECTED ROUTES */}
