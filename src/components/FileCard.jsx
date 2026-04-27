@@ -25,35 +25,42 @@ function FileCard({ file, onFileUpdate }) {
 
     checkStatus();
   }, [file.id, user]);
+  
 
   // =========================
-  // 🔥 UPDATED VIEW HANDLER
-  // =========================
-  const handleViewFile = () => {
-    if (!user) {
-      if (!checkViewLimit()) {
-        navigate('/login', {
-          state: { from: { pathname: '/files' } }
-        });
-        return;
-      }
-    }
-
-    if (!canAccess) {
-      navigate('/pricing', {
-        state: {
-          from: {
-            pathname: '/files',
-            fileId: file.id
-          }
-        }
+// UPDATED VIEW HANDLER with logging
+// =========================
+const handleViewFile = () => {
+  // Log file view attempt from FileCard
+  console.log('📊 FileCard: Viewing file:', file.id, file.name);
+  
+  // You can also import and call logFileView here if needed
+  // But main log will happen in FileViewer component
+  
+  if (!user) {
+    if (!checkViewLimit()) {
+      navigate('/login', {
+        state: { from: { pathname: '/files' } }
       });
       return;
     }
+  }
 
-    // ✅ NEW: React Router navigation (NO window.open)
-    navigate(`/viewer/${file.id}`);
-  };
+  if (!canAccess) {
+    navigate('/pricing', {
+      state: {
+        from: {
+          pathname: '/files',
+          fileId: file.id
+        }
+      }
+    });
+    return;
+  }
+
+  // Navigate to viewer
+  navigate(`/viewer/${file.id}`);
+};
 
   const handleSaveToggle = async (e) => {
     e.stopPropagation();

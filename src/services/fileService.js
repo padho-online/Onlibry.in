@@ -13,7 +13,7 @@ import {
   arrayUnion,
   arrayRemove
 } from 'firebase/firestore';
-import { logSavedFile } from './loggerService';
+import { logSavedFileToSheet } from './firebaseLogger';
 
 // Get all files (with pagination)
 export async function getAllFiles(pageParam = null, pageSize = 20) {
@@ -62,8 +62,7 @@ export async function getAllFiles(pageParam = null, pageSize = 20) {
 // Search files by relevance
 export async function searchFiles(searchQuery) {
   const lowerQuery = searchQuery.toLowerCase();
-  const isExactSearch =
-    lowerQuery.startsWith('exact:');
+  const isExactSearch = lowerQuery.startsWith('exact:');
 
   const rawQuery = isExactSearch
     ? searchQuery.slice(6).trim()
@@ -82,10 +81,7 @@ export async function searchFiles(searchQuery) {
       where('showOnWebsite', '==', true)
     );
 
-    const querySnapshot = await getDocs(
-      filesQuery
-    );
-
+    const querySnapshot = await getDocs(filesQuery);
     const files = [];
 
     querySnapshot.forEach((doc) => {
@@ -104,26 +100,22 @@ export async function searchFiles(searchQuery) {
         .toLowerCase();
 
       if (isExactSearch) {
-        const allTokensPresent =
-          queryTokens.every((token) =>
-            searchableText.includes(token)
-          );
+        const allTokensPresent = queryTokens.every((token) =>
+          searchableText.includes(token)
+        );
 
         if (allTokensPresent) {
           files.push({
             id: doc.id,
             ...fileData,
-            _relevanceScore:
-              queryTokens.length
+            _relevanceScore: queryTokens.length
           });
         }
       } else {
         let matchCount = 0;
 
         queryTokens.forEach((token) => {
-          if (
-            searchableText.includes(token)
-          ) {
+          if (searchableText.includes(token)) {
             matchCount += 1;
           }
         });
@@ -138,18 +130,11 @@ export async function searchFiles(searchQuery) {
       }
     });
 
-    files.sort(
-      (a, b) =>
-        b._relevanceScore -
-        a._relevanceScore
-    );
+    files.sort((a, b) => b._relevanceScore - a._relevanceScore);
 
     return files;
   } catch (error) {
-    console.error(
-      'Error searching files:',
-      error
-    );
+    console.error('Error searching files:', error);
     return [];
   }
 }
@@ -157,12 +142,7 @@ export async function searchFiles(searchQuery) {
 // Get file by ID
 export async function getFileById(fileId) {
   try {
-    const docRef = doc(
-      db,
-      'files',
-      fileId
-    );
-
+    const docRef = doc(db, 'files', fileId);
     const docSnap = await getDoc(docRef);
 
     if (docSnap.exists()) {
@@ -174,10 +154,7 @@ export async function getFileById(fileId) {
 
     return null;
   } catch (error) {
-    console.error(
-      'Error getting file:',
-      error
-    );
+    console.error('Error getting file:', error);
     return null;
   }
 }
@@ -186,43 +163,44 @@ export async function getFileById(fileId) {
 export async function saveFile(fileId) {
   const user = auth.currentUser;
 
+  console.log('📌 saveFile called - User:', user?.email || 'Not logged in');
+
   if (!user) {
-    throw new Error(
-      'Please login to save files'
-    );
+    console.log('❌ User not logged in, cannot save');
+    throw new Error('Please login to save files');
   }
 
   try {
-    const userRef = doc(
-      db,
-      'users',
-      user.uid
-    );
+    const userRef = doc(db, 'users', user.uid);
 
     await updateDoc(userRef, {
       savedFiles: arrayUnion(fileId)
     });
 
-    // ✅ Log saved file
-    const fileDoc = await getDoc(
-      doc(db, 'files', fileId)
-    );
-
-    if (fileDoc.exists()) {
-      logSavedFile(
+    // Get file name for logging
+    const fileDoc = await getDoc(doc(db, 'files', fileId));
+    const fileName = fileDoc.data()?.name || 'Unknown';
+    
+    console.log('📌 FILE SAVED in Firebase:', fileName);
+    
+    // ✅ Send to Google Sheet
+    try {
+      await logSavedFileToSheet(
         fileId,
-        fileDoc.data()?.name,
-        'save'
+        fileName,
+        'save',
+        user.uid,
+        user.email,
+        user.displayName || user.email?.split('@')[0]
       );
+      console.log('✅ Sheet logging completed for SAVE');
+    } catch (sheetError) {
+      console.error('❌ Sheet logging failed but file was saved:', sheetError);
     }
 
     return { success: true };
   } catch (error) {
-    console.error(
-      'Error saving file:',
-      error
-    );
-
+    console.error('Error saving file:', error);
     return {
       success: false,
       error: error.message
@@ -234,43 +212,44 @@ export async function saveFile(fileId) {
 export async function unsaveFile(fileId) {
   const user = auth.currentUser;
 
+  console.log('📌 unsaveFile called - User:', user?.email || 'Not logged in');
+
   if (!user) {
-    throw new Error(
-      'Please login to unsave files'
-    );
+    console.log('❌ User not logged in, cannot unsave');
+    throw new Error('Please login to unsave files');
   }
 
   try {
-    const userRef = doc(
-      db,
-      'users',
-      user.uid
-    );
+    const userRef = doc(db, 'users', user.uid);
 
     await updateDoc(userRef, {
       savedFiles: arrayRemove(fileId)
     });
 
-    // ✅ Log unsaved file
-    const fileDoc = await getDoc(
-      doc(db, 'files', fileId)
-    );
-
-    if (fileDoc.exists()) {
-      logSavedFile(
+    // Get file name for logging
+    const fileDoc = await getDoc(doc(db, 'files', fileId));
+    const fileName = fileDoc.data()?.name || 'Unknown';
+    
+    console.log('📌 FILE UNSAVED from Firebase:', fileName);
+    
+    // ✅ Send to Google Sheet
+    try {
+      await logSavedFileToSheet(
         fileId,
-        fileDoc.data()?.name,
-        'unsave'
+        fileName,
+        'unsave',
+        user.uid,
+        user.email,
+        user.displayName || user.email?.split('@')[0]
       );
+      console.log('✅ Sheet logging completed for UNSAVE');
+    } catch (sheetError) {
+      console.error('❌ Sheet logging failed but file was unsaved:', sheetError);
     }
 
     return { success: true };
   } catch (error) {
-    console.error(
-      'Error unsaving file:',
-      error
-    );
-
+    console.error('Error unsaving file:', error);
     return {
       success: false,
       error: error.message
@@ -285,29 +264,17 @@ export async function isFileSaved(fileId) {
   if (!user) return false;
 
   try {
-    const userRef = doc(
-      db,
-      'users',
-      user.uid
-    );
-
-    const userDoc = await getDoc(
-      userRef
-    );
+    const userRef = doc(db, 'users', user.uid);
+    const userDoc = await getDoc(userRef);
 
     if (userDoc.exists()) {
-      const savedFiles =
-        userDoc.data().savedFiles || [];
-
+      const savedFiles = userDoc.data().savedFiles || [];
       return savedFiles.includes(fileId);
     }
 
     return false;
   } catch (error) {
-    console.error(
-      'Error checking saved file:',
-      error
-    );
+    console.error('Error checking saved file:', error);
     return false;
   }
 }
@@ -319,45 +286,23 @@ export async function canAccessFile(fileId) {
   if (!user) return false;
 
   try {
-    const userRef = doc(
-      db,
-      'users',
-      user.uid
-    );
+    const userRef = doc(db, 'users', user.uid);
+    const userDoc = await getDoc(userRef);
 
-    const userDoc = await getDoc(
-      userRef
-    );
-
-    const isSubscribed =
-      userDoc.data()?.subscription
-        ?.isActive || false;
-
+    const isSubscribed = userDoc.data()?.subscription?.isActive || false;
     if (isSubscribed) return true;
 
-    const purchasedFiles =
-      userDoc.data()?.purchasedFiles ||
-      [];
-
-    if (
-      purchasedFiles.includes(fileId)
-    ) {
+    const purchasedFiles = userDoc.data()?.purchasedFiles || [];
+    if (purchasedFiles.includes(fileId)) {
       return true;
     }
 
-    const fileDoc = await getDoc(
-      doc(db, 'files', fileId)
-    );
-
-    const isFree =
-      fileDoc.data()?.isFree !== false;
+    const fileDoc = await getDoc(doc(db, 'files', fileId));
+    const isFree = fileDoc.data()?.isFree !== false;
 
     return isFree;
   } catch (error) {
-    console.error(
-      'Error checking file access:',
-      error
-    );
+    console.error('Error checking file access:', error);
     return false;
   }
 }

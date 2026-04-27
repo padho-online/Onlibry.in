@@ -1,5 +1,5 @@
-// Google Sheets Web App URL (Replace with your deployed URL)
-const LOGGER_API_URL = 'https://script.google.com/macros/s/AKfycbwjpb6PYaZ3HOwiFVF4nU-QUexsfaf5NHd4tfrAM4dJ_kfSaZHNEsygJ6EF16g8LK9qZw/exec';
+// Google Sheets Web App URL
+const LOGGER_API_URL = 'https://script.google.com/macros/s/AKfycbzLNJnj4MSuREQ9K_ZloTip7D_UuC1SQAYg1bYXz5O1m2v_lJnn_1F7ydsqWlr96R12og/exec';
 
 // Get client IP address
 async function getClientIP() {
@@ -22,22 +22,40 @@ function getDeviceId() {
   return deviceId;
 }
 
+// ✅ Get current user from Firebase auth directly via callback
+let currentUserCallback = null;
+
+export function setCurrentUserGetter(callback) {
+  currentUserCallback = callback;
+}
+
+async function getCurrentUser() {
+  if (currentUserCallback) {
+    return currentUserCallback();
+  }
+  return null;
+}
+
 // Send log to Google Sheets
 async function sendLog(action, data) {
   try {
     const ipAddress = await getClientIP();
     const deviceId = getDeviceId();
+    const user = await getCurrentUser();
     
     const payload = {
       action: action,
       ...data,
+      userId: user?.uid || null,
+      userEmail: user?.email || null,
+      userDisplayName: user?.displayName || null,
       ipAddress: ipAddress,
       deviceId: deviceId,
       userAgent: navigator.userAgent,
       timestamp: new Date().toISOString()
     };
     
-    // Use sendBeacon for page unload events, fetch for others
+    // Use sendBeacon for page unload events
     if (action === 'pageView' && document.visibilityState === 'hidden') {
       navigator.sendBeacon(LOGGER_API_URL, JSON.stringify(payload));
     } else {
@@ -49,7 +67,7 @@ async function sendLog(action, data) {
       });
     }
     
-    console.log(`Logged: ${action}`);
+    console.log(`✅ Logged: ${action}`, payload.userEmail || 'guest');
   } catch (error) {
     console.error('Logging error:', error);
   }
@@ -57,51 +75,47 @@ async function sendLog(action, data) {
 
 // 1. Log Page View
 export function logPageView(pageUrl, pageTitle) {
-  const user = JSON.parse(localStorage.getItem('user') || 'null');
   sendLog('pageView', {
-    userId: user?.uid || null,
-    userEmail: user?.email || null,
     pageUrl: pageUrl,
     pageTitle: pageTitle,
     referrer: document.referrer || ''
   });
 }
 
-// 2. Log File View
-export function logFileView(fileId, fileName, isPremium, hasAccess) {
-  const user = JSON.parse(localStorage.getItem('user') || 'null');
+// 2. Log File View (with duration tracking) - SINGLE VERSION
+export function logFileView(fileId, fileName, isPremium, hasAccess, durationSeconds = 0, status = 'completed') {
+  console.log('📊 logFileView called:', { fileId, fileName, isPremium, hasAccess, durationSeconds, status });
   sendLog('fileView', {
-    userId: user?.uid || null,
-    userEmail: user?.email || null,
     fileId: fileId,
     fileName: fileName,
     fileType: fileName?.split('.').pop() || 'unknown',
     isPremium: isPremium,
-    hasAccess: hasAccess
+    hasAccess: hasAccess,
+    durationSeconds: durationSeconds,
+    viewStatus: status
   });
 }
 
-// 3. Log User Login (Logged in users details)
+// 3. Log User Login (Called from AuthContext)
 export function logUserLogin(user) {
-  if (!user) return;
-  
-  // Get subscription status from localStorage or check
-  const isSubscribed = localStorage.getItem('isSubscribed') === 'true';
+  if (!user) {
+    console.log('⚠️ logUserLogin called with no user');
+    return;
+  }
   
   sendLog('userLogin', {
     userId: user.uid,
     userEmail: user.email,
     displayName: user.displayName || user.email?.split('@')[0],
-    isSubscribed: isSubscribed
+    emailVerified: user.emailVerified
   });
 }
 
-// 4. Log Saved File Action
-export function logSavedFile(fileId, fileName, action) {
-  const user = JSON.parse(localStorage.getItem('user') || 'null');
-  sendLog('savedFile', {
-    userId: user?.uid || null,
-    userEmail: user?.email || null,
+// 4. Log Saved File Action (with user info)
+export async function logSavedFile(fileId, fileName, action, userId = null, userEmail = null) {
+  console.log(`📌 Saved File Log: ${action} - ${fileName}`);
+  
+  await sendLog('savedFile', {
     fileId: fileId,
     fileName: fileName,
     action: action // 'save' or 'unsave'
@@ -110,10 +124,7 @@ export function logSavedFile(fileId, fileName, action) {
 
 // 5. Log Search Query
 export function logSearch(searchQuery, resultsCount, isExactSearch = false) {
-  const user = JSON.parse(localStorage.getItem('user') || 'null');
   sendLog('searchLog', {
-    userId: user?.uid || null,
-    userEmail: user?.email || null,
     searchQuery: searchQuery,
     resultsCount: resultsCount,
     isExactSearch: isExactSearch
@@ -122,12 +133,9 @@ export function logSearch(searchQuery, resultsCount, isExactSearch = false) {
 
 // 6. Log Mock Test Result
 export function logMockTestResult(resultData) {
-  const user = JSON.parse(localStorage.getItem('user') || 'null');
   const percentage = ((resultData.correct / resultData.totalQuestions) * 100).toFixed(2);
   
   sendLog('mockTestResult', {
-    userId: user?.uid || null,
-    userEmail: user?.email || null,
     testName: resultData.testName,
     totalQuestions: resultData.totalQuestions,
     correct: resultData.correct,
@@ -141,12 +149,9 @@ export function logMockTestResult(resultData) {
 
 // 7. Log Quiz Result
 export function logQuizResult(resultData) {
-  const user = JSON.parse(localStorage.getItem('user') || 'null');
   const percentage = ((resultData.correct / resultData.totalQuestions) * 100).toFixed(2);
   
   sendLog('quizResult', {
-    userId: user?.uid || null,
-    userEmail: user?.email || null,
     quizName: resultData.quizName,
     totalQuestions: resultData.totalQuestions,
     correct: resultData.correct,
@@ -160,10 +165,7 @@ export function logQuizResult(resultData) {
 
 // 8. Log Payment
 export function logPayment(event, plan, amount, status, paymentId = null, orderId = null, error = null) {
-  const user = JSON.parse(localStorage.getItem('user') || 'null');
   sendLog('paymentLog', {
-    userId: user?.uid || null,
-    userEmail: user?.email || null,
     event: event,
     plan: plan,
     amount: amount,
@@ -177,9 +179,11 @@ export function logPayment(event, plan, amount, status, paymentId = null, orderI
 // Initialize page view logging
 export function initPageViewLogger() {
   // Log initial page view
-  logPageView(window.location.href, document.title);
+  setTimeout(() => {
+    logPageView(window.location.href, document.title);
+  }, 100);
   
-  // Log on page visibility change (when user leaves)
+  // Log on page visibility change
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
       logPageView(window.location.href, document.title);

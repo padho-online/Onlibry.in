@@ -17,7 +17,7 @@ import {
   setDoc,
   serverTimestamp,
 } from 'firebase/firestore';
-import { logUserLogin } from '../services/loggerService';
+import { logUserLogin, setCurrentUserGetter } from '../services/loggerService';
 
 const AuthContext = createContext();
 
@@ -201,48 +201,48 @@ export function AuthProvider({ children }) {
       };
     }
   };
-
-  // =========================
-  // AUTH STATE LISTENER
-  // =========================
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(
-      auth,
-      async (currentUser) => {
-        setUser(currentUser);
-
-        if (currentUser) {
-          // ✅ Log user login
-          logUserLogin(currentUser);
-
-          const userDoc = await getDoc(
-            doc(db, 'users', currentUser.uid)
-          );
-
-          if (userDoc.exists()) {
-            const userData = userDoc.data();
-            setSavedFiles(
-              userData.savedFiles || []
-            );
-          } else {
-            setSavedFiles([]);
-          }
-
-          await checkSubscription(
-            currentUser.uid
-          );
+  
+// =========================
+// AUTH STATE LISTENER
+// =========================
+useEffect(() => {
+  // ✅ Register current user getter for logger service
+  setCurrentUserGetter(() => auth.currentUser);
+  
+  const unsubscribe = onAuthStateChanged(
+    auth,
+    async (currentUser) => {
+      setUser(currentUser);
+      
+      if (currentUser) {
+        // ✅ Log user login with proper user object
+        console.log('✅ Logging user login for:', currentUser.email);
+        await logUserLogin(currentUser);
+        
+        const userDoc = await getDoc(
+          doc(db, 'users', currentUser.uid)
+        );
+        
+        if (userDoc.exists()) {
+          const userData = userDoc.data();
+          setSavedFiles(userData.savedFiles || []);
         } else {
-          setIsSubscribed(false);
-          setSubscriptionType(null);
           setSavedFiles([]);
         }
-
-        setLoading(false);
+        
+        await checkSubscription(currentUser.uid);
+      } else {
+        setIsSubscribed(false);
+        setSubscriptionType(null);
+        setSavedFiles([]);
       }
-    );
-
-    return unsubscribe;
-  }, []);
+      
+      setLoading(false);
+    }
+  );
+  
+  return unsubscribe;
+}, []);
 
   return (
     <AuthContext.Provider

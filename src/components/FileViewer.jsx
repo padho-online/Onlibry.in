@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { getFileById } from '../services/fileService';
 import { useAuth } from '../contexts/AuthContext';
 import { canAccessFile } from '../services/fileService';
+import { logFileView } from '../services/loggerService';
 
 function FileViewer() {
   const { fileId } = useParams();
@@ -14,6 +15,13 @@ function FileViewer() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [canView, setCanView] = useState(false);
+  
+  // Time tracking states
+  const [viewStartTime, setViewStartTime] = useState(null);
+  const [viewDuration, setViewDuration] = useState(0);
+  const [isViewerVisible, setIsViewerVisible] = useState(true);
+  const [viewLogged, setViewLogged] = useState(false);
+  const durationIntervalRef = useRef(null);
 
   // Get fileId from URL params or query string
   const actualFileId = fileId || searchParams.get('fileId');
@@ -26,6 +34,112 @@ function FileViewer() {
       setLoading(false);
     }
   }, [actualFileId]);
+
+  // Start time tracking when file is loaded and viewable
+  useEffect(() => {
+    if (!loading && canView && file && !viewLogged) {
+      setViewLogged(true);
+      const startTime = Date.now();
+      setViewStartTime(startTime);
+      
+      console.log('⏱️ File view started at:', new Date(startTime).toLocaleTimeString());
+      
+      logFileView(
+        actualFileId,
+        file?.name || 'Unknown',
+        file?.isPremium || false,
+        true,
+        0,
+        'started'
+      );
+      
+      durationIntervalRef.current = setInterval(() => {
+        if (isViewerVisible && !loading) {
+          const currentDuration = Math.floor((Date.now() - startTime) / 1000);
+          setViewDuration(currentDuration);
+          
+          if (currentDuration > 0 && currentDuration % 30 === 0) {
+            console.log(`⏱️ User has viewed for ${currentDuration} seconds`);
+            logFileView(
+              actualFileId,
+              file?.name || 'Unknown',
+              file?.isPremium || false,
+              true,
+              currentDuration,
+              'in_progress'
+            );
+          }
+        }
+      }, 1000);
+      
+      return () => {
+        if (durationIntervalRef.current) {
+          clearInterval(durationIntervalRef.current);
+        }
+      };
+    }
+  }, [loading, canView, file, isViewerVisible]);
+
+  // Track page visibility (tab switch)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      const isVisible = document.visibilityState === 'visible';
+      setIsViewerVisible(isVisible);
+      
+      if (isVisible && viewStartTime && !loading) {
+        const elapsed = Math.floor((Date.now() - viewStartTime) / 1000);
+        console.log(`👁️ Tab visible again, viewed ${elapsed} seconds so far`);
+      } else if (!isVisible && viewStartTime) {
+        console.log('👁️ Tab hidden, pausing duration tracking');
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [viewStartTime, loading]);
+
+  // Log final duration when user leaves/closes
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (viewStartTime && file && canView) {
+        const finalDuration = Math.floor((Date.now() - viewStartTime) / 1000);
+        console.log(`⏱️ FINAL: User viewed for ${finalDuration} seconds`);
+        
+        logFileView(
+          actualFileId,
+          file?.name || 'Unknown',
+          file?.isPremium || false,
+          true,
+          finalDuration,
+          'completed'
+        );
+      }
+    };
+    
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      
+      if (viewStartTime && file && canView) {
+        const finalDuration = Math.floor((Date.now() - viewStartTime) / 1000);
+        if (finalDuration > 0) {
+          console.log(`⏱️ FINAL (unmount): User viewed for ${finalDuration} seconds`);
+          logFileView(
+            actualFileId,
+            file?.name || 'Unknown',
+            file?.isPremium || false,
+            true,
+            finalDuration,
+            'completed'
+          );
+        }
+      }
+    };
+  }, [viewStartTime, file, canView, actualFileId]);
 
   const loadFile = async () => {
     setLoading(true);
@@ -40,7 +154,6 @@ function FileViewer() {
       
       setFile(fileData);
       
-      // Check if user can access this file
       const hasAccess = await canAccessFile(actualFileId);
       setCanView(hasAccess);
       
@@ -55,12 +168,10 @@ function FileViewer() {
   const getViewerUrl = () => {
     if (!file) return '';
     
-    // Google Drive file
     if (file.webViewLink) {
       return file.webViewLink;
     }
     
-    // Google Drive ID
     if (actualFileId) {
       return `https://drive.google.com/file/d/${actualFileId}/preview`;
     }
@@ -73,7 +184,25 @@ function FileViewer() {
   };
 
   const handleGoBack = () => {
+    // Log duration before going back
+    if (viewStartTime && file && canView) {
+      const finalDuration = Math.floor((Date.now() - viewStartTime) / 1000);
+      logFileView(
+        actualFileId,
+        file?.name || 'Unknown',
+        file?.isPremium || false,
+        true,
+        finalDuration,
+        'completed'
+      );
+    }
     navigate(-1);
+  };
+
+  const formatDuration = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
   };
 
   if (loading) {
@@ -143,7 +272,12 @@ function FileViewer() {
             {file?.name || 'Document Viewer'}
           </span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          {viewDuration > 0 && (
+            <span className="text-xs bg-gray-700 px-2 py-1 rounded-lg">
+              ⏱️ Reading: {formatDuration(viewDuration)}
+            </span>
+          )}
           {file?.webViewLink && (
             <a
               href={file.webViewLink}
@@ -155,10 +289,10 @@ function FileViewer() {
             </a>
           )}
           <button
-            onClick={() => window.close()}
+            onClick={handleGoBack}
             className="px-3 py-1 bg-red-600 hover:bg-red-700 rounded-lg transition"
           >
-            Close
+            ✕ Close
           </button>
         </div>
       </div>
