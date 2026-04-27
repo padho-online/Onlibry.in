@@ -1,5 +1,5 @@
 // Google Sheets Web App URL (Replace with your deployed URL)
-const LOGGER_API_URL = 'https://script.google.com/macros/s/AKfycbw-92nwMrY1EpP7myu1eH9cvmDn7Kg0AhbPlkhOzdiKzmU4dkQPRpAVySFOt0IOdlW7Ng/exec';
+const LOGGER_API_URL = 'https://script.google.com/macros/s/AKfycbwjpb6PYaZ3HOwiFVF4nU-QUexsfaf5NHd4tfrAM4dJ_kfSaZHNEsygJ6EF16g8LK9qZw/exec';
 
 // Get client IP address
 async function getClientIP() {
