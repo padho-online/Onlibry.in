@@ -1,23 +1,32 @@
 // Firebase to Sheets Logger - Direct logging from Firebase
 
-// ⚠️ IMPORTANT: Is URL ko apne deployed Google Apps Script URL se replace karein
-const SHEET_API_URL = 'https://script.google.com/macros/s/AKfycbzLNJnj4MSuREQ9K_ZloTip7D_UuC1SQAYg1bYXz5O1m2v_lJnn_1F7ydsqWlr96R12og/exec';
+// ✅ CORRECTED URL - Make sure this is exactly your deployed URL
+const SHEET_API_URL = 'https://script.google.com/macros/s/AKfycbyHujfaaRZTsH6FBKplt4EdpURVrLPC-Efrd1gaQ-NqGQydfhMloAGsnHAaKSdgj0w/exec';
 
 // Send data to Google Sheet
 async function sendToSheet(action, data) {
   try {
-    // Use fetch with keepalive for reliable delivery
+    console.log(`📤 Sending to sheet: ${action}`);
+    console.log(`📤 Data:`, JSON.stringify(data));
+    
+    // Use fetch with proper options
     const response = await fetch(SHEET_API_URL, {
       method: 'POST',
       mode: 'no-cors',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action, ...data }),
-      keepalive: true
+      headers: { 
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ 
+        action: action, 
+        ...data,
+        timestamp: new Date().toISOString()
+      })
     });
+    
     console.log(`✅ Sent to sheet: ${action}`);
     return true;
   } catch (error) {
-    console.error('Error sending to sheet:', error);
+    console.error('❌ Error sending to sheet:', error);
     return false;
   }
 }
@@ -29,6 +38,7 @@ async function getClientIP() {
     const data = await response.json();
     return data.ip;
   } catch (error) {
+    console.log('IP fetch failed, using unknown');
     return 'unknown';
   }
 }
@@ -45,41 +55,48 @@ function getDeviceId() {
 
 // Log Saved File (called from fileService.js)
 export async function logSavedFileToSheet(fileId, fileName, action, userId, userEmail, displayName) {
+  console.log(`📌 logSavedFileToSheet called: ${action} - ${fileName} - User: ${userEmail || 'guest'}`);
+  
   const ipAddress = await getClientIP();
   const deviceId = getDeviceId();
+  const userAgent = navigator.userAgent;
   
-  console.log(`📌 Logging saved file to sheet: ${action} - ${fileName} - ${userEmail}`);
-  
-  await sendToSheet('savedFile', {
-    userId: userId,
-    userEmail: userEmail,
-    displayName: displayName,
+  const payload = {
+    action: action,
+    userId: userId || null,
+    userEmail: userEmail || null,
+    userDisplayName: displayName || null,
     fileId: fileId,
     fileName: fileName,
-    action: action,
     ipAddress: ipAddress,
     deviceId: deviceId,
-    timestamp: new Date().toISOString()
-  });
+    userAgent: userAgent
+  };
+  
+  console.log('📤 Full payload being sent:', JSON.stringify(payload, null, 2));
+  
+  const result = await sendToSheet('savedFile', payload);
+  return result;
 }
 
 // Log File View with duration
 export async function logFileViewToSheet(fileId, fileName, fileType, durationSeconds, viewStatus, userId, userEmail, isPremium, hasAccess) {
   const deviceId = getDeviceId();
+  const userAgent = navigator.userAgent;
   
   await sendToSheet('fileView', {
-    userId: userId,
-    userEmail: userEmail,
+    userId: userId || null,
+    userEmail: userEmail || null,
     fileId: fileId,
     fileName: fileName,
     fileType: fileType,
     viewStatus: viewStatus,
     durationSeconds: durationSeconds,
     durationFormatted: formatDuration(durationSeconds),
-    isPremium: isPremium,
-    hasAccess: hasAccess,
+    isPremium: isPremium || false,
+    hasAccess: hasAccess || false,
     deviceId: deviceId,
-    timestamp: new Date().toISOString()
+    userAgent: userAgent
   });
 }
 
@@ -87,35 +104,17 @@ export async function logFileViewToSheet(fileId, fileName, fileType, durationSec
 export async function logUserLoginToSheet(userId, userEmail, displayName, isSubscribed) {
   const ipAddress = await getClientIP();
   const deviceId = getDeviceId();
+  const userAgent = navigator.userAgent;
   
   await sendToSheet('userLogin', {
     userId: userId,
     userEmail: userEmail,
     displayName: displayName,
     eventType: 'login',
-    isSubscribed: isSubscribed,
+    isSubscribed: isSubscribed || false,
     ipAddress: ipAddress,
     deviceId: deviceId,
-    timestamp: new Date().toISOString()
-  });
-}
-
-// Log Payment
-export async function logPaymentToSheet(event, plan, amount, status, userId, userEmail, paymentId = null, orderId = null, error = null) {
-  const deviceId = getDeviceId();
-  
-  await sendToSheet('paymentLog', {
-    userId: userId,
-    userEmail: userEmail,
-    event: event,
-    plan: plan,
-    amount: amount,
-    status: status,
-    paymentId: paymentId,
-    orderId: orderId,
-    error: error,
-    deviceId: deviceId,
-    timestamp: new Date().toISOString()
+    userAgent: userAgent
   });
 }
 

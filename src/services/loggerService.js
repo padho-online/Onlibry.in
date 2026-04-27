@@ -1,5 +1,5 @@
 // Google Sheets Web App URL
-const LOGGER_API_URL = 'https://script.google.com/macros/s/AKfycbzLNJnj4MSuREQ9K_ZloTip7D_UuC1SQAYg1bYXz5O1m2v_lJnn_1F7ydsqWlr96R12og/exec';
+const LOGGER_API_URL = 'https://script.google.com/macros/s/AKfycbyHujfaaRZTsH6FBKplt4EdpURVrLPC-Efrd1gaQ-NqGQydfhMloAGsnHAaKSdgj0w/exec';
 
 // Get client IP address
 async function getClientIP() {
