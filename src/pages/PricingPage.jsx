@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { loadRazorpayScript, openRazorpayModal } from "../services/razorpay";
 import { logPaymentInitiation, logPaymentSuccess, logPaymentFailure, logPaymentModalClose } from '../services/paymentLogService';
+import { logPayment } from '../services/loggerService'; // STEP 8: Import logger service
 
 function PricingPage() {
   const { user, isSubscribed, subscriptionType, updateSubscription } = useAuth();
@@ -69,62 +70,75 @@ function PricingPage() {
   ];
 
   const handleSubscribe = async (planName, price, durationDays) => {
-  if (!user) {
-    navigate('/login', { state: { from: { pathname: '/pricing' } } });
-    return;
-  }
-
-  if (price === 0) return;
-
-  setProcessingPlan(planName);
-  setLoading(true);
-
-  // Log payment initiation
-  await logPaymentInitiation(user.uid, user.email, planName, price);
-
-  try {
-    const scriptLoaded = await loadRazorpayScript();
-    
-    if (!scriptLoaded) {
-      throw new Error('Failed to load payment gateway');
+    if (!user) {
+      navigate('/login', { state: { from: { pathname: '/pricing' } } });
+      return;
     }
 
-    await openRazorpayModal({
-      razorpay: window.Razorpay,
-      amount: price,
-      planName: planName,
-      user: user,
-      onSuccess: async (paymentData) => {
-        // Log success
-        await logPaymentSuccess(user.uid, user.email, planName, price, paymentData.paymentId, paymentData.orderId);
-        
-        const result = await updateSubscription(user.uid, planName.toLowerCase().replace('pro ', ''), durationDays);
-        
-        if (result.success) {
-          alert(`Successfully subscribed to ${planName}! 🎉`);
-          window.location.reload();
-        } else {
-          throw new Error(result.error);
-        }
-      },
-      onFailure: async (error) => {
-        await logPaymentFailure(user.uid, user.email, planName, price, error);
-        alert('Payment cancelled or failed. Please try again.');
-      },
-      onModalClose: async () => {
-        await logPaymentModalClose(user.uid, user.email, planName, price);
+    if (price === 0) return;
+
+    setProcessingPlan(planName);
+    setLoading(true);
+
+    // Log payment initiation (keep existing log)
+    await logPaymentInitiation(user.uid, user.email, planName, price);
+
+    try {
+      const scriptLoaded = await loadRazorpayScript();
+      
+      if (!scriptLoaded) {
+        throw new Error('Failed to load payment gateway');
       }
-    });
-    
-  } catch (error) {
-    console.error('Payment error:', error);
-    await logPaymentFailure(user.uid, user.email, planName, price, error.message);
-    alert('Something went wrong. Please try again later.');
-  } finally {
-    setLoading(false);
-    setProcessingPlan(null);
-  }
-};
+
+      await openRazorpayModal({
+        razorpay: window.Razorpay,
+        amount: price,
+        planName: planName,
+        user: user,
+        onSuccess: async (paymentData) => {
+          // STEP 8: Log payment success using loggerService
+          await logPayment('payment_success', planName, price, 'success', paymentData.paymentId, paymentData.orderId);
+          
+          // Keep existing payment success log for backward compatibility
+          await logPaymentSuccess(user.uid, user.email, planName, price, paymentData.paymentId, paymentData.orderId);
+          
+          const result = await updateSubscription(user.uid, planName.toLowerCase().replace('pro ', ''), durationDays);
+          
+          if (result.success) {
+            alert(`Successfully subscribed to ${planName}! 🎉`);
+            window.location.reload();
+          } else {
+            throw new Error(result.error);
+          }
+        },
+        onFailure: async (error) => {
+          // STEP 8: Log payment failure using loggerService
+          await logPayment('payment_failed', planName, price, 'failed', null, null, error);
+          
+          // Keep existing payment failure log for backward compatibility
+          await logPaymentFailure(user.uid, user.email, planName, price, error);
+          alert('Payment cancelled or failed. Please try again.');
+        },
+        onModalClose: async () => {
+          // Keep existing modal close log
+          await logPaymentModalClose(user.uid, user.email, planName, price);
+        }
+      });
+      
+    } catch (error) {
+      console.error('Payment error:', error);
+      
+      // STEP 8: Log payment failure for general errors
+      await logPayment('payment_failed', planName, price, 'failed', null, null, error.message);
+      
+      // Keep existing payment failure log
+      await logPaymentFailure(user.uid, user.email, planName, price, error.message);
+      alert('Something went wrong. Please try again later.');
+    } finally {
+      setLoading(false);
+      setProcessingPlan(null);
+    }
+  };
 
   return (
     <div className="py-12">

@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider } from './contexts/AuthContext';
+import { initPageViewLogger } from './services/loggerService';
+
 import MainLayout from './layouts/MainLayout';
 import ProtectedRoute from './components/ProtectedRoute';
 import AdminGuard from './components/AdminGuard';
@@ -32,6 +34,10 @@ import PlansEditor from './pages/admin/PlansEditor';
 import FilesManager from './pages/admin/FilesManager';
 
 function App() {
+  useEffect(() => {
+    initPageViewLogger();
+  }, []);
+
   return (
     <ThemeProvider>
       <AuthProvider>

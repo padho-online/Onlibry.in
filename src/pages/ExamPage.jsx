@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getExamData, logExamResult } from '../services/mockTestService';
+import { logMockTestResult } from '../services/loggerService'; // STEP 7: Import logger service
 
 function ExamPage() {
   const { examName } = useParams();
@@ -139,7 +140,22 @@ function ExamPage() {
     const results = calculateResults();
     const decodedName = decodeURIComponent(examName);
     
+    // STEP 7: Log mock test result using the new logger service
     const resultPayload = {
+      testName: decodedName,
+      totalQuestions: results.totalQuestions,
+      correct: results.correct,
+      incorrect: results.incorrect,
+      unanswered: results.unanswered,
+      score: results.correct,
+      timeTaken: results.timeTaken
+    };
+    
+    // Log to Google Sheets using loggerService (STEP 7)
+    await logMockTestResult(resultPayload);
+    
+    // Also maintain the original logging for backward compatibility
+    const examResultPayload = {
       score: results.correct,
       answeredCount: results.correct + results.incorrect,
       unansweredCount: results.unanswered,
@@ -151,11 +167,11 @@ function ExamPage() {
     };
     
     // Save to localStorage for results page
-    localStorage.setItem(`exam_result_${decodedName}`, JSON.stringify(resultPayload));
+    localStorage.setItem(`exam_result_${decodedName}`, JSON.stringify(examResultPayload));
     localStorage.setItem('activeResultKey', `exam_result_${decodedName}`);
     
-    // Log to Google Sheets
-    await logExamResult(resultPayload, 'mock');
+    // Log using the existing service (optional, for backward compatibility)
+    await logExamResult(examResultPayload, 'mock');
     
     // Clear progress
     localStorage.removeItem(`exam_progress_${decodedName}`);

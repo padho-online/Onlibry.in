@@ -17,6 +17,7 @@ import {
   setDoc,
   serverTimestamp,
 } from 'firebase/firestore';
+import { logUserLogin } from '../services/loggerService';
 
 const AuthContext = createContext();
 
@@ -26,7 +27,7 @@ export function AuthProvider({ children }) {
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [subscriptionType, setSubscriptionType] = useState(null);
 
-  // ✅ NEW: Saved Files State
+  // ✅ Saved Files State
   const [savedFiles, setSavedFiles] = useState([]);
 
   const googleProvider = new GoogleAuthProvider();
@@ -62,19 +63,20 @@ export function AuthProvider({ children }) {
       } else {
         const userData = userDoc.data();
 
-        // ✅ Load saved files immediately
         setSavedFiles(userData.savedFiles || []);
 
-        // Check active subscription
         if (
           userData.subscription?.isActive &&
           userData.subscription?.endDate
         ) {
-          const endDate = userData.subscription.endDate.toDate();
+          const endDate =
+            userData.subscription.endDate.toDate();
 
           if (endDate > new Date()) {
             setIsSubscribed(true);
-            setSubscriptionType(userData.subscription.type);
+            setSubscriptionType(
+              userData.subscription.type
+            );
           }
         }
       }
@@ -102,7 +104,7 @@ export function AuthProvider({ children }) {
 
       setIsSubscribed(false);
       setSubscriptionType(null);
-      setSavedFiles([]); // ✅ Clear saved files
+      setSavedFiles([]);
 
       return { success: true };
     } catch (error) {
@@ -120,7 +122,9 @@ export function AuthProvider({ children }) {
   // =========================
   const checkSubscription = async (userId) => {
     try {
-      const userDoc = await getDoc(doc(db, 'users', userId));
+      const userDoc = await getDoc(
+        doc(db, 'users', userId)
+      );
 
       if (userDoc.exists()) {
         const data = userDoc.data();
@@ -129,11 +133,14 @@ export function AuthProvider({ children }) {
           data.subscription?.isActive &&
           data.subscription?.endDate
         ) {
-          const endDate = data.subscription.endDate.toDate();
+          const endDate =
+            data.subscription.endDate.toDate();
 
           if (endDate > new Date()) {
             setIsSubscribed(true);
-            setSubscriptionType(data.subscription.type);
+            setSubscriptionType(
+              data.subscription.type
+            );
             return true;
           }
         }
@@ -143,7 +150,10 @@ export function AuthProvider({ children }) {
       setSubscriptionType(null);
       return false;
     } catch (error) {
-      console.error('Error checking subscription:', error);
+      console.error(
+        'Error checking subscription:',
+        error
+      );
       return false;
     }
   };
@@ -158,7 +168,9 @@ export function AuthProvider({ children }) {
   ) => {
     try {
       const endDate = new Date();
-      endDate.setDate(endDate.getDate() + durationInDays);
+      endDate.setDate(
+        endDate.getDate() + durationInDays
+      );
 
       await setDoc(
         doc(db, 'users', userId),
@@ -178,7 +190,10 @@ export function AuthProvider({ children }) {
 
       return { success: true };
     } catch (error) {
-      console.error('Error updating subscription:', error);
+      console.error(
+        'Error updating subscription:',
+        error
+      );
 
       return {
         success: false,
@@ -197,20 +212,25 @@ export function AuthProvider({ children }) {
         setUser(currentUser);
 
         if (currentUser) {
+          // ✅ Log user login
+          logUserLogin(currentUser);
+
           const userDoc = await getDoc(
             doc(db, 'users', currentUser.uid)
           );
 
           if (userDoc.exists()) {
             const userData = userDoc.data();
-
-            // ✅ Load saved files
-            setSavedFiles(userData.savedFiles || []);
+            setSavedFiles(
+              userData.savedFiles || []
+            );
           } else {
             setSavedFiles([]);
           }
 
-          await checkSubscription(currentUser.uid);
+          await checkSubscription(
+            currentUser.uid
+          );
         } else {
           setIsSubscribed(false);
           setSubscriptionType(null);
