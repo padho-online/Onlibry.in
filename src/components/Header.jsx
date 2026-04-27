@@ -127,6 +127,15 @@ function Header() {
               <Link to="/mock-tests" onClick={() => setMobileMenuOpen(false)} className="text-gray-700 dark:text-gray-300 hover:text-green-600 py-2">
                 Mock Tests
               </Link>
+              {user && (
+  <Link
+    to="/saved-files"
+    onClick={() => setMobileMenuOpen(false)}
+    className="text-gray-700 dark:text-gray-300 hover:text-green-600 py-2"
+  >
+    Saved Files
+  </Link>
+)}
               <Link to="/quiz" onClick={() => setMobileMenuOpen(false)} className="text-gray-700 dark:text-gray-300 hover:text-green-600 py-2">
                 Quiz
               </Link>
