@@ -51,9 +51,12 @@ function Header() {
             <Link to="/mock-tests" className="text-gray-700 dark:text-gray-300 hover:text-green-600 dark:hover:text-green-400 transition">
               Mock Tests
             </Link>
-            <Link to="/quiz" className="text-gray-700 dark:text-gray-300 hover:text-green-600 dark:hover:text-green-400 transition">
+            <Link to="/saved-files" onClick={() => setMobileMenuOpen(false)} className="...">
+  Saved Files
+</Link>
+            {/* <Link to="/quiz" className="text-gray-700 dark:text-gray-300 hover:text-green-600 dark:hover:text-green-400 transition">
               Quiz
-            </Link>
+            </Link> */}
             
             {/* Subscription Badge */}
             {isSubscribed && (

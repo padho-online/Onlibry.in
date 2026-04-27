@@ -2,7 +2,7 @@
 import { logPaymentInitiation, logPaymentSuccess, logPaymentFailure, logPaymentModalClose } from './paymentLogService';
 
 // LIVE KEY - DO NOT SHARE THIS PUBLICLY
-const RAZORPAY_KEY_ID = 'rzp_live_Si2m5d0A3VdWrR';
+const RAZORPAY_KEY_ID = 'rzp_live_SiS2QOdZl6zCUx';
 
 export const loadRazorpayScript = () => {
   return new Promise((resolve) => {
