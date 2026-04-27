@@ -19,13 +19,30 @@ export const loadRazorpayScript = () => {
 };
 
 export const createRazorpayOrder = async (amount, currency = 'INR') => {
-  // For production, you need a backend endpoint
-  // For now, using mock order (but real payment will still work)
-  return {
-    id: 'order_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-    amount: amount * 100,
-    currency: currency
-  };
+  try {
+    const response = await fetch('/api/create-order', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ amount, currency }),
+    });
+
+    const data = await response.json();
+
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to create order');
+    }
+
+    return {
+      id: data.id,
+      amount: data.amount,
+      currency: data.currency,
+    };
+  } catch (error) {
+    console.error('Order creation failed:', error);
+    throw error;
+  }
 };
 
 export const openRazorpayModal = async (options) => {
