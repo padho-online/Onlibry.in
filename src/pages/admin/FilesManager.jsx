@@ -44,7 +44,7 @@ function FilesManager() {
   const [allDriveFolders, setAllDriveFolders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedFolder, setSelectedFolder] = useState('root');
+  const [selectedFolder, setSelectedFolder] = useState('1eK8qYfhKcUh4BAXswW7J-V8OJmPD51Q_');
   const [isGoogleAuth, setIsGoogleAuth] = useState(false);
   const [isLoadingAuth, setIsLoadingAuth] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState(new Set());
