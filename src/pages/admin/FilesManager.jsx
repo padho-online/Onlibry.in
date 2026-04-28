@@ -78,7 +78,7 @@ function FilesManager() {
       
       // Initialize Token Client
       tokenClient = google.accounts.oauth2.initTokenClient({
-        client_id: '999741231051-6trb2mlvisan4pbar76i0m8n0mjk6gq6.apps.googleusercontent.com',
+        client_id: '279268985463-013b4esq66rfkuojg1ssrb9t0evsh1e0.apps.googleusercontent.com',
         scope: 'https://www.googleapis.com/auth/drive',
         callback: (resp) => {
           if (resp.error) {
