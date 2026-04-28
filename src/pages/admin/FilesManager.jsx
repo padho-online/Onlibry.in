@@ -1,83 +1,126 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { db, auth } from '../../config/firebase';
 import { doc, getDoc, setDoc, deleteDoc, writeBatch, serverTimestamp } from 'firebase/firestore';
 
-// Google Drive API - Load script dynamically
-const loadGoogleAPI = () => {
-  return new Promise((resolve) => {
-    if (window.gapi && window.gapi.client) {
+// Global variables for Google API
+let gapiInited = false;
+let gisInited = false;
+let tokenClient = null;
+let accessToken = null;
+
+// Load Google APIs
+const loadGoogleApis = () => {
+  return new Promise((resolve, reject) => {
+    if (document.querySelector('script[src="https://apis.google.com/js/api.js"]')) {
       resolve();
       return;
     }
+    
     const script = document.createElement('script');
     script.src = 'https://apis.google.com/js/api.js';
-    script.onload = () => {
-      gapi.load('client', () => {
-        gapi.client.init({
-          apiKey: 'AIzaSyC02khoIXw9oG2aVo7m5rGolfdTMM6FLOo',
-          discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest']
-        }).then(resolve);
-      });
-    };
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('Failed to load Google API'));
     document.head.appendChild(script);
   });
 };
 
-// Google OAuth for Drive access
-const authenticateGoogleDrive = () => {
-  return new Promise((resolve) => {
-    google.accounts.oauth2.initTokenClient({
-      client_id: '999741231051-6trb2mlvisan4pbar76i0m8n0mjk6gq6.apps.googleusercontent.com',
-      scope: 'https://www.googleapis.com/auth/drive',
-      callback: (response) => {
-        resolve(response.access_token);
-      }
-    }).requestAccessToken();
+const loadGoogleIdentity = () => {
+  return new Promise((resolve, reject) => {
+    if (document.querySelector('script[src="https://accounts.google.com/gsi/client"]')) {
+      resolve();
+      return;
+    }
+    
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('Failed to load Google Identity'));
+    document.head.appendChild(script);
   });
 };
 
 function FilesManager() {
   const [files, setFiles] = useState([]);
-  const [allDriveFiles, setAllDriveFiles] = useState([]);
   const [allDriveFolders, setAllDriveFolders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedFolder, setSelectedFolder] = useState('root');
-  const [accessToken, setAccessToken] = useState(null);
   const [isGoogleAuth, setIsGoogleAuth] = useState(false);
+  const [isLoadingAuth, setIsLoadingAuth] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState(new Set());
-  const [editingCell, setEditingCell] = useState(null);
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [bulkFolderId, setBulkFolderId] = useState('');
   const [bulkShowOnWeb, setBulkShowOnWeb] = useState(null);
   const [bulkIsPremium, setBulkIsPremium] = useState(null);
 
-  // Initialize Google Drive API
+  // Initialize Google APIs
   useEffect(() => {
-    initGoogleDrive();
+    initializeGoogleApis();
   }, []);
 
-  const initGoogleDrive = async () => {
+  const initializeGoogleApis = async () => {
+    setIsLoadingAuth(true);
     try {
-      await loadGoogleAPI();
+      await loadGoogleApis();
+      await loadGoogleIdentity();
+      
+      // Initialize GAPI client
+      await new Promise((resolve) => {
+        gapi.load('client', resolve);
+      });
+      
+      await gapi.client.init({
+        apiKey: 'AIzaSyC02khoIXw9oG2aVo7m5rGolfdTMM6FLOo',
+        discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'],
+      });
+      
+      gapiInited = true;
+      
+      // Initialize Token Client
+      tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: '999741231051-6trb2mlvisan4pbar76i0m8n0mjk6gq6.apps.googleusercontent.com',
+        scope: 'https://www.googleapis.com/auth/drive',
+        callback: (resp) => {
+          if (resp.error) {
+            console.error('Auth error:', resp);
+            setIsGoogleAuth(false);
+            setIsLoadingAuth(false);
+            return;
+          }
+          accessToken = resp.access_token;
+          setIsGoogleAuth(true);
+          setIsLoadingAuth(false);
+          loadDriveFiles('root');
+        },
+      });
+      
+      gisInited = true;
+      
       // Check if user is admin first
       const user = auth.currentUser;
       if (user) {
         const userDoc = await getDoc(doc(db, 'users', user.uid));
         if (userDoc.exists() && userDoc.data().isAdmin) {
-          const token = await authenticateGoogleDrive();
-          setAccessToken(token);
-          setIsGoogleAuth(true);
-          await loadDriveFiles('root');
+          // Request access token
+          tokenClient.requestAccessToken();
+        } else {
+          setIsLoadingAuth(false);
+          alert('Admin access required');
         }
+      } else {
+        setIsLoadingAuth(false);
+        alert('Please login as admin');
       }
+      
     } catch (error) {
-      console.error('Google Drive init error:', error);
+      console.error('Google API init error:', error);
+      setIsLoadingAuth(false);
     }
   };
 
   // Load folders for dropdown
   const loadFolders = async () => {
+    if (!accessToken) return [];
     try {
       const response = await gapi.client.drive.files.list({
         q: "mimeType='application/vnd.google-apps.folder'",
@@ -85,16 +128,20 @@ function FilesManager() {
         pageSize: 1000
       });
       setAllDriveFolders(response.result.files);
+      return response.result.files;
     } catch (error) {
       console.error('Error loading folders:', error);
+      return [];
     }
   };
 
   // Load files from Google Drive
   const loadDriveFiles = async (folderId = 'root') => {
+    if (!accessToken) return;
+    
     setLoading(true);
     try {
-      await loadFolders();
+      const folders = await loadFolders();
       
       let allFiles = [];
       let nextPageToken = null;
@@ -112,8 +159,6 @@ function FilesManager() {
         nextPageToken = response.result.nextPageToken;
       } while (nextPageToken);
       
-      setAllDriveFiles(allFiles);
-      
       // Get Firestore metadata for each file
       const filesWithMetadata = [];
       for (const file of allFiles) {
@@ -121,7 +166,7 @@ function FilesManager() {
         const fileData = docSnap.exists() ? docSnap.data() : {};
         
         // Get folder name
-        const folder = allDriveFolders.find(f => f.id === (file.parents?.[0] || 'root'));
+        const folder = folders.find(f => f.id === (file.parents?.[0] || 'root'));
         
         filesWithMetadata.push({
           id: file.id,
@@ -174,7 +219,6 @@ function FilesManager() {
         lastUpdated: serverTimestamp()
       }, { merge: true });
       
-      // Update local state
       setFiles(prev => prev.map(file => 
         file.id === fileId ? { ...file, ...updates } : file
       ));
@@ -223,7 +267,7 @@ function FilesManager() {
     }
   };
 
-  // Delete file from Drive and Firestore
+  // Delete file
   const deleteFile = async (fileId, fileName) => {
     if (!window.confirm(`Delete "${fileName}"? This action cannot be undone.`)) return;
     
@@ -231,6 +275,11 @@ function FilesManager() {
       await gapi.client.drive.files.delete({ fileId: fileId });
       await deleteDoc(doc(db, 'files', fileId));
       setFiles(prev => prev.filter(f => f.id !== fileId));
+      setSelectedFiles(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(fileId);
+        return newSet;
+      });
     } catch (error) {
       console.error('Error deleting file:', error);
       alert('Error deleting file: ' + error.message);
@@ -239,7 +288,7 @@ function FilesManager() {
 
   // Bulk delete
   const bulkDelete = async () => {
-    if (!window.confirm(`Delete ${selectedFiles.size} files?`)) return;
+    if (!window.confirm(`Delete ${selectedFiles.size} files? This cannot be undone.`)) return;
     
     try {
       const batch = writeBatch(db);
@@ -252,10 +301,11 @@ function FilesManager() {
       loadDriveFiles(selectedFolder);
     } catch (error) {
       console.error('Error in bulk delete:', error);
+      alert('Error deleting files: ' + error.message);
     }
   };
 
-  // Bulk move to folder
+  // Bulk move
   const bulkMove = async () => {
     if (!bulkFolderId) return;
     
@@ -273,10 +323,11 @@ function FilesManager() {
       loadDriveFiles(selectedFolder);
     } catch (error) {
       console.error('Error moving files:', error);
+      alert('Error moving files: ' + error.message);
     }
   };
 
-  // Bulk update show on web or premium
+  // Bulk update
   const bulkUpdate = async () => {
     try {
       const updates = {};
@@ -293,6 +344,7 @@ function FilesManager() {
       loadDriveFiles(selectedFolder);
     } catch (error) {
       console.error('Error in bulk update:', error);
+      alert('Error updating files: ' + error.message);
     }
   };
 
@@ -307,7 +359,7 @@ function FilesManager() {
     setSelectedFiles(newSelected);
   };
 
-  // Select all files
+  // Select all
   const selectAllFiles = () => {
     if (selectedFiles.size === files.length) {
       setSelectedFiles(new Set());
@@ -316,31 +368,41 @@ function FilesManager() {
     }
   };
 
-  // Filter files by search
+  // Filter files
   const filteredFiles = files.filter(file =>
     file.name?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // Get folder path for dropdown
+  // Get folder path
   const getFolderPath = (folder) => {
     if (!folder.parents || folder.parents[0] === 'root') return folder.name;
     const parent = allDriveFolders.find(f => f.id === folder.parents[0]);
     return parent ? `${getFolderPath(parent)} > ${folder.name}` : folder.name;
   };
 
-  // Render tags as editable string
-  const renderTagValue = (file, tagField) => {
+  // Render tag input
+  const renderTagInput = (file, tagField) => {
     const value = file.tags?.[tagField]?.join(', ') || '';
     return (
       <input
         type="text"
         defaultValue={value}
         onBlur={(e) => updateTag(file.id, tagField, e.target.value)}
-        className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-        placeholder={`Enter ${tagField}s (comma separated)`}
+        className="w-full px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+        placeholder={`${tagField}s (comma separated)`}
       />
     );
   };
+
+  // Loading state
+  if (isLoadingAuth) {
+    return (
+      <div className="text-center py-20">
+        <div className="w-12 h-12 border-4 border-green-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+        <p className="text-gray-600 dark:text-gray-400">Connecting to Google Drive...</p>
+      </div>
+    );
+  }
 
   if (!isGoogleAuth) {
     return (
@@ -349,7 +411,7 @@ function FilesManager() {
         <h2 className="text-xl font-semibold mb-2">Google Drive Access Required</h2>
         <p className="text-gray-500 mb-4">Please authenticate with Google Drive to manage files.</p>
         <button
-          onClick={initGoogleDrive}
+          onClick={() => tokenClient?.requestAccessToken()}
           className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
         >
           Connect Google Drive
@@ -390,7 +452,7 @@ function FilesManager() {
         </div>
       </div>
 
-      {/* Toolbar - Search and Folder Select */}
+      {/* Toolbar */}
       <div className="flex flex-col md:flex-row gap-4 mb-6">
         <div className="flex-1">
           <input
@@ -470,7 +532,7 @@ function FilesManager() {
                 <th className="p-2 text-left">Subject</th>
                 <th className="p-2 text-left">Title</th>
                 <th className="p-2 text-left">Other Tags</th>
-                <th className="p-2 text-left">Price (₹)</th>
+                <th className="p-2 text-left">Price</th>
                 <th className="p-2 text-left">Premium</th>
                 <th className="p-2 text-left">Visible</th>
                 <th className="p-2 text-left">Actions</th>
@@ -479,7 +541,6 @@ function FilesManager() {
             <tbody>
               {filteredFiles.map(file => (
                 <tr key={file.id} className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800">
-                  {/* Checkbox */}
                   <td className="p-2">
                     <input
                       type="checkbox"
@@ -488,8 +549,6 @@ function FilesManager() {
                       className="w-4 h-4"
                     />
                   </td>
-                  
-                  {/* File Name - Editable */}
                   <td className="p-2">
                     <input
                       type="text"
@@ -499,34 +558,14 @@ function FilesManager() {
                     />
                     <div className="text-xs text-gray-400 mt-1">{file.id?.slice(0, 8)}...</div>
                   </td>
-                  
-                  {/* Folder Name */}
-                  <td className="p-2 text-gray-600 dark:text-gray-400 text-sm">
-                    {file.folderName}
-                  </td>
-                  
-                  {/* University */}
-                  <td className="p-2">{renderTagValue(file, 'university')}</td>
-                  
-                  {/* Course */}
-                  <td className="p-2">{renderTagValue(file, 'course')}</td>
-                  
-                  {/* Year */}
-                  <td className="p-2">{renderTagValue(file, 'year')}</td>
-                  
-                  {/* Semester */}
-                  <td className="p-2">{renderTagValue(file, 'semester')}</td>
-                  
-                  {/* Subject */}
-                  <td className="p-2">{renderTagValue(file, 'subject')}</td>
-                  
-                  {/* Title */}
-                  <td className="p-2">{renderTagValue(file, 'title')}</td>
-                  
-                  {/* Other Tags */}
-                  <td className="p-2">{renderTagValue(file, 'other')}</td>
-                  
-                  {/* Price */}
+                  <td className="p-2 text-gray-600 dark:text-gray-400 text-sm">{file.folderName}</td>
+                  <td className="p-2">{renderTagInput(file, 'university')}</td>
+                  <td className="p-2">{renderTagInput(file, 'course')}</td>
+                  <td className="p-2">{renderTagInput(file, 'year')}</td>
+                  <td className="p-2">{renderTagInput(file, 'semester')}</td>
+                  <td className="p-2">{renderTagInput(file, 'subject')}</td>
+                  <td className="p-2">{renderTagInput(file, 'title')}</td>
+                  <td className="p-2">{renderTagInput(file, 'other')}</td>
                   <td className="p-2">
                     <input
                       type="number"
@@ -538,8 +577,6 @@ function FilesManager() {
                       disabled={!file.isPremium}
                     />
                   </td>
-                  
-                  {/* Premium Toggle */}
                   <td className="p-2">
                     <button
                       onClick={() => togglePremium(file.id, file.isPremium)}
@@ -552,8 +589,6 @@ function FilesManager() {
                       {file.isPremium ? 'Premium' : 'Free'}
                     </button>
                   </td>
-                  
-                  {/* Visible Toggle */}
                   <td className="p-2">
                     <button
                       onClick={() => toggleShowOnWeb(file.id, file.showOnWebsite)}
@@ -565,27 +600,17 @@ function FilesManager() {
                     >
                       {file.showOnWebsite ? 'Visible' : 'Hidden'}
                     </button>
-                  </td>
-                  
-                  {/* Actions */}
+                   </td>
                   <td className="p-2">
-                    <div className="flex gap-1">
-                      <a
-                        href={file.webViewLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-600 hover:text-blue-800 text-sm"
-                      >
+                    <div className="flex gap-2">
+                      <a href={file.webViewLink} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 text-sm">
                         View
                       </a>
-                      <button
-                        onClick={() => deleteFile(file.id, file.name)}
-                        className="text-red-600 hover:text-red-800 text-sm ml-2"
-                      >
+                      <button onClick={() => deleteFile(file.id, file.name)} className="text-red-600 hover:text-red-800 text-sm">
                         Delete
                       </button>
                     </div>
-                  </td>
+                   </td>
                 </tr>
               ))}
             </tbody>
