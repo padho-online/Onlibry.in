@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import FileViewer from '../components/FileViewer';
+import { logFileViewStart, logFileViewClose } from '../services/loggerService';
 
 function ViewerPage() {
   const { fileId } = useParams();
@@ -8,6 +9,23 @@ function ViewerPage() {
   
   // Support both /viewer/:fileId and /viewer?fileId=xxx
   const actualFileId = fileId || searchParams.get('fileId');
+  
+  // Log file view start when component mounts
+  useEffect(() => {
+    if (actualFileId) {
+      console.log('📊 Logging file view start for:', actualFileId);
+      // Log file view start
+      logFileViewStart(actualFileId, 'File Viewer', false, true);
+    }
+    
+    // Log file view close when component unmounts
+    return () => {
+      if (actualFileId) {
+        console.log('📊 Logging file view close for:', actualFileId);
+        logFileViewClose();
+      }
+    };
+  }, [actualFileId]);
   
   if (!actualFileId) {
     return (

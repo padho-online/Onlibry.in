@@ -1,5 +1,13 @@
+// src/services/loggerService.js
 // Google Sheets Web App URL
 const LOGGER_API_URL = 'https://script.google.com/macros/s/AKfycbyHujfaaRZTsH6FBKplt4EdpURVrLPC-Efrd1gaQ-NqGQydfhMloAGsnHAaKSdgj0w/exec';
+
+// ============================================
+// FILE VIEW DURATION TRACKING
+// ============================================
+let currentFileStartTime = null;
+let currentFileId = null;
+let currentFileName = null;
 
 // Get client IP address
 async function getClientIP() {
@@ -22,7 +30,7 @@ function getDeviceId() {
   return deviceId;
 }
 
-// ✅ Get current user from Firebase auth directly via callback
+// Get current user from Firebase auth directly via callback
 let currentUserCallback = null;
 
 export function setCurrentUserGetter(callback) {
@@ -46,8 +54,8 @@ async function sendLog(action, data) {
     const payload = {
       action: action,
       ...data,
-      userId: user?.uid || null,
-      userEmail: user?.email || null,
+      userId: user?.uid || 'guest',
+      userEmail: user?.email || 'guest',
       userDisplayName: user?.displayName || null,
       ipAddress: ipAddress,
       deviceId: deviceId,
@@ -67,13 +75,15 @@ async function sendLog(action, data) {
       });
     }
     
-    console.log(`✅ Logged: ${action}`, payload.userEmail || 'guest');
+    console.log(`✅ Logged: ${action}`);
   } catch (error) {
     console.error('Logging error:', error);
   }
 }
 
-// 1. Log Page View
+// ============================================
+// 1. Page View Log
+// ============================================
 export function logPageView(pageUrl, pageTitle) {
   sendLog('pageView', {
     pageUrl: pageUrl,
@@ -82,21 +92,78 @@ export function logPageView(pageUrl, pageTitle) {
   });
 }
 
-// 2. Log File View (with duration tracking) - SINGLE VERSION
+// ============================================
+// 2. FILE VIEW LOGS (with start/close tracking)
+// ============================================
+
+// Call this when file view starts
+export function logFileViewStart(fileId, fileName, isPremium, hasAccess) {
+  currentFileStartTime = Date.now();
+  currentFileId = fileId;
+  currentFileName = fileName;
+  
+  sendLog('fileView', {
+    fileId: fileId,
+    fileName: fileName,
+    fileType: fileName?.split('.').pop() || 'unknown',
+    isPremium: isPremium || false,
+    hasAccess: hasAccess || false,
+    eventType: 'open',
+    durationSeconds: 0
+  });
+}
+
+// Call this when file view closes
+export function logFileViewClose() {
+  if (!currentFileStartTime || !currentFileId) {
+    return;
+  }
+  
+  const durationSeconds = Math.round((Date.now() - currentFileStartTime) / 1000);
+  
+  // Don't log very short views
+  if (durationSeconds > 0) {
+    sendLog('fileView', {
+      fileId: currentFileId,
+      fileName: currentFileName,
+      eventType: 'close',
+      durationSeconds: durationSeconds,
+      durationFormatted: formatDuration(durationSeconds)
+    });
+  }
+  
+  // Reset tracking
+  currentFileStartTime = null;
+  currentFileId = null;
+  currentFileName = null;
+}
+
+// Helper function to format duration
+function formatDuration(seconds) {
+  if (seconds < 60) return `${seconds} seconds`;
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  if (secs === 0) return `${mins} minute${mins > 1 ? 's' : ''}`;
+  return `${mins} min ${secs} sec`;
+}
+
+// Simple file view log (without duration tracking)
 export function logFileView(fileId, fileName, isPremium, hasAccess, durationSeconds = 0, status = 'completed') {
-  console.log('📊 logFileView called:', { fileId, fileName, isPremium, hasAccess, durationSeconds, status });
   sendLog('fileView', {
     fileId: fileId,
     fileName: fileName,
     fileType: fileName?.split('.').pop() || 'unknown',
     isPremium: isPremium,
     hasAccess: hasAccess,
+    eventType: 'simple',
     durationSeconds: durationSeconds,
     viewStatus: status
   });
 }
 
-// 3. Log User Login (Called from AuthContext)
+// ============================================
+// 3. User Login Log
+// ============================================
 export function logUserLogin(user) {
   if (!user) {
     console.log('⚠️ logUserLogin called with no user');
@@ -111,7 +178,9 @@ export function logUserLogin(user) {
   });
 }
 
-// 4. Log Saved File Action (with user info)
+// ============================================
+// 4. Saved File Log
+// ============================================
 export async function logSavedFile(fileId, fileName, action, userId = null, userEmail = null) {
   console.log(`📌 Saved File Log: ${action} - ${fileName}`);
   
@@ -122,7 +191,9 @@ export async function logSavedFile(fileId, fileName, action, userId = null, user
   });
 }
 
-// 5. Log Search Query
+// ============================================
+// 5. Search Log
+// ============================================
 export function logSearch(searchQuery, resultsCount, isExactSearch = false) {
   sendLog('searchLog', {
     searchQuery: searchQuery,
@@ -131,7 +202,9 @@ export function logSearch(searchQuery, resultsCount, isExactSearch = false) {
   });
 }
 
-// 6. Log Mock Test Result
+// ============================================
+// 6. Mock Test Result Log
+// ============================================
 export function logMockTestResult(resultData) {
   const percentage = ((resultData.correct / resultData.totalQuestions) * 100).toFixed(2);
   
@@ -147,7 +220,9 @@ export function logMockTestResult(resultData) {
   });
 }
 
-// 7. Log Quiz Result
+// ============================================
+// 7. Quiz Result Log
+// ============================================
 export function logQuizResult(resultData) {
   const percentage = ((resultData.correct / resultData.totalQuestions) * 100).toFixed(2);
   
@@ -163,7 +238,9 @@ export function logQuizResult(resultData) {
   });
 }
 
-// 8. Log Payment
+// ============================================
+// 8. Payment Log
+// ============================================
 export function logPayment(event, plan, amount, status, paymentId = null, orderId = null, error = null) {
   sendLog('paymentLog', {
     event: event,
@@ -176,22 +253,39 @@ export function logPayment(event, plan, amount, status, paymentId = null, orderI
   });
 }
 
-// Initialize page view logging
+// ============================================
+// 9. Initialize Page View Logger
+// ============================================
 export function initPageViewLogger() {
   // Log initial page view
   setTimeout(() => {
     logPageView(window.location.href, document.title);
   }, 100);
   
-  // Log on page visibility change
+  // Log when page is about to close
+  window.addEventListener('beforeunload', () => {
+    logPageView(window.location.href, document.title);
+  });
+  
+  // Log when page becomes hidden (tab switch)
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
       logPageView(window.location.href, document.title);
     }
   });
+}
+
+// ============================================
+// 10. Test Logger
+// ============================================
+export async function testLogger() {
+  console.log('🔍 Testing logger...');
   
-  // Log on beforeunload
-  window.addEventListener('beforeunload', () => {
-    logPageView(window.location.href, document.title);
+  await sendLog('pageView', {
+    pageUrl: 'TEST_PAGE',
+    pageTitle: 'Logger Test',
+    referrer: 'test'
   });
+  
+  console.log('✅ Test log sent! Check your Google Sheet.');
 }
