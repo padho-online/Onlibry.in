@@ -8,6 +8,7 @@ function FilesManager() {
   const [files, setFiles] = useState([]);
   const [allDriveFolders, setAllDriveFolders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedFolder, setSelectedFolder] = useState('root');
   const [isGoogleAuth, setIsGoogleAuth] = useState(false);
@@ -15,6 +16,11 @@ function FilesManager() {
   const [selectedFiles, setSelectedFiles] = useState(new Set());
   const [accessToken, setAccessToken] = useState(null);
   const [tokenClient, setTokenClient] = useState(null);
+  
+  // Pagination state
+  const [nextPageToken, setNextPageToken] = useState(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [totalFileCount, setTotalFileCount] = useState(0);
 
   // Check admin on mount
   useEffect(() => {
@@ -34,24 +40,20 @@ function FilesManager() {
       return;
     }
     
-    // Load Google API scripts
     await loadGoogleScripts();
   };
 
   const loadGoogleScripts = () => {
     return new Promise((resolve) => {
-      // Check if already loaded
       if (window.gapi && window.google) {
         initTokenClient();
         resolve();
         return;
       }
       
-      // Load GAPI
       const gapiScript = document.createElement('script');
       gapiScript.src = 'https://apis.google.com/js/api.js';
       gapiScript.onload = () => {
-        // Load GIS
         const gisScript = document.createElement('script');
         gisScript.src = 'https://accounts.google.com/gsi/client';
         gisScript.onload = () => {
@@ -78,7 +80,7 @@ function FilesManager() {
         setAccessToken(resp.access_token);
         setIsGoogleAuth(true);
         setIsLoadingAuth(false);
-        await loadDriveFiles('root', resp.access_token);
+        await loadDriveFiles('root', resp.access_token, false);
       },
     });
     setTokenClient(client);
@@ -94,32 +96,45 @@ function FilesManager() {
     }
   };
 
-  const loadDriveFiles = async (folderId = 'root', token = accessToken) => {
+  // Load Drive Files with Pagination Support
+  const loadDriveFiles = async (folderId = 'root', token = accessToken, loadMore = false) => {
     if (!token) return;
     
-    setLoading(true);
+    if (!loadMore) {
+      setLoading(true);
+      setFiles([]);
+      setNextPageToken(null);
+      setHasMore(false);
+    } else {
+      setLoadingMore(true);
+    }
+    
     try {
-      // Fetch folders first
+      // First, get total count and folders
       const foldersResponse = await fetch(
         `https://www.googleapis.com/drive/v3/files?q=mimeType='application/vnd.google-apps.folder' and trashed=false&fields=files(id,name,parents)&pageSize=100`,
-        {
-          headers: { Authorization: `Bearer ${token}` }
-        }
+        { headers: { Authorization: `Bearer ${token}` } }
       );
       const foldersData = await foldersResponse.json();
       const folders = foldersData.files || [];
       setAllDriveFolders(folders);
       
-      // Fetch files from selected folder
-      const query = `'${folderId}' in parents and mimeType!='application/vnd.google-apps.folder' and trashed=false`;
-      const filesResponse = await fetch(
-        `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name,webViewLink,parents,createdTime,modifiedTime)&pageSize=100&orderBy=name`,
-        {
-          headers: { Authorization: `Bearer ${token}` }
-        }
-      );
+      // Build URL with pagination
+      let url = `https://www.googleapis.com/drive/v3/files?q='${folderId}' in parents and mimeType!='application/vnd.google-apps.folder' and trashed=false&fields=files(id,name,webViewLink,parents,createdTime,modifiedTime),nextPageToken&pageSize=200&orderBy=name`;
+      
+      if (loadMore && nextPageToken) {
+        url += `&pageToken=${nextPageToken}`;
+      }
+      
+      const filesResponse = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       const filesData = await filesResponse.json();
       const driveFiles = filesData.files || [];
+      const newNextPageToken = filesData.nextPageToken || null;
+      
+      setNextPageToken(newNextPageToken);
+      setHasMore(!!newNextPageToken);
       
       // Get Firestore metadata for each file
       const filesWithMeta = [];
@@ -144,7 +159,14 @@ function FilesManager() {
         });
       }
       
-      setFiles(filesWithMeta);
+      if (loadMore) {
+        setFiles(prev => [...prev, ...filesWithMeta]);
+      } else {
+        setFiles(filesWithMeta);
+      }
+      
+      setTotalFileCount(prev => loadMore ? prev + driveFiles.length : driveFiles.length);
+      
     } catch (error) {
       console.error('Error loading files:', error);
       if (error.status === 401) {
@@ -153,6 +175,41 @@ function FilesManager() {
       }
     } finally {
       setLoading(false);
+      setLoadingMore(false);
+    }
+  };
+
+  // Load ALL files recursively (for full export)
+  const loadAllFilesRecursively = async (folderId = 'root', token = accessToken) => {
+    if (!token) return [];
+    
+    let allFiles = [];
+    let pageToken = null;
+    let hasMorePages = true;
+    
+    try {
+      while (hasMorePages) {
+        let url = `https://www.googleapis.com/drive/v3/files?q='${folderId}' in parents and mimeType!='application/vnd.google-apps.folder' and trashed=false&fields=files(id,name,webViewLink,parents,createdTime,modifiedTime),nextPageToken&pageSize=200&orderBy=name`;
+        
+        if (pageToken) {
+          url += `&pageToken=${pageToken}`;
+        }
+        
+        const response = await fetch(url, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = await response.json();
+        const driveFiles = data.files || [];
+        
+        allFiles = [...allFiles, ...driveFiles];
+        pageToken = data.nextPageToken;
+        hasMorePages = !!pageToken;
+      }
+      
+      return allFiles;
+    } catch (error) {
+      console.error('Error loading all files:', error);
+      return allFiles;
     }
   };
 
@@ -189,7 +246,24 @@ function FilesManager() {
   const handleFolderChange = async (e) => {
     const folderId = e.target.value;
     setSelectedFolder(folderId);
-    await loadDriveFiles(folderId, accessToken);
+    setNextPageToken(null);
+    setHasMore(false);
+    await loadDriveFiles(folderId, accessToken, false);
+  };
+
+  const handleLoadMore = () => {
+    if (hasMore && !loadingMore) {
+      loadDriveFiles(selectedFolder, accessToken, true);
+    }
+  };
+
+  const handleExportAll = async () => {
+    if (!accessToken) return;
+    setLoading(true);
+    const allFiles = await loadAllFilesRecursively(selectedFolder, accessToken);
+    alert(`Total files in this folder: ${allFiles.length}`);
+    console.log('All files:', allFiles);
+    setLoading(false);
   };
 
   const toggleFileSelection = (fileId) => {
@@ -243,12 +317,21 @@ function FilesManager() {
     <div>
       <div className="flex justify-between mb-6">
         <h2 className="text-xl font-bold">Google Drive Files Manager</h2>
-        <button 
-          onClick={() => loadDriveFiles(selectedFolder, accessToken)} 
-          className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700"
-        >
-          Refresh
-        </button>
+        <div className="flex gap-2">
+          <button 
+            onClick={handleExportAll}
+            className="px-3 py-1 bg-purple-600 text-white rounded hover:bg-purple-700"
+            title="Count all files in folder"
+          >
+            Count All
+          </button>
+          <button 
+            onClick={() => loadDriveFiles(selectedFolder, accessToken, false)} 
+            className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700"
+          >
+            Refresh
+          </button>
+        </div>
       </div>
 
       <div className="flex gap-4 mb-6">
@@ -275,7 +358,7 @@ function FilesManager() {
       <div className="grid grid-cols-5 gap-3 mb-6">
         <div className="bg-blue-100 p-3 rounded text-center">
           <div className="text-xl font-bold">{files.length}</div>
-          <div className="text-xs">Total</div>
+          <div className="text-xs">Displayed</div>
         </div>
         <div className="bg-green-100 p-3 rounded text-center">
           <div className="text-xl font-bold">{files.filter(f => f.showOnWebsite).length}</div>
@@ -301,71 +384,94 @@ function FilesManager() {
           <div className="animate-spin w-8 h-8 border-4 border-green-500 border-t-transparent rounded-full"></div>
         </div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm border-collapse">
-            <thead className="bg-gray-100 sticky top-0">
-              <tr>
-                <th className="p-2 w-10">
-                  <input type="checkbox" checked={selectedFiles.size === files.length && files.length > 0} onChange={selectAllFiles} />
-                </th>
-                <th className="p-2">File Name</th>
-                <th className="p-2">Folder</th>
-                <th className="p-2">University</th>
-                <th className="p-2">Course</th>
-                <th className="p-2">Year</th>
-                <th className="p-2">Semester</th>
-                <th className="p-2">Subject</th>
-                <th className="p-2">Title</th>
-                <th className="p-2">Other Tags</th>
-                <th className="p-2">Price</th>
-                <th className="p-2">Premium</th>
-                <th className="p-2">Visible</th>
-                <th className="p-2">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredFiles.map((file) => (
-                <tr key={file.id} className="border-b hover:bg-gray-50">
-                  <td className="p-2">
-                    <input type="checkbox" checked={selectedFiles.has(file.id)} onChange={() => toggleFileSelection(file.id)} />
-                  </td>
-                  <td className="p-2">
-                    <input type="text" defaultValue={file.name} onBlur={(e) => updateFileMetadata(file.id, { name: e.target.value })} className="w-full px-2 py-1 border rounded text-sm" />
-                    <div className="text-xs text-gray-400 mt-1">{file.id?.slice(0, 8)}...</div>
-                  </td>
-                  <td className="p-2 text-sm">{file.folderName}</td>
-                  <td className="p-2">{renderTagInput(file, 'university')}</td>
-                  <td className="p-2">{renderTagInput(file, 'course')}</td>
-                  <td className="p-2">{renderTagInput(file, 'year')}</td>
-                  <td className="p-2">{renderTagInput(file, 'semester')}</td>
-                  <td className="p-2">{renderTagInput(file, 'subject')}</td>
-                  <td className="p-2">{renderTagInput(file, 'title')}</td>
-                  <td className="p-2">{renderTagInput(file, 'other')}</td>
-                  <td className="p-2">
-                    <input type="number" value={file.price} onChange={(e) => updateFileMetadata(file.id, { price: parseInt(e.target.value) || 0 })} min="0" max="999" className="w-20 px-2 py-1 text-sm border rounded" disabled={!file.isPremium} />
-                  </td>
-                  <td className="p-2">
-                    <button onClick={() => updateFileMetadata(file.id, { isPremium: !file.isPremium })} className={`px-2 py-1 rounded text-xs font-medium ${file.isPremium ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-600'}`}>
-                      {file.isPremium ? 'Premium' : 'Free'}
-                    </button>
-                  </td>
-                  <td className="p-2">
-                    <button onClick={() => updateFileMetadata(file.id, { showOnWebsite: !file.showOnWebsite })} className={`px-2 py-1 rounded text-xs font-medium ${file.showOnWebsite ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                      {file.showOnWebsite ? 'Visible' : 'Hidden'}
-                    </button>
-                  </td>
-                  <td className="p-2">
-                    <a href={file.webViewLink} target="_blank" rel="noopener noreferrer" className="text-blue-600 text-sm mr-2">View</a>
-                    <button onClick={() => { if(confirm('Delete this file?')) deleteDoc(doc(db, 'files', file.id)).then(() => setFiles(files.filter(f => f.id !== file.id))); }} className="text-red-600 text-sm">Delete</button>
-                  </td>
+        <>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead className="bg-gray-100 sticky top-0">
+                <tr>
+                  <th className="p-2 w-10">
+                    <input type="checkbox" checked={selectedFiles.size === files.length && files.length > 0} onChange={selectAllFiles} />
+                  </th>
+                  <th className="p-2">File Name</th>
+                  <th className="p-2">Folder</th>
+                  <th className="p-2">University</th>
+                  <th className="p-2">Course</th>
+                  <th className="p-2">Year</th>
+                  <th className="p-2">Semester</th>
+                  <th className="p-2">Subject</th>
+                  <th className="p-2">Title</th>
+                  <th className="p-2">Other Tags</th>
+                  <th className="p-2">Price</th>
+                  <th className="p-2">Premium</th>
+                  <th className="p-2">Visible</th>
+                  <th className="p-2">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-          {filteredFiles.length === 0 && (
-            <div className="text-center py-12 text-gray-500">No files found in this folder</div>
+              </thead>
+              <tbody>
+                {filteredFiles.map((file) => (
+                  <tr key={file.id} className="border-b hover:bg-gray-50">
+                    <td className="p-2">
+                      <input type="checkbox" checked={selectedFiles.has(file.id)} onChange={() => toggleFileSelection(file.id)} />
+                    </td>
+                    <td className="p-2">
+                      <input type="text" defaultValue={file.name} onBlur={(e) => updateFileMetadata(file.id, { name: e.target.value })} className="w-full px-2 py-1 border rounded text-sm" />
+                      <div className="text-xs text-gray-400 mt-1">{file.id?.slice(0, 8)}...</div>
+                    </td>
+                    <td className="p-2 text-sm">{file.folderName}</td>
+                    <td className="p-2">{renderTagInput(file, 'university')}</td>
+                    <td className="p-2">{renderTagInput(file, 'course')}</td>
+                    <td className="p-2">{renderTagInput(file, 'year')}</td>
+                    <td className="p-2">{renderTagInput(file, 'semester')}</td>
+                    <td className="p-2">{renderTagInput(file, 'subject')}</td>
+                    <td className="p-2">{renderTagInput(file, 'title')}</td>
+                    <td className="p-2">{renderTagInput(file, 'other')}</td>
+                    <td className="p-2">
+                      <input type="number" value={file.price} onChange={(e) => updateFileMetadata(file.id, { price: parseInt(e.target.value) || 0 })} min="0" max="999" className="w-20 px-2 py-1 text-sm border rounded" disabled={!file.isPremium} />
+                    </td>
+                    <td className="p-2">
+                      <button onClick={() => updateFileMetadata(file.id, { isPremium: !file.isPremium })} className={`px-2 py-1 rounded text-xs font-medium ${file.isPremium ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-600'}`}>
+                        {file.isPremium ? 'Premium' : 'Free'}
+                      </button>
+                    </td>
+                    <td className="p-2">
+                      <button onClick={() => updateFileMetadata(file.id, { showOnWebsite: !file.showOnWebsite })} className={`px-2 py-1 rounded text-xs font-medium ${file.showOnWebsite ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                        {file.showOnWebsite ? 'Visible' : 'Hidden'}
+                      </button>
+                    </td>
+                    <td className="p-2">
+                      <a href={file.webViewLink} target="_blank" rel="noopener noreferrer" className="text-blue-600 text-sm mr-2">View</a>
+                      <button onClick={() => { if(confirm('Delete this file?')) deleteDoc(doc(db, 'files', file.id)).then(() => setFiles(files.filter(f => f.id !== file.id))); }} className="text-red-600 text-sm">Delete</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            
+            {filteredFiles.length === 0 && (
+              <div className="text-center py-12 text-gray-500">No files found in this folder</div>
+            )}
+          </div>
+          
+          {/* Load More Button */}
+          {hasMore && (
+            <div className="text-center mt-4">
+              <button 
+                onClick={handleLoadMore}
+                disabled={loadingMore}
+                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+              >
+                {loadingMore ? 'Loading...' : 'Load More Files'}
+              </button>
+            </div>
           )}
-        </div>
+          
+          {/* Show total count if more files exist */}
+          {hasMore && (
+            <div className="text-center mt-2 text-xs text-gray-500">
+              Showing {files.length} files. Click "Load More" to see more.
+            </div>
+          )}
+        </>
       )}
     </div>
   );

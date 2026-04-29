@@ -1,67 +1,58 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import FileCard from '../components/FileCard';
-import { getAllFilesFromCloud } from '../services/cloudFunctions';
-import { searchFiles } from '../services/fileService';
+import { getAllFiles, searchFiles } from '../services/fileService';
 import { logSearch } from '../services/loggerService';
+import { useAuth } from '../contexts/AuthContext';
 
 function FilesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const { user } = useAuth(); // ✅ IMPORTANT
+  
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
-  const [lastId, setLastId] = useState(null);
+  const [lastVisible, setLastVisible] = useState(null);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
 
-  // Load files using Cloud Function
-  const loadFiles = useCallback(async (isSearch = false, loadMore = false) => {
-    if (!loadMore) setLoading(true);
-
-    try {
-      if (isSearch && searchQuery) {
-        const results = await searchFiles(searchQuery);
-        setFiles(results);
-        setHasMore(false);
-        setLoading(false);
-        return results;
-      } else {
-        const currentLastId = loadMore ? lastId : null;
-        const result = await getAllFilesFromCloud(20, currentLastId);
-        
-        if (result.success) {
-          if (loadMore) {
-            setFiles(prev => [...prev, ...result.files]);
-          } else {
-            setFiles(result.files);
-          }
-          setLastId(result.lastId);
-          setHasMore(result.hasMore);
-        }
-        
-        setLoading(false);
-        return result.files || [];
-      }
-    } catch (error) {
-      console.error('Error loading files:', error);
+  // Load files function
+  const loadFiles = useCallback(async (isSearch = false) => {
+    setLoading(true);
+    if (isSearch && searchQuery) {
+      const results = await searchFiles(searchQuery);
+      setFiles(results);
+      setHasMore(false);
       setLoading(false);
-      return [];
+      return results;
+    } else {
+      const { files: newFiles, lastVisible: last } = await getAllFiles();
+      setFiles(newFiles);
+      setLastVisible(last);
+      setHasMore(newFiles.length === 20);
+      setLoading(false);
+      return newFiles;
     }
-  }, [searchQuery, lastId]);
+  }, [searchQuery]);
 
   // Load more files
   const loadMore = async () => {
     if (loadingMore || !hasMore || searchQuery) return;
-    
     setLoadingMore(true);
-    await loadFiles(false, true);
+    const { files: newFiles, lastVisible: last } = await getAllFiles(lastVisible);
+    if (newFiles.length > 0) {
+      setFiles(prev => [...prev, ...newFiles]);
+      setLastVisible(last);
+      setHasMore(newFiles.length === 20);
+    } else {
+      setHasMore(false);
+    }
     setLoadingMore(false);
   };
 
   // Handle search
   const handleSearch = async (e) => {
     e.preventDefault();
-    
     if (searchQuery.trim()) {
       setSearchParams({ search: searchQuery });
       const results = await loadFiles(true);
@@ -72,14 +63,12 @@ function FilesPage() {
     }
   };
 
-  // Clear search
   const handleClearSearch = () => {
     setSearchQuery('');
     setSearchParams({});
     loadFiles(false);
   };
 
-  // Initial load
   useEffect(() => {
     loadFiles(!!searchParams.get('search'));
   }, []);
@@ -104,20 +93,13 @@ function FilesPage() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search for files, subjects, courses..."
-            className="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 focus:border-transparent"
+            className="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
           />
-          <button
-            type="submit"
-            className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition"
-          >
+          <button type="submit" className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition">
             Search
           </button>
           {searchQuery && (
-            <button
-              type="button"
-              onClick={handleClearSearch}
-              className="px-4 py-3 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg transition"
-            >
+            <button type="button" onClick={handleClearSearch} className="px-4 py-3 bg-gray-500 hover:bg-gray-600 text-white rounded-lg transition">
               Clear
             </button>
           )}
@@ -125,35 +107,27 @@ function FilesPage() {
       </div>
 
       {/* Results count */}
-      {!loading && (
-        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-          Found {files.length} file{files.length !== 1 ? 's' : ''}
-        </p>
-      )}
+      {!loading && <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Found {files.length} file{files.length !== 1 ? 's' : ''}</p>}
 
-      {/* Loader */}
+      {/* Loading */}
       {loading && (
         <div className="flex justify-center items-center py-20">
           <div className="w-12 h-12 border-4 border-green-500 border-t-transparent rounded-full animate-spin"></div>
         </div>
       )}
 
-      {/* Files grid */}
+      {/* Files Grid */}
       {!loading && files.length > 0 && (
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {files.map((file) => (
-              <FileCard key={file.id} file={file} />
+              <FileCard key={file.id} file={file} user={user} />
             ))}
           </div>
-
+          
           {hasMore && !searchQuery && (
             <div className="text-center mt-8">
-              <button
-                onClick={loadMore}
-                disabled={loadingMore}
-                className="px-6 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-medium rounded-lg transition disabled:opacity-50"
-              >
+              <button onClick={loadMore} disabled={loadingMore} className="px-6 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 rounded-lg transition disabled:opacity-50">
                 {loadingMore ? 'Loading...' : 'Load More'}
               </button>
             </div>
@@ -168,10 +142,7 @@ function FilesPage() {
             {searchQuery ? 'No files found matching your search.' : 'No files available.'}
           </p>
           {searchQuery && (
-            <button
-              onClick={handleClearSearch}
-              className="mt-4 px-4 py-2 text-green-600 dark:text-green-400 hover:underline"
-            >
+            <button onClick={handleClearSearch} className="mt-4 px-4 py-2 text-green-600 dark:text-green-400 hover:underline">
               Clear search
             </button>
           )}

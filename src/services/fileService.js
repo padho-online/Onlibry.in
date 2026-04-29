@@ -15,8 +15,10 @@ import {
 } from 'firebase/firestore';
 import { logSavedFileToSheet } from './firebaseLogger';
 
-// Get all files (with pagination)
-export async function getAllFiles(pageParam = null, pageSize = 20) {
+// ============================================
+// 1. GET ALL FILES (with pagination - supports 500+ files)
+// ============================================
+export async function getAllFiles(pageParam = null, pageSize = 30) {
   try {
     let filesQuery = query(
       collection(db, 'files'),
@@ -49,17 +51,55 @@ export async function getAllFiles(pageParam = null, pageSize = 20) {
       lastVisible = doc;
     });
 
-    return { files, lastVisible };
+    return { files, lastVisible, hasMore: files.length === pageSize };
   } catch (error) {
     console.error('Error getting files:', error);
-    return {
-      files: [],
-      lastVisible: null
-    };
+    return { files: [], lastVisible: null, hasMore: false };
   }
 }
 
-// Search files by relevance
+// ============================================
+// 2. LOAD ALL FILES (recursive - for admin panel)
+// ============================================
+export async function loadAllFilesForAdmin() {
+  let allFiles = [];
+  let lastDoc = null;
+  let hasMore = true;
+  const pageSize = 100;
+
+  try {
+    while (hasMore) {
+      let filesQuery = query(
+        collection(db, 'files'),
+        where('showOnWebsite', '==', true),
+        orderBy('createdAt', 'desc'),
+        limit(pageSize)
+      );
+
+      if (lastDoc) {
+        filesQuery = query(filesQuery, startAfter(lastDoc));
+      }
+
+      const querySnapshot = await getDocs(filesQuery);
+      
+      querySnapshot.forEach((doc) => {
+        allFiles.push({ id: doc.id, ...doc.data() });
+      });
+      
+      lastDoc = querySnapshot.docs[querySnapshot.docs.length - 1];
+      hasMore = querySnapshot.docs.length === pageSize;
+    }
+    
+    return allFiles;
+  } catch (error) {
+    console.error('Error loading all files:', error);
+    return allFiles;
+  }
+}
+
+// ============================================
+// 3. SEARCH FILES BY RELEVANCE
+// ============================================
 export async function searchFiles(searchQuery) {
   const lowerQuery = searchQuery.toLowerCase();
   const isExactSearch = lowerQuery.startsWith('exact:');
@@ -139,7 +179,9 @@ export async function searchFiles(searchQuery) {
   }
 }
 
-// Get file by ID
+// ============================================
+// 4. GET SINGLE FILE BY ID
+// ============================================
 export async function getFileById(fileId) {
   try {
     const docRef = doc(db, 'files', fileId);
@@ -159,7 +201,9 @@ export async function getFileById(fileId) {
   }
 }
 
-// Save file
+// ============================================
+// 5. SAVE FILE TO USER'S COLLECTION
+// ============================================
 export async function saveFile(fileId) {
   const user = auth.currentUser;
 
@@ -183,7 +227,7 @@ export async function saveFile(fileId) {
     
     console.log('📌 FILE SAVED in Firebase:', fileName);
     
-    // ✅ Send to Google Sheet
+    // Send to Google Sheet
     try {
       await logSavedFileToSheet(
         fileId,
@@ -208,7 +252,9 @@ export async function saveFile(fileId) {
   }
 }
 
-// Unsave file
+// ============================================
+// 6. UNSAVE FILE FROM USER'S COLLECTION
+// ============================================
 export async function unsaveFile(fileId) {
   const user = auth.currentUser;
 
@@ -232,7 +278,7 @@ export async function unsaveFile(fileId) {
     
     console.log('📌 FILE UNSAVED from Firebase:', fileName);
     
-    // ✅ Send to Google Sheet
+    // Send to Google Sheet
     try {
       await logSavedFileToSheet(
         fileId,
@@ -257,7 +303,9 @@ export async function unsaveFile(fileId) {
   }
 }
 
-// Check if file is saved
+// ============================================
+// 7. CHECK IF FILE IS SAVED BY USER
+// ============================================
 export async function isFileSaved(fileId) {
   const user = auth.currentUser;
 
@@ -279,30 +327,109 @@ export async function isFileSaved(fileId) {
   }
 }
 
-// Check access
+// ============================================
+// 8. CHECK FILE ACCESS (FREE / PREMIUM / SUBSCRIBED)
+// ============================================
 export async function canAccessFile(fileId) {
   const user = auth.currentUser;
 
-  if (!user) return false;
+  // Guest user: only free files
+  if (!user) {
+    try {
+      const fileDoc = await getDoc(doc(db, 'files', fileId));
+      return !fileDoc.data()?.isPremium;
+    } catch (error) {
+      return false;
+    }
+  }
 
   try {
     const userRef = doc(db, 'users', user.uid);
     const userDoc = await getDoc(userRef);
+    const userData = userDoc.data() || {};
 
-    const isSubscribed = userDoc.data()?.subscription?.isActive || false;
+    // Check subscription
+    const isSubscribed = userData.subscription?.isActive === true;
     if (isSubscribed) return true;
 
-    const purchasedFiles = userDoc.data()?.purchasedFiles || [];
-    if (purchasedFiles.includes(fileId)) {
-      return true;
-    }
+    // Check single purchase
+    const purchasedFiles = userData.purchasedFiles || [];
+    if (purchasedFiles.includes(fileId)) return true;
 
+    // Check free file
     const fileDoc = await getDoc(doc(db, 'files', fileId));
-    const isFree = fileDoc.data()?.isFree !== false;
-
-    return isFree;
+    return !fileDoc.data()?.isPremium;
+    
   } catch (error) {
     console.error('Error checking file access:', error);
     return false;
+  }
+}
+
+// ============================================
+// 9. GET FILE PRICE (for premium files)
+// ============================================
+export async function getFilePrice(fileId) {
+  try {
+    const fileDoc = await getDoc(doc(db, 'files', fileId));
+    if (!fileDoc.exists()) return 29;
+    
+    const fileData = fileDoc.data();
+    if (!fileData.isPremium) return 0;
+    
+    return fileData.price || 29;
+  } catch (error) {
+    console.error('Error getting file price:', error);
+    return 29;
+  }
+}
+
+// ============================================
+// 10. PURCHASE SINGLE FILE
+// ============================================
+export async function purchaseFile(fileId) {
+  const user = auth.currentUser;
+  
+  if (!user) {
+    throw new Error('Please login to purchase');
+  }
+  
+  try {
+    const userRef = doc(db, 'users', user.uid);
+    await updateDoc(userRef, {
+      purchasedFiles: arrayUnion(fileId)
+    });
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Error purchasing file:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// ============================================
+// 11. UPDATE FILE METADATA (Admin only)
+// ============================================
+export async function updateFileMetadata(fileId, updates) {
+  const user = auth.currentUser;
+  
+  if (!user) {
+    throw new Error('Authentication required');
+  }
+  
+  try {
+    // Check if user is admin
+    const userDoc = await getDoc(doc(db, 'users', user.uid));
+    if (!userDoc.data()?.isAdmin) {
+      throw new Error('Admin access required');
+    }
+    
+    const fileRef = doc(db, 'files', fileId);
+    await updateDoc(fileRef, updates);
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Error updating file metadata:', error);
+    return { success: false, error: error.message };
   }
 }
