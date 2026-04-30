@@ -6,27 +6,19 @@ import { logFileViewStart, logFileViewClose } from '../services/loggerService';
 function ViewerPage() {
   const { fileId } = useParams();
   const [searchParams] = useSearchParams();
-  
-  // Support both /viewer/:fileId and /viewer?fileId=xxx
   const actualFileId = fileId || searchParams.get('fileId');
-  
-  // Log file view start when component mounts
+
   useEffect(() => {
     if (actualFileId) {
-      console.log('📊 Logging file view start for:', actualFileId);
-      // Log file view start
       logFileViewStart(actualFileId, 'File Viewer', false, true);
     }
-    
-    // Log file view close when component unmounts
     return () => {
       if (actualFileId) {
-        console.log('📊 Logging file view close for:', actualFileId);
         logFileViewClose();
       }
     };
   }, [actualFileId]);
-  
+
   if (!actualFileId) {
     return (
       <div className="text-center py-20">
@@ -37,7 +29,7 @@ function ViewerPage() {
       </div>
     );
   }
-  
+
   return <FileViewer />;
 }
 

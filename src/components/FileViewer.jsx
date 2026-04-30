@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { getFileById } from '../services/fileService';
+import { getFileById, canAccessFile } from '../services/fileService';
 import { useAuth } from '../contexts/AuthContext';
-import { canAccessFile } from '../services/fileService';
-import { logFileView } from '../services/loggerService';
+import { logFileViewStart, logFileViewClose } from '../services/loggerService';
 
 function FileViewer() {
   const { fileId } = useParams();
@@ -15,17 +14,10 @@ function FileViewer() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [canView, setCanView] = useState(false);
-  
-  // Time tracking states
-  const [viewStartTime, setViewStartTime] = useState(null);
-  const [viewDuration, setViewDuration] = useState(0);
-  const [isViewerVisible, setIsViewerVisible] = useState(true);
-  const [viewLogged, setViewLogged] = useState(false);
-  const durationIntervalRef = useRef(null);
 
-  // Get fileId from URL params or query string
   const actualFileId = fileId || searchParams.get('fileId');
 
+  // ✅ Effect 1: Load file
   useEffect(() => {
     if (actualFileId) {
       loadFile();
@@ -33,113 +25,76 @@ function FileViewer() {
       setError('No file specified');
       setLoading(false);
     }
+    
+    return () => {
+      logFileViewClose();
+    };
   }, [actualFileId]);
 
-  // Start time tracking when file is loaded and viewable
+  // ✅ Effect 2: CSS Injection to hide Google Drive download button
   useEffect(() => {
-    if (!loading && canView && file && !viewLogged) {
-      setViewLogged(true);
-      const startTime = Date.now();
-      setViewStartTime(startTime);
-      
-      console.log('⏱️ File view started at:', new Date(startTime).toLocaleTimeString());
-      
-      logFileView(
-        actualFileId,
-        file?.name || 'Unknown',
-        file?.isPremium || false,
-        true,
-        0,
-        'started'
-      );
-      
-      durationIntervalRef.current = setInterval(() => {
-        if (isViewerVisible && !loading) {
-          const currentDuration = Math.floor((Date.now() - startTime) / 1000);
-          setViewDuration(currentDuration);
-          
-          if (currentDuration > 0 && currentDuration % 30 === 0) {
-            console.log(`⏱️ User has viewed for ${currentDuration} seconds`);
-            logFileView(
-              actualFileId,
-              file?.name || 'Unknown',
-              file?.isPremium || false,
-              true,
-              currentDuration,
-              'in_progress'
-            );
-          }
-        }
-      }, 1000);
-      
-      return () => {
-        if (durationIntervalRef.current) {
-          clearInterval(durationIntervalRef.current);
-        }
-      };
-    }
-  }, [loading, canView, file, isViewerVisible]);
-
-  // Track page visibility (tab switch)
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      const isVisible = document.visibilityState === 'visible';
-      setIsViewerVisible(isVisible);
-      
-      if (isVisible && viewStartTime && !loading) {
-        const elapsed = Math.floor((Date.now() - viewStartTime) / 1000);
-        console.log(`👁️ Tab visible again, viewed ${elapsed} seconds so far`);
-      } else if (!isVisible && viewStartTime) {
-        console.log('👁️ Tab hidden, pausing duration tracking');
-      }
-    };
+    if (!canView) return;
     
-    document.addEventListener('visibilitychange', handleVisibilityChange);
+    // Inject CSS to hide download buttons in Google Drive iframe
+    const style = document.createElement('style');
+    style.id = 'drive-hide-download-css';
+    style.textContent = `
+      /* Hide Google Drive download buttons */
+      .ndfHFb-c4YZDc-Wrql6b,
+      .ndfHFb-c4YZDc-Wrql6b-LgbsSe,
+      .uHMk6b fsHoPb,
+      .J9UWEb,
+      .V2CwNc,
+      .V2CwNc-BI52fc,
+      [aria-label="Download"],
+      [aria-label="Download file"],
+      [aria-label="Download this file"],
+      button[aria-label="Download"],
+      button[aria-label="Download file"],
+      .drive-toolbar-download-button,
+      .drive-viewer-download-button,
+      [data-tooltip="Download"],
+      .goog-menuitem[aria-label="Download"],
+      .docs-download-button {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+        width: 0 !important;
+        height: 0 !important;
+        overflow: hidden !important;
+      }
+      
+      /* Hide print button too */
+      [aria-label="Print"],
+      button[aria-label="Print"] {
+        display: none !important;
+      }
+    `;
+    document.head.appendChild(style);
+    
+    // Also try to hide after iframe loads
+    const hideButtonsInIframe = setInterval(() => {
+      const iframe = document.querySelector('iframe');
+      if (iframe && iframe.contentDocument) {
+        try {
+          const iframeDoc = iframe.contentDocument;
+          const buttons = iframeDoc.querySelectorAll('[aria-label="Download"], .ndfHFb-c4YZDc-Wrql6b');
+          buttons.forEach(btn => {
+            btn.style.display = 'none';
+          });
+        } catch (e) {
+          // Cross-origin iframe can't be accessed - that's fine
+        }
+      }
+    }, 1000);
     
     return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      const existingStyle = document.getElementById('drive-hide-download-css');
+      if (existingStyle) existingStyle.remove();
+      clearInterval(hideButtonsInIframe);
     };
-  }, [viewStartTime, loading]);
-
-  // Log final duration when user leaves/closes
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      if (viewStartTime && file && canView) {
-        const finalDuration = Math.floor((Date.now() - viewStartTime) / 1000);
-        console.log(`⏱️ FINAL: User viewed for ${finalDuration} seconds`);
-        
-        logFileView(
-          actualFileId,
-          file?.name || 'Unknown',
-          file?.isPremium || false,
-          true,
-          finalDuration,
-          'completed'
-        );
-      }
-    };
-    
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-      
-      if (viewStartTime && file && canView) {
-        const finalDuration = Math.floor((Date.now() - viewStartTime) / 1000);
-        if (finalDuration > 0) {
-          console.log(`⏱️ FINAL (unmount): User viewed for ${finalDuration} seconds`);
-          logFileView(
-            actualFileId,
-            file?.name || 'Unknown',
-            file?.isPremium || false,
-            true,
-            finalDuration,
-            'completed'
-          );
-        }
-      }
-    };
-  }, [viewStartTime, file, canView, actualFileId]);
+  }, [canView]);
 
   const loadFile = async () => {
     setLoading(true);
@@ -157,6 +112,10 @@ function FileViewer() {
       const hasAccess = await canAccessFile(actualFileId);
       setCanView(hasAccess);
       
+      if (hasAccess) {
+        logFileViewStart(actualFileId, fileData.name, fileData.isPremium, hasAccess);
+      }
+      
     } catch (err) {
       console.error('Error loading file:', err);
       setError('Failed to load file');
@@ -168,15 +127,18 @@ function FileViewer() {
   const getViewerUrl = () => {
     if (!file) return '';
     
+    // For PDF - use Google Docs Viewer (no download)
+    if (file.name?.endsWith('.pdf') || file.mimeType === 'application/pdf') {
+      const driveUrl = file.webViewLink || `https://drive.google.com/file/d/${actualFileId}/view`;
+      return `https://docs.google.com/viewer?embedded=true&url=${encodeURIComponent(driveUrl)}`;
+    }
+    
+    // Default Drive embed
     if (file.webViewLink) {
       return file.webViewLink;
     }
     
-    if (actualFileId) {
-      return `https://drive.google.com/file/d/${actualFileId}/preview`;
-    }
-    
-    return '';
+    return `https://drive.google.com/file/d/${actualFileId}/preview`;
   };
 
   const handlePurchase = () => {
@@ -184,25 +146,7 @@ function FileViewer() {
   };
 
   const handleGoBack = () => {
-    // Log duration before going back
-    if (viewStartTime && file && canView) {
-      const finalDuration = Math.floor((Date.now() - viewStartTime) / 1000);
-      logFileView(
-        actualFileId,
-        file?.name || 'Unknown',
-        file?.isPremium || false,
-        true,
-        finalDuration,
-        'completed'
-      );
-    }
     navigate(-1);
-  };
-
-  const formatDuration = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
   };
 
   if (loading) {
@@ -220,10 +164,7 @@ function FileViewer() {
         <div className="text-red-500 text-6xl mb-4">⚠️</div>
         <h2 className="text-xl font-semibold text-gray-800 dark:text-white mb-2">{error}</h2>
         <p className="text-gray-600 dark:text-gray-400 mb-6">The file you're looking for doesn't exist or has been removed.</p>
-        <button
-          onClick={handleGoBack}
-          className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-        >
+        <button onClick={handleGoBack} className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
           Go Back
         </button>
       </div>
@@ -262,39 +203,18 @@ function FileViewer() {
       {/* Header */}
       <div className="bg-gray-900 text-white p-3 flex justify-between items-center">
         <div className="flex items-center gap-3">
-          <button
-            onClick={handleGoBack}
-            className="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded-lg transition"
-          >
+          <button onClick={handleGoBack} className="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded-lg transition">
             ← Back
           </button>
           <span className="text-sm font-medium truncate max-w-md">
             {file?.name || 'Document Viewer'}
           </span>
         </div>
-        <div className="flex items-center gap-3">
-          {viewDuration > 0 && (
-            <span className="text-xs bg-gray-700 px-2 py-1 rounded-lg">
-              ⏱️ Reading: {formatDuration(viewDuration)}
-            </span>
-          )}
-          {file?.webViewLink && (
-            <a
-              href={file.webViewLink}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="px-3 py-1 bg-green-600 hover:bg-green-700 rounded-lg text-sm transition"
-            >
-              Open in Drive
-            </a>
-          )}
-          <button
-            onClick={handleGoBack}
-            className="px-3 py-1 bg-red-600 hover:bg-red-700 rounded-lg transition"
-          >
-            ✕ Close
-          </button>
-        </div>
+        
+        {/* NO DOWNLOAD BUTTON - Intentionally removed */}
+        <button onClick={() => window.close()} className="px-3 py-1 bg-red-600 hover:bg-red-700 rounded-lg transition">
+          Close
+        </button>
       </div>
       
       {/* Viewer */}
