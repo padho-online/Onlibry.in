@@ -18,25 +18,17 @@ import { logSavedFileToSheet } from './firebaseLogger';
 // ============================================
 // 1. GET ALL FILES (with pagination - supports 500+ files)
 // ============================================
-export async function getAllFiles(pageParam = null, pageSize = 30) {
+export async function getAllFiles(pageParam = null, pageSize = 20) {
   try {
     let filesQuery = query(
       collection(db, 'files'),
       where('showOnWebsite', '==', true),
-      orderBy('createdAt', 'desc')
+      orderBy('createdAt', 'desc'),
+      limit(pageSize)
     );
 
     if (pageParam) {
-      filesQuery = query(
-        filesQuery,
-        startAfter(pageParam),
-        limit(pageSize)
-      );
-    } else {
-      filesQuery = query(
-        filesQuery,
-        limit(pageSize)
-      );
+      filesQuery = query(filesQuery, startAfter(pageParam));
     }
 
     const querySnapshot = await getDocs(filesQuery);
@@ -44,14 +36,15 @@ export async function getAllFiles(pageParam = null, pageSize = 30) {
     let lastVisible = null;
 
     querySnapshot.forEach((doc) => {
-      files.push({
-        id: doc.id,
-        ...doc.data()
-      });
+      files.push({ id: doc.id, ...doc.data() });
       lastVisible = doc;
     });
 
-    return { files, lastVisible, hasMore: files.length === pageSize };
+    return {
+      files,
+      lastVisible,
+      hasMore: files.length === pageSize
+    };
   } catch (error) {
     console.error('Error getting files:', error);
     return { files: [], lastVisible: null, hasMore: false };

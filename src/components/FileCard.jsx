@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { saveFile, unsaveFile, isFileSaved, canAccessFile } from '../services/fileService';
+import { requestSecureDownload, triggerDownload } from '../services/downloadService';
 import { checkViewLimit } from '../utils/helpers';
 
 function FileCard({ file }) {
@@ -10,6 +11,7 @@ function FileCard({ file }) {
   const [isSaved, setIsSaved] = useState(false);
   const [canAccess, setCanAccess] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     const checkStatus = async () => {
@@ -36,17 +38,51 @@ function FileCard({ file }) {
       return;
     }
     
-    // Paid user but no access (premium file without subscription)
-    if (!canAccess && file.isPremium) {
+    // Logged in user - Premium file without subscription
+    if (file.isPremium && !canAccess && !isSubscribed) {
       navigate('/pricing', { state: { from: { pathname: '/files', fileId: file.id } } });
       return;
     }
     
-    // Free file OR paid user with access - open file
+    // Free file OR subscribed user - open file viewer
     if (file.webViewLink) {
       window.open(file.webViewLink, '_blank');
     } else {
       navigate(`/viewer/${file.id}`);
+    }
+  };
+
+  // ============================================
+  // DOWNLOAD FILE HANDLER - Secure download
+  // ============================================
+  const handleDownload = async () => {
+    // Guest user not allowed to download
+    if (!user) {
+      navigate('/login', { state: { from: { pathname: '/files', fileId: file.id } } });
+      return;
+    }
+
+    // Free user trying to download premium file - redirect to subscribe
+    if (file.isPremium && !isSubscribed && !canAccess) {
+      navigate('/pricing', { state: { from: { pathname: '/files', fileId: file.id } } });
+      return;
+    }
+
+    setDownloading(true);
+    
+    try {
+      const result = await requestSecureDownload(file.id);
+      
+      if (result.success && result.downloadUrl) {
+        triggerDownload(result.downloadUrl, file.name);
+      } else {
+        alert(result.message || 'Download failed. Please try again.');
+      }
+    } catch (error) {
+      console.error('Download error:', error);
+      alert(error.message || 'Download failed. Please try again.');
+    } finally {
+      setDownloading(false);
     }
   };
 
@@ -58,10 +94,12 @@ function FileCard({ file }) {
       navigate('/login', { state: { from: { pathname: '/files', fileId: file.id } } });
       return;
     }
-    // Go to single file purchase page
     navigate(`/purchase/${file.id}`, { state: { file: file } });
   };
 
+  // ============================================
+  // SAVE/UNSAVE HANDLER
+  // ============================================
   const handleSaveToggle = async (e) => {
     e.stopPropagation();
     if (!user) {
@@ -80,6 +118,9 @@ function FileCard({ file }) {
     setLoading(false);
   };
 
+  // ============================================
+  // SHARE HANDLER
+  // ============================================
   const handleShare = async (e) => {
     e.stopPropagation();
     const shareUrl = file.webViewLink || `https://onlibry.in/viewer.html?fileId=${file.id}`;
@@ -91,7 +132,9 @@ function FileCard({ file }) {
     }
   };
 
-  // Render tags
+  // ============================================
+  // RENDER TAGS
+  // ============================================
   const renderTags = () => {
     const tags = [];
     if (file.tags) {
@@ -109,20 +152,79 @@ function FileCard({ file }) {
     ));
   };
 
-  // Determine button text and action
+  // ============================================
+  // BUTTON CONFIGURATION BASED ON USER TYPE
+  // ============================================
+  // Requirement Table:
+  // | User Type              | Free File | Premium File | Single Purchased File |
+  // |------------------------|-----------|--------------|----------------------|
+  // | Guest (Not Logged In)  | Login     | Login        | N/A                  |
+  // | Free User (Logged In)  | View Only | Subscribe    | Download             |
+  // | Premium User           | Download  | Download     | Download             |
+  // ============================================
+  
   const getButtonConfig = () => {
-    // Guest user
+    // ========== GUEST USER ==========
     if (!user) {
-      return { text: 'View', action: handleViewFile, color: 'bg-green-600' };
+      return { 
+        text: 'View', 
+        action: handleViewFile, 
+        color: 'bg-green-600',
+        showDownload: false 
+      };
     }
     
-    // Logged in user - Premium file without access
-    if (file.isPremium && !canAccess && !isSubscribed) {
-      return { text: `🔒 Unlock (₹${file.price || 29})`, action: handleUnlockFile, color: 'bg-yellow-600' };
+    // ========== FREE USER (Logged in but not subscribed) ==========
+    if (!isSubscribed) {
+      // Free user + Free file → View Only (No download)
+      if (!file.isPremium) {
+        return { 
+          text: '📖 View', 
+          action: handleViewFile, 
+          color: 'bg-green-600',
+          showDownload: false 
+        };
+      }
+      
+      // Free user + Premium file (not purchased) → Subscribe button
+      if (!canAccess) {
+        return { 
+          text: `🔒 Subscribe (₹${file.price || 29})`, 
+          action: handleUnlockFile, 
+          color: 'bg-yellow-600',
+          showDownload: false 
+        };
+      }
+      
+      // Free user + Premium file (single purchased) → Download available
+      if (canAccess && file.isPremium) {
+        return { 
+          text: '📖 View', 
+          action: handleViewFile, 
+          color: 'bg-green-600',
+          showDownload: true 
+        };
+      }
     }
     
-    // Logged in user - Has access (free or subscribed)
-    return { text: '📖 View', action: handleViewFile, color: 'bg-green-600' };
+    // ========== PREMIUM USER (Subscribed) ==========
+    if (isSubscribed) {
+      // Premium user any file → Download + View
+      return { 
+        text: '📖 View', 
+        action: handleViewFile, 
+        color: 'bg-green-600',
+        showDownload: true 
+      };
+    }
+    
+    // Default fallback
+    return { 
+      text: '📖 View', 
+      action: handleViewFile, 
+      color: 'bg-green-600',
+      showDownload: false 
+    };
   };
 
   const buttonConfig = getButtonConfig();
@@ -158,6 +260,7 @@ function FileCard({ file }) {
         
         {/* Action Buttons */}
         <div className="flex gap-2 mt-2">
+          {/* Main Button (View/Subscribe/Unlock) */}
           <button
             onClick={buttonConfig.action}
             className={`flex-1 px-3 py-2 ${buttonConfig.color} hover:opacity-90 text-white text-sm font-medium rounded-lg transition`}
@@ -165,6 +268,19 @@ function FileCard({ file }) {
             {buttonConfig.text}
           </button>
           
+          {/* Download Button - Only for users who can download */}
+          {buttonConfig.showDownload && (
+            <button
+              onClick={handleDownload}
+              disabled={downloading}
+              className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition disabled:opacity-50"
+              title="Download"
+            >
+              {downloading ? '⏳' : '⬇️'}
+            </button>
+          )}
+          
+          {/* Save Button */}
           <button
             onClick={handleSaveToggle}
             disabled={loading}
@@ -178,6 +294,7 @@ function FileCard({ file }) {
             {isSaved ? '⭐' : '📌'}
           </button>
           
+          {/* Share Button */}
           <button
             onClick={handleShare}
             className="px-3 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-lg transition"
