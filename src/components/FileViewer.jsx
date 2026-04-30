@@ -14,10 +14,11 @@ function FileViewer() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [canView, setCanView] = useState(false);
+  const [viewerUrl, setViewerUrl] = useState('');
 
   const actualFileId = fileId || searchParams.get('fileId');
 
-  // ✅ Effect 1: Load file
+  // Effect 1: Load file
   useEffect(() => {
     if (actualFileId) {
       loadFile();
@@ -31,68 +32,35 @@ function FileViewer() {
     };
   }, [actualFileId]);
 
-  // ✅ Effect 2: CSS Injection to hide Google Drive download button
+  // Effect 2: CSS Injection to hide Google Drive download button
   useEffect(() => {
     if (!canView) return;
     
-    // Inject CSS to hide download buttons in Google Drive iframe
+    // Inject CSS to hide download buttons
     const style = document.createElement('style');
     style.id = 'drive-hide-download-css';
     style.textContent = `
-      /* Hide Google Drive download buttons */
       .ndfHFb-c4YZDc-Wrql6b,
       .ndfHFb-c4YZDc-Wrql6b-LgbsSe,
       .uHMk6b fsHoPb,
       .J9UWEb,
       .V2CwNc,
-      .V2CwNc-BI52fc,
       [aria-label="Download"],
       [aria-label="Download file"],
-      [aria-label="Download this file"],
       button[aria-label="Download"],
-      button[aria-label="Download file"],
       .drive-toolbar-download-button,
-      .drive-viewer-download-button,
-      [data-tooltip="Download"],
-      .goog-menuitem[aria-label="Download"],
-      .docs-download-button {
+      .goog-menuitem[aria-label="Download"] {
         display: none !important;
         visibility: hidden !important;
         opacity: 0 !important;
         pointer-events: none !important;
-        width: 0 !important;
-        height: 0 !important;
-        overflow: hidden !important;
-      }
-      
-      /* Hide print button too */
-      [aria-label="Print"],
-      button[aria-label="Print"] {
-        display: none !important;
       }
     `;
     document.head.appendChild(style);
     
-    // Also try to hide after iframe loads
-    const hideButtonsInIframe = setInterval(() => {
-      const iframe = document.querySelector('iframe');
-      if (iframe && iframe.contentDocument) {
-        try {
-          const iframeDoc = iframe.contentDocument;
-          const buttons = iframeDoc.querySelectorAll('[aria-label="Download"], .ndfHFb-c4YZDc-Wrql6b');
-          buttons.forEach(btn => {
-            btn.style.display = 'none';
-          });
-        } catch (e) {
-          // Cross-origin iframe can't be accessed - that's fine
-        }
-      }
-    }, 1000);
-    
     return () => {
       const existingStyle = document.getElementById('drive-hide-download-css');
       if (existingStyle) existingStyle.remove();
-      clearInterval(hideButtonsInIframe);
     };
   }, [canView]);
 
@@ -114,6 +82,29 @@ function FileViewer() {
       
       if (hasAccess) {
         logFileViewStart(actualFileId, fileData.name, fileData.isPremium, hasAccess);
+        
+        // Set viewer URL based on file type
+        let url = '';
+        
+        // For PDF files - use Google Drive embed with parameters
+        if (fileData.name?.endsWith('.pdf') || fileData.mimeType === 'application/pdf') {
+          // Direct Drive embed - no extra params
+          url = `https://drive.google.com/file/d/${actualFileId}/preview`;
+        } 
+        // For images
+        else if (fileData.name?.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
+          url = `https://drive.google.com/uc?id=${actualFileId}&export=view`;
+        }
+        // For other files (docs, sheets, slides)
+        else if (fileData.webViewLink) {
+          url = fileData.webViewLink;
+        }
+        // Fallback
+        else {
+          url = `https://drive.google.com/file/d/${actualFileId}/preview`;
+        }
+        
+        setViewerUrl(url);
       }
       
     } catch (err) {
@@ -122,23 +113,6 @@ function FileViewer() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const getViewerUrl = () => {
-    if (!file) return '';
-    
-    // For PDF - use Google Docs Viewer (no download)
-    if (file.name?.endsWith('.pdf') || file.mimeType === 'application/pdf') {
-      const driveUrl = file.webViewLink || `https://drive.google.com/file/d/${actualFileId}/view`;
-      return `https://docs.google.com/viewer?embedded=true&url=${encodeURIComponent(driveUrl)}`;
-    }
-    
-    // Default Drive embed
-    if (file.webViewLink) {
-      return file.webViewLink;
-    }
-    
-    return `https://drive.google.com/file/d/${actualFileId}/preview`;
   };
 
   const handlePurchase = () => {
@@ -211,7 +185,7 @@ function FileViewer() {
           </span>
         </div>
         
-        {/* NO DOWNLOAD BUTTON - Intentionally removed */}
+        {/* Close button only - NO DOWNLOAD BUTTON */}
         <button onClick={() => window.close()} className="px-3 py-1 bg-red-600 hover:bg-red-700 rounded-lg transition">
           Close
         </button>
@@ -219,13 +193,28 @@ function FileViewer() {
       
       {/* Viewer */}
       <div className="flex-1 p-2">
-        <iframe
-          src={getViewerUrl()}
-          className="w-full h-full rounded-lg"
-          title={file?.name || 'File Viewer'}
-          allow="autoplay; fullscreen"
-          frameBorder="0"
-        />
+        {viewerUrl ? (
+          <iframe
+            src={viewerUrl}
+            className="w-full h-full rounded-lg"
+            title={file?.name || 'File Viewer'}
+            allow="autoplay; fullscreen"
+            frameBorder="0"
+          />
+        ) : (
+          <div className="flex flex-col items-center justify-center h-full">
+            <div className="text-gray-400 text-6xl mb-4">📄</div>
+            <p className="text-gray-500">File preview not available</p>
+            <a 
+              href={file?.webViewLink || `https://drive.google.com/file/d/${actualFileId}/view`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              Open in Google Drive
+            </a>
+          </div>
+        )}
       </div>
     </div>
   );

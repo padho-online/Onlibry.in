@@ -25,6 +25,7 @@ import QuizExamPage from './pages/QuizExamPage';
 import QuizResultsPage from './pages/QuizResultsPage';
 import ViewerPage from './pages/ViewerPage';
 import NotFoundPage from './pages/NotFoundPage';
+import PurchasePage from './pages/PurchasePage';  // ✅ ADD THIS
 
 // =====================
 // ADMIN PAGES
@@ -73,6 +74,9 @@ function App() {
                   </ProtectedRoute>
                 }
               />
+              
+              {/* ✅ SINGLE FILE PURCHASE ROUTE */}
+              <Route path="/purchase/:fileId" element={<PurchasePage />} />
 
               {/* ===================== */}
               {/* VIEWER ROUTES */}

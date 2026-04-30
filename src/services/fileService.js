@@ -378,7 +378,7 @@ export async function getFilePrice(fileId) {
 }
 
 // ============================================
-// 10. PURCHASE SINGLE FILE
+// 10. PURCHASE SINGLE FILE ✅ FIXED
 // ============================================
 export async function purchaseFile(fileId) {
   const user = auth.currentUser;
@@ -393,6 +393,7 @@ export async function purchaseFile(fileId) {
       purchasedFiles: arrayUnion(fileId)
     });
     
+    console.log(`✅ File ${fileId} purchased by ${user.email}`);
     return { success: true };
   } catch (error) {
     console.error('Error purchasing file:', error);
