@@ -8,7 +8,6 @@ function PurchasePage() {
   const { fileId } = useParams();
   const navigate = useNavigate();
   const { user, isSubscribed } = useAuth();
-  
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);

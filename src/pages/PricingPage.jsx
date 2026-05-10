@@ -1,5 +1,5 @@
 // src/pages/PricingPage.jsx
-// COMPLETE - With Cart Section and location state support
+// COMPLETE FIXED - Razorpay Payment Working
 
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
@@ -16,9 +16,24 @@ function PricingPage() {
   const location = useLocation();
   const [loading, setLoading] = useState(false);
   const [processingPlan, setProcessingPlan] = useState(null);
-  const [activeTab, setActiveTab] = useState('subscription'); // 'subscription' or 'cart'
+  const [activeTab, setActiveTab] = useState('subscription');
+  const [razorpayLoaded, setRazorpayLoaded] = useState(false);
 
-  // 🔥 Check location state for activeTab
+  // Load Razorpay script on mount
+  useEffect(() => {
+    const loadScript = async () => {
+      const loaded = await loadRazorpayScript();
+      setRazorpayLoaded(loaded);
+      if (!loaded) {
+        console.error('❌ Razorpay script failed to load');
+      } else {
+        console.log('✅ Razorpay script loaded');
+      }
+    };
+    loadScript();
+  }, []);
+
+  // Check location state for activeTab
   useEffect(() => {
     if (location.state?.activeTab === 'cart') {
       setActiveTab('cart');
@@ -94,29 +109,38 @@ function PricingPage() {
 
     if (price === 0) return;
 
+    if (!razorpayLoaded) {
+      alert('Payment gateway is loading. Please try again in a moment.');
+      return;
+    }
+
     setProcessingPlan(planName);
     setLoading(true);
 
     await logPaymentInitiation(user.uid, user.email, planName, price);
 
     try {
-      const scriptLoaded = await loadRazorpayScript();
+      console.log('📡 Creating order for plan:', planName, 'Amount:', price);
       
-      if (!scriptLoaded) {
-        throw new Error('Failed to load payment gateway');
-      }
-
       const order = await createRazorpayOrder(price);
+      
+      if (!order || !order.id) {
+        throw new Error('Failed to create order');
+      }
+      
+      console.log('✅ Order created:', order.id);
       
       const options = {
         key: 'rzp_live_SiS2QOdZl6zCUx',
-        amount: price * 100,
-        currency: 'INR',
+        amount: order.amount,
+        currency: order.currency,
         name: 'Onlibry',
         description: `${planName} Subscription`,
         image: 'https://onlibry.in/logo transparent.png',
         order_id: order.id,
         handler: async (response) => {
+          console.log('✅ Payment success:', response);
+          
           await logPayment('payment_success', planName, price, 'success', response.razorpay_payment_id, response.razorpay_order_id);
           await logPaymentSuccess(user.uid, user.email, planName, price, response.razorpay_payment_id, response.razorpay_order_id);
           
@@ -138,7 +162,10 @@ function PricingPage() {
         },
         modal: {
           ondismiss: () => {
+            console.log('Payment modal closed');
             logPaymentModalClose(user.uid, user.email, planName, price);
+            setLoading(false);
+            setProcessingPlan(null);
           }
         }
       };
@@ -150,8 +177,7 @@ function PricingPage() {
       console.error('Payment error:', error);
       await logPayment('payment_failed', planName, price, 'failed', null, null, error.message);
       await logPaymentFailure(user.uid, user.email, planName, price, error.message);
-      alert('Something went wrong. Please try again later.');
-    } finally {
+      alert(error.message || 'Something went wrong. Please try again later.');
       setLoading(false);
       setProcessingPlan(null);
     }
@@ -169,30 +195,38 @@ function PricingPage() {
       return;
     }
 
+    if (!razorpayLoaded) {
+      alert('Payment gateway is loading. Please try again in a moment.');
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const scriptLoaded = await loadRazorpayScript();
-      
-      if (!scriptLoaded) {
-        throw new Error('Failed to load payment gateway');
-      }
-
       const totalAmount = cartTotal;
+      console.log('📡 Creating order for cart total:', totalAmount);
+      
       const order = await createRazorpayOrder(totalAmount);
+      
+      if (!order || !order.id) {
+        throw new Error('Failed to create order');
+      }
+      
+      console.log('✅ Order created:', order.id);
       
       const options = {
         key: 'rzp_live_SiS2QOdZl6zCUx',
-        amount: totalAmount * 100,
-        currency: 'INR',
+        amount: order.amount,
+        currency: order.currency,
         name: 'Onlibry',
         description: `Purchase ${cartItems.length} item(s)`,
         image: 'https://onlibry.in/logo transparent.png',
         order_id: order.id,
         handler: async (response) => {
+          console.log('✅ Cart payment success:', response);
+          
           await logPayment('cart_payment_success', 'Cart Purchase', totalAmount, 'success', response.razorpay_payment_id, response.razorpay_order_id);
           
-          // For now, show success and clear cart
           alert(`Successfully purchased ${cartItems.length} item(s)! 🎉`);
           clearCart();
           navigate('/files');
@@ -207,6 +241,7 @@ function PricingPage() {
         modal: {
           ondismiss: () => {
             console.log('Cart checkout cancelled');
+            setLoading(false);
           }
         }
       };
@@ -216,7 +251,7 @@ function PricingPage() {
       
     } catch (error) {
       console.error('Cart checkout error:', error);
-      alert('Something went wrong. Please try again later.');
+      alert(error.message || 'Something went wrong. Please try again later.');
     } finally {
       setLoading(false);
     }
@@ -229,29 +264,39 @@ function PricingPage() {
       return;
     }
 
+    if (!razorpayLoaded) {
+      alert('Payment gateway is loading. Please try again in a moment.');
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const scriptLoaded = await loadRazorpayScript();
+      console.log('📡 Creating order for file:', item.name, 'Amount:', item.price);
       
-      if (!scriptLoaded) {
-        throw new Error('Failed to load payment gateway');
-      }
-
       const order = await createRazorpayOrder(item.price);
+      
+      if (!order || !order.id) {
+        throw new Error('Failed to create order');
+      }
+      
+      console.log('✅ Order created:', order.id);
       
       const options = {
         key: 'rzp_live_SiS2QOdZl6zCUx',
-        amount: item.price * 100,
-        currency: 'INR',
+        amount: order.amount,
+        currency: order.currency,
         name: 'Onlibry',
         description: `Purchase: ${item.name}`,
         image: 'https://onlibry.in/logo transparent.png',
         order_id: order.id,
         handler: async (response) => {
+          console.log('✅ Single file payment success:', response);
+          
           await logPayment('single_file_payment_success', item.name, item.price, 'success', response.razorpay_payment_id, response.razorpay_order_id);
           alert(`Successfully purchased "${item.name}"! 🎉`);
           removeFromCart(item.id);
+          setLoading(false);
         },
         prefill: {
           name: user.displayName || '',
@@ -259,6 +304,12 @@ function PricingPage() {
         },
         theme: {
           color: '#22c55e',
+        },
+        modal: {
+          ondismiss: () => {
+            console.log('Single file checkout cancelled');
+            setLoading(false);
+          }
         }
       };
       
@@ -267,8 +318,7 @@ function PricingPage() {
       
     } catch (error) {
       console.error('Single file checkout error:', error);
-      alert('Something went wrong. Please try again later.');
-    } finally {
+      alert(error.message || 'Something went wrong. Please try again later.');
       setLoading(false);
     }
   };
@@ -331,6 +381,15 @@ function PricingPage() {
         </div>
       )}
 
+      {/* Razorpay Loading Warning */}
+      {!razorpayLoaded && activeTab === 'subscription' && (
+        <div className="max-w-md mx-auto mb-8 p-4 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg text-center">
+          <p className="text-yellow-700 dark:text-yellow-400">
+            ⏳ Loading payment gateway...
+          </p>
+        </div>
+      )}
+
       {/* Subscription Plans Tab */}
       {activeTab === 'subscription' && (
         <>
@@ -383,16 +442,18 @@ function PricingPage() {
                     
                     <button
                       onClick={() => handleSubscribe(plan.name, plan.price, plan.durationDays)}
-                      disabled={isCurrentPlan || plan.price === 0}
+                      disabled={isCurrentPlan || plan.price === 0 || !razorpayLoaded}
                       className={`w-full py-3 rounded-lg font-semibold text-white transition ${
                         isCurrentPlan 
                           ? 'bg-gray-500 cursor-default' 
                           : isProcessing
                           ? 'bg-gray-400 cursor-wait'
+                          : !razorpayLoaded
+                          ? 'bg-gray-400 cursor-wait'
                           : plan.buttonClass
                       }`}
                     >
-                      {isProcessing ? 'Processing...' : isCurrentPlan ? 'Current Plan' : plan.buttonText}
+                      {isProcessing ? 'Processing...' : !razorpayLoaded ? 'Loading...' : isCurrentPlan ? 'Current Plan' : plan.buttonText}
                     </button>
                   </div>
                 </div>
@@ -464,7 +525,8 @@ function PricingPage() {
                         <div className="flex gap-2 mt-1">
                           <button
                             onClick={() => handleSingleFileCheckout(item)}
-                            className="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+                            disabled={!razorpayLoaded}
+                            className="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
                           >
                             Buy Now
                           </button>
@@ -497,7 +559,8 @@ function PricingPage() {
                     </button>
                     <button
                       onClick={handleCartCheckout}
-                      className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-semibold"
+                      disabled={!razorpayLoaded}
+                      className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-semibold disabled:opacity-50"
                     >
                       Checkout (₹{cartTotal})
                     </button>
