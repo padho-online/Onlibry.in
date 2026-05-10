@@ -1,6 +1,7 @@
 // src/pages/SavedFilesPage.jsx
 // UPDATED - Added Purchased Items Section (Files, Mock Tests, Quizzes)
 // FIXED - Handle 'all' flag for subscription users
+// FIXED - Purchased files show "View" instead of "Unlock"
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -18,7 +19,7 @@ function SavedFilesPage() {
   const navigate = useNavigate();
   
   // Tab state
-  const [activeTab, setActiveTab] = useState('saved'); // 'saved', 'purchased'
+  const [activeTab, setActiveTab] = useState('saved');
   
   // Saved files state
   const [savedFiles, setSavedFiles] = useState([]);
@@ -30,6 +31,9 @@ function SavedFilesPage() {
   const [purchasedMockTests, setPurchasedMockTests] = useState([]);
   const [purchasedQuizzes, setPurchasedQuizzes] = useState([]);
   const [loadingPurchased, setLoadingPurchased] = useState(true);
+  
+  // 🔥 NEW: Track purchased items access status
+  const [purchasedAccessStatus, setPurchasedAccessStatus] = useState({});
 
   useEffect(() => {
     if (!user) {
@@ -84,8 +88,7 @@ function SavedFilesPage() {
   };
 
   // ============================================
-  // LOAD PURCHASED ITEMS
-  // 🔥 UPDATED: Handle 'all' flag for subscription users
+  // LOAD PURCHASED ITEMS - FIXED VERSION
   // ============================================
   const loadPurchasedItems = async () => {
     setLoadingPurchased(true);
@@ -96,31 +99,50 @@ function SavedFilesPage() {
       let purchasedMockTestData = userDoc.data()?.purchasedMockTests || [];
       let purchasedQuizData = userDoc.data()?.purchasedQuizzes || [];
       
-      // Load purchased files
+      // 🔥 Get ALL files from sheet first
+      const allFiles = await getAllFilesFromSheet();
+      
+      // Create a map for quick lookup
+      const fileMap = new Map();
+      allFiles.forEach(file => {
+        fileMap.set(file.cloudflareKey || file.id, file);
+        fileMap.set(file.originalId, file);
+        fileMap.set(file.id, file);
+      });
+      
+      // Load purchased files with CORRECT access status
       if (purchasedFileIds.length > 0) {
-        const allFiles = await getAllFilesFromSheet();
-        const files = purchasedFileIds.map(fileId => {
-          const fileData = allFiles.find(f => 
-            f.id === fileId || f.cloudflareKey === fileId || f.originalId === fileId
-          );
+        const files = [];
+        for (const fileId of purchasedFileIds) {
+          let fileData = fileMap.get(fileId);
+          if (!fileData) {
+            fileData = allFiles.find(f => 
+              f.id === fileId || f.cloudflareKey === fileId || f.originalId === fileId
+            );
+          }
+          
           if (fileData) {
-            return {
-              id: fileData.cloudflareKey || fileData.id,
+            const finalId = fileData.cloudflareKey || fileData.id;
+            files.push({
+              id: finalId,
               ...fileData,
               type: 'file'
-            };
+            });
+            // 🔥 CRITICAL: Mark as purchased - ALWAYS accessible
+            setPurchasedAccessStatus(prev => ({ ...prev, [finalId]: true }));
+            console.log('✅ Marked as purchased:', fileData.name, 'ID:', finalId);
+          } else {
+            console.warn('⚠️ File not found in sheet:', fileId);
           }
-          return null;
-        }).filter(f => f !== null);
+        }
         setPurchasedFiles(files);
       }
       
-      // 🔥 NEW: Check if user has subscription ('all' flag)
+      // Check if user has subscription ('all' flag)
       const hasSubscriptionAccess = isSubscribed === true;
       
       // Load purchased mock tests - Handle 'all' flag
       if (purchasedMockTestData === 'all' || hasSubscriptionAccess) {
-        // User has subscription - show ALL mock tests
         console.log('📝 User has subscription - showing all mock tests');
         const allMockTests = await getAllMockTests();
         const mockTests = allMockTests.map(mt => ({
@@ -131,7 +153,6 @@ function SavedFilesPage() {
         }));
         setPurchasedMockTests(mockTests);
       } else if (purchasedMockTestData.length > 0) {
-        // User purchased specific mock tests
         const allMockTests = await getAllMockTests();
         const mockTests = allMockTests.filter(mt => 
           purchasedMockTestData.includes(mt.id) || purchasedMockTestData.includes(mt.originalName)
@@ -146,7 +167,6 @@ function SavedFilesPage() {
       
       // Load purchased quizzes - Handle 'all' flag
       if (purchasedQuizData === 'all' || hasSubscriptionAccess) {
-        // User has subscription - show ALL quizzes
         console.log('❓ User has subscription - showing all quizzes');
         const allQuizzes = await getAllQuizzes();
         const quizzes = allQuizzes.map(q => ({
@@ -157,7 +177,6 @@ function SavedFilesPage() {
         }));
         setPurchasedQuizzes(quizzes);
       } else if (purchasedQuizData.length > 0) {
-        // User purchased specific quizzes
         const allQuizzes = await getAllQuizzes();
         const quizzes = allQuizzes.filter(q => 
           purchasedQuizData.includes(q.id) || purchasedQuizData.includes(q.originalName)
@@ -205,13 +224,27 @@ function SavedFilesPage() {
     } else if (item.type === 'quiz') {
       navigate(`/quiz/${encodeURIComponent(item.originalName)}`);
     } else {
-      const hasAccess = accessStatus[item.id] || isSubscribed;
+      // 🔥 Check if file is purchased OR subscribed
+      const isPurchased = purchasedAccessStatus[item.id] === true;
+      const hasAccess = isPurchased || isSubscribed;
+      
       if (!hasAccess && item.isPremium) {
         navigate('/pricing', { state: { from: '/saved-files', fileId: item.id } });
         return;
       }
       navigate(`/viewer/${item.id}`);
     }
+  };
+
+  // ============================================
+  // CHECK IF ITEM IS ACCESSIBLE
+  // ============================================
+  const isItemAccessible = (item, isPurchasedItem = false) => {
+    if (isPurchasedItem) return true;
+    if (item.type === 'mocktest' || item.type === 'quiz') {
+      return isSubscribed === true;
+    }
+    return purchasedAccessStatus[item.id] === true || isSubscribed === true;
   };
 
   // ============================================
@@ -234,11 +267,14 @@ function SavedFilesPage() {
   };
 
   // ============================================
-  // RENDER ITEM CARD
+  // RENDER ITEM CARD - FIXED VERSION
   // ============================================
-  const renderItemCard = (item, showUnsave = false, onUnsave = null) => {
-    const isPremiumItem = item.isPremium === true;
-    const hasAccess = accessStatus[item.id] || isSubscribed;
+  const renderItemCard = (item, showUnsave = false, onUnsave = null, isPurchasedItem = false) => {
+    // 🔥 For purchased items, ALWAYS show View button
+    const showViewOnly = isPurchasedItem === true;
+    
+    // For saved files tab, check access status
+    const hasAccess = showViewOnly ? true : (accessStatus[item.id] || isSubscribed);
     
     return (
       <div
@@ -258,11 +294,6 @@ function SavedFilesPage() {
               </h3>
             </div>
             <div className="flex gap-1">
-              {isPremiumItem && !hasAccess && (
-                <span className="px-2 py-1 text-xs font-semibold text-yellow-700 bg-yellow-100 dark:bg-yellow-900/50 rounded-full">
-                  Premium
-                </span>
-              )}
               {item.type === 'mocktest' && (
                 <span className="px-2 py-1 text-xs font-semibold text-blue-700 bg-blue-100 dark:bg-blue-900/50 rounded-full">
                   Mock Test
@@ -311,12 +342,11 @@ function SavedFilesPage() {
             <button
               onClick={(e) => { e.stopPropagation(); handleViewFile(item); }}
               className={`flex-1 px-3 py-2 rounded-lg text-white text-sm font-medium transition ${
-                hasAccess || !isPremiumItem
-                  ? 'bg-green-600 hover:bg-green-700'
-                  : 'bg-yellow-500 hover:bg-yellow-600'
+                showViewOnly ? 'bg-green-600 hover:bg-green-700' :
+                (hasAccess || !item.isPremium) ? 'bg-green-600 hover:bg-green-700' : 'bg-yellow-500 hover:bg-yellow-600'
               }`}
             >
-              {hasAccess || !isPremiumItem ? '📖 View' : '🔒 Unlock'}
+              {showViewOnly ? '📖 View' : (hasAccess || !item.isPremium) ? '📖 View' : '🔒 Unlock'}
             </button>
             
             {showUnsave && onUnsave && (
@@ -386,7 +416,7 @@ function SavedFilesPage() {
             </div>
           ) : savedFiles.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {savedFiles.map((file) => renderItemCard(file, true, handleUnsave))}
+              {savedFiles.map((file) => renderItemCard(file, true, handleUnsave, false))}
             </div>
           ) : (
             <div className="text-center py-20">
@@ -427,7 +457,7 @@ function SavedFilesPage() {
                     <span>📄</span> Purchased Files ({purchasedFiles.length})
                   </h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {purchasedFiles.map((file) => renderItemCard(file, false))}
+                    {purchasedFiles.map((file) => renderItemCard(file, false, null, true))}
                   </div>
                 </div>
               )}
@@ -439,7 +469,7 @@ function SavedFilesPage() {
                     <span>📝</span> Purchased Mock Tests ({purchasedMockTests.length})
                   </h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {purchasedMockTests.map((test) => renderItemCard(test, false))}
+                    {purchasedMockTests.map((test) => renderItemCard(test, false, null, true))}
                   </div>
                 </div>
               )}
@@ -451,7 +481,7 @@ function SavedFilesPage() {
                     <span>❓</span> Purchased Quizzes ({purchasedQuizzes.length})
                   </h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {purchasedQuizzes.map((quiz) => renderItemCard(quiz, false))}
+                    {purchasedQuizzes.map((quiz) => renderItemCard(quiz, false, null, true))}
                   </div>
                 </div>
               )}

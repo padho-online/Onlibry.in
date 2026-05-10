@@ -1,13 +1,16 @@
 // src/components/FileViewer.jsx
-// FIXED - Direct URL without fetch test
+// UPDATED - With purchased items access check
+// DOWNLOAD BUTTON: ONLY for premium subscribers (NOT for single file purchase, NOT for free users)
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { getFileById } from '../services/fileService';
 import SecurePDFViewer from './SecurePDFViewer';
+import { db } from '../config/firebase';
+import { doc, getDoc } from 'firebase/firestore';
 
-const WORKER_URL = 'https://onlibry.mdhabibul12212141.workers.dev';
+const WORKER_URL = import.meta.env.VITE_CLOUDFLARE_WORKER_URL;
 
 function FileViewer() {
   const { fileId } = useParams();
@@ -20,8 +23,23 @@ function FileViewer() {
   const [error, setError] = useState(null);
   const [pdfUrl, setPdfUrl] = useState('');
   const [canView, setCanView] = useState(false);
+  const [isPurchased, setIsPurchased] = useState(false);
+  const [checkingAccess, setCheckingAccess] = useState(true);
 
   const actualFileId = fileId || searchParams.get('fileId');
+
+  // Check if user has purchased this specific file
+  const checkPurchasedFile = async (userId, fileIdentifier) => {
+    if (!userId) return false;
+    try {
+      const userDoc = await getDoc(doc(db, 'users', userId));
+      const purchasedFiles = userDoc.data()?.purchasedFiles || [];
+      return purchasedFiles.includes(fileIdentifier);
+    } catch (error) {
+      console.error('Error checking purchased file:', error);
+      return false;
+    }
+  };
 
   useEffect(() => {
     if (actualFileId) {
@@ -35,6 +53,7 @@ function FileViewer() {
   const loadFile = async () => {
     setLoading(true);
     setError(null);
+    setCheckingAccess(true);
     
     try {
       const fileData = await getFileById(actualFileId);
@@ -42,40 +61,59 @@ function FileViewer() {
       if (!fileData) {
         setError('File not found');
         setLoading(false);
+        setCheckingAccess(false);
         return;
       }
       
       setFile(fileData);
       
-      // Check access
-      const hasAccess = !fileData.isPremium || (fileData.isPremium && isSubscribed);
+      // 🔥 CHECK ACCESS LOGIC:
+      // 1. If file is free -> always accessible
+      // 2. If user is premium subscriber -> accessible
+      // 3. If user purchased this specific file -> accessible
+      // 4. Else -> not accessible
       
-      if (!hasAccess) {
-        setCanView(false);
-        setLoading(false);
-        return;
+      let hasAccess = false;
+      
+      // Case 1: Free file
+      if (!fileData.isPremium) {
+        hasAccess = true;
+      }
+      // Case 2: Premium user
+      else if (isSubscribed) {
+        hasAccess = true;
+      }
+      // Case 3: Check if user purchased this file
+      else if (user) {
+        const purchased = await checkPurchasedFile(user.uid, actualFileId);
+        setIsPurchased(purchased);
+        hasAccess = purchased;
       }
       
-      setCanView(true);
+      setCanView(hasAccess);
+      setCheckingAccess(false);
       
-      const workerFileId = fileData.cloudflareKey || fileData.id;
-      // Direct URL - no fetch test
-      const viewUrl = `${WORKER_URL}/view/${workerFileId}`;
-      
-      setPdfUrl(viewUrl);
+      if (hasAccess) {
+        const workerFileId = fileData.cloudflareKey || fileData.id;
+        const viewUrl = `${WORKER_URL}/view/${workerFileId}`;
+        setPdfUrl(viewUrl);
+      }
       
     } catch (err) {
       console.error('Error loading file:', err);
       setError('Failed to load file');
+      setCheckingAccess(false);
     } finally {
       setLoading(false);
     }
   };
 
+  // 🔥 DOWNLOAD HANDLER - ONLY for premium subscribers
   const handleDownload = async () => {
+    // Only premium subscribers can download
     if (!isSubscribed) {
-      alert('Download only for premium subscribers');
-      navigate('/pricing');
+      alert('📥 Download feature is only available for premium subscribers. Upgrade to download files.');
+      navigate('/pricing', { state: { activeTab: 'subscription' } });
       return;
     }
     
@@ -108,12 +146,17 @@ function FileViewer() {
   };
 
   const handlePurchase = () => {
-    navigate('/pricing', { 
-      state: { 
-        from: `/viewer/${actualFileId}`, 
-        fileId: actualFileId 
-      } 
+    // Add to cart first
+    const { addToCart } = require('../contexts/CartContext').useCart();
+    addToCart({
+      id: actualFileId,
+      name: file?.name,
+      price: file?.price || 29,
+      type: 'file',
+      originalName: file?.name,
+      cloudflareKey: file?.cloudflareKey
     });
+    navigate('/pricing', { state: { activeTab: 'cart' } });
   };
 
   const handleGoBack = () => {
@@ -124,7 +167,7 @@ function FileViewer() {
     loadFile();
   };
 
-  if (loading) {
+  if (loading || checkingAccess) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh]">
         <div className="w-12 h-12 border-4 border-green-500 border-t-transparent rounded-full animate-spin"></div>
@@ -149,22 +192,68 @@ function FileViewer() {
     );
   }
 
-  if (!canView && file?.isPremium && !isSubscribed) {
+  if (!canView && file?.isPremium && !isSubscribed && !isPurchased) {
+    // User not logged in
+    if (!user) {
+      return (
+        <div className="text-center py-20 max-w-md mx-auto">
+          <div className="text-yellow-500 text-6xl mb-4">🔒</div>
+          <h2 className="text-xl font-semibold text-gray-800 dark:text-white mb-2">Login Required</h2>
+          <p className="text-gray-600 dark:text-gray-400 mb-4">
+            Please login to access this file.
+          </p>
+          <div className="flex gap-3 justify-center">
+            <button
+              onClick={() => navigate('/login', { state: { from: `/viewer/${actualFileId}` } })}
+              className="px-6 py-3 bg-green-600 text-white rounded-lg font-semibold"
+            >
+              Login Now
+            </button>
+            <button
+              onClick={handleGoBack}
+              className="px-6 py-3 bg-gray-500 text-white rounded-lg"
+            >
+              Go Back
+            </button>
+          </div>
+        </div>
+      );
+    }
+    
     return (
       <div className="text-center py-20 max-w-md mx-auto">
         <div className="text-yellow-500 text-6xl mb-4">🔒</div>
         <h2 className="text-xl font-semibold text-gray-800 dark:text-white mb-2">Premium Content</h2>
-        <p className="text-gray-600 dark:text-gray-400 mb-4">This file is only available for premium subscribers.</p>
+        <p className="text-gray-600 dark:text-gray-400 mb-4">
+          This file is only available for premium subscribers or individual purchase.
+        </p>
         {file && file.price && <p className="text-sm text-green-600 mb-4">₹{file.price}</p>}
-        <button onClick={handlePurchase} className="px-6 py-3 bg-gradient-to-r from-yellow-500 to-yellow-600 text-white rounded-lg font-semibold">
-          Upgrade to Premium
-        </button>
-        <button onClick={handleGoBack} className="ml-3 px-6 py-3 bg-gray-500 text-white rounded-lg">Go Back</button>
+        <div className="flex gap-3 justify-center flex-wrap">
+          <button
+            onClick={handlePurchase}
+            className="px-6 py-3 bg-gradient-to-r from-yellow-500 to-yellow-600 text-white rounded-lg font-semibold"
+          >
+            Buy Now (₹{file?.price || 29})
+          </button>
+          <button
+            onClick={() => navigate('/pricing')}
+            className="px-6 py-3 bg-green-600 text-white rounded-lg font-semibold"
+          >
+            Subscribe for Full Access
+          </button>
+          <button
+            onClick={handleGoBack}
+            className="px-6 py-3 bg-gray-500 text-white rounded-lg"
+          >
+            Go Back
+          </button>
+        </div>
       </div>
     );
   }
 
   if (pdfUrl) {
+    // 🔥 DOWNLOAD BUTTON: ONLY for premium subscribers (NOT for single file purchase)
     const showDownloadButton = isSubscribed === true;
     
     return (

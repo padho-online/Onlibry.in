@@ -1,11 +1,13 @@
 // src/pages/QuizExamPage.jsx
-// UPDATED - With premium access check before loading quiz
+// UPDATED - With proper purchased item access check
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { getQuizData, logQuizResult, getAllPapers } from '../services/quizService';
 import { logQuizResult as logQuizResultToLogger } from '../services/loggerService';
 import { useAuth } from '../contexts/AuthContext';
+import { db } from '../config/firebase';
+import { doc, getDoc } from 'firebase/firestore';
 
 function QuizExamPage() {
   const { quizName } = useParams();
@@ -24,6 +26,8 @@ function QuizExamPage() {
   const [quizStartTime, setQuizStartTime] = useState(null);
   const [paperInfo, setPaperInfo] = useState(null);
   const [accessDenied, setAccessDenied] = useState(false);
+  const [isPurchased, setIsPurchased] = useState(false);
+  const [checkingAccess, setCheckingAccess] = useState(true);
 
   const getDecodedQuizName = () => {
     let decoded = quizName ? decodeURIComponent(quizName) : null;
@@ -36,33 +40,75 @@ function QuizExamPage() {
     return decoded;
   };
 
+  // 🔥 NEW: Check if user has purchased this specific quiz
+  const checkPurchasedQuiz = async (userId, quizId) => {
+    if (!userId) return false;
+    try {
+      const userDoc = await getDoc(doc(db, 'users', userId));
+      const purchasedQuizzes = userDoc.data()?.purchasedQuizzes || [];
+      
+      // Check if 'all' (subscription) or specific quiz id
+      if (purchasedQuizzes === 'all') return true;
+      if (Array.isArray(purchasedQuizzes) && purchasedQuizzes.includes(quizId)) return true;
+      return false;
+    } catch (error) {
+      console.error('Error checking purchased quiz:', error);
+      return false;
+    }
+  };
+
   // Check if user can access this quiz
   const checkAccess = async (decodedName) => {
-    const papers = await getAllPapers();
-    const paper = papers.find(p => p.originalName === decodedName);
-    setPaperInfo(paper);
-    
-    if (!paper) {
-      setError('Quiz not found');
-      return false;
-    }
-    
-    if (paper.isFree) {
-      return true;
-    }
-    
-    // Premium quiz - check subscription
-    if (!user) {
+    setCheckingAccess(true);
+    try {
+      const papers = await getAllPapers();
+      const paper = papers.find(p => p.originalName === decodedName);
+      setPaperInfo(paper);
+      
+      if (!paper) {
+        setError('Quiz not found');
+        setCheckingAccess(false);
+        return false;
+      }
+      
+      // 🔥 CASE 1: Free quiz - always accessible
+      if (paper.isFree) {
+        setCheckingAccess(false);
+        return true;
+      }
+      
+      // 🔥 CASE 2: Premium user - all quizzes accessible
+      if (isSubscribed) {
+        setCheckingAccess(false);
+        return true;
+      }
+      
+      // 🔥 CASE 3: User not logged in
+      if (!user) {
+        setAccessDenied(true);
+        setCheckingAccess(false);
+        return false;
+      }
+      
+      // 🔥 CASE 4: Check if user purchased this specific quiz
+      const purchased = await checkPurchasedQuiz(user.uid, paper.id);
+      setIsPurchased(purchased);
+      
+      if (purchased) {
+        setCheckingAccess(false);
+        return true;
+      }
+      
+      // 🔥 CASE 5: Not subscribed and not purchased - deny access
       setAccessDenied(true);
+      setCheckingAccess(false);
+      return false;
+      
+    } catch (error) {
+      console.error('Error checking access:', error);
+      setCheckingAccess(false);
       return false;
     }
-    
-    if (!isSubscribed) {
-      setAccessDenied(true);
-      return false;
-    }
-    
-    return true;
   };
 
   useEffect(() => {
@@ -71,6 +117,7 @@ function QuizExamPage() {
       if (!decodedName) {
         setError('No quiz specified');
         setLoading(false);
+        setCheckingAccess(false);
         return;
       }
       
@@ -283,28 +330,72 @@ function QuizExamPage() {
   const currentQ = quizData.questions[currentQuestion];
   const displayName = getDecodedQuizName() || 'Quiz';
 
-  // 🔥 Access Denied State - Premium content
-  if (accessDenied && paperInfo && !paperInfo.isFree) {
+  // 🔥 Access Denied State - Premium content (not purchased, not subscribed)
+  if (accessDenied && paperInfo && !paperInfo.isFree && !checkingAccess) {
+    // Check if user is logged in
+    if (!user) {
+      return (
+        <div className="text-center py-20 max-w-md mx-auto">
+          <div className="text-yellow-500 text-6xl mb-4">🔒</div>
+          <h2 className="text-xl font-semibold text-gray-800 dark:text-white mb-2">Login Required</h2>
+          <p className="text-gray-600 dark:text-gray-400 mb-4">
+            Please login to access this quiz.
+          </p>
+          <div className="flex gap-3 justify-center">
+            <button
+              onClick={() => navigate('/login', { state: { from: `/quiz/${encodeURIComponent(paperInfo.originalName)}` } })}
+              className="px-6 py-3 bg-green-600 text-white rounded-lg font-semibold"
+            >
+              Login Now
+            </button>
+            <button
+              onClick={() => navigate('/quizzes')}
+              className="px-6 py-3 bg-gray-500 text-white rounded-lg"
+            >
+              Back to Quizzes
+            </button>
+          </div>
+        </div>
+      );
+    }
+    
     return (
       <div className="text-center py-20 max-w-md mx-auto">
         <div className="text-yellow-500 text-6xl mb-4">🔒</div>
         <h2 className="text-xl font-semibold text-gray-800 dark:text-white mb-2">Premium Content</h2>
         <p className="text-gray-600 dark:text-gray-400 mb-4">
-          This quiz is only available for premium subscribers.
+          This quiz is only available for premium subscribers or individual purchase.
         </p>
         <p className="text-sm text-gray-500 mb-6">
-          {paperInfo.displayName}
+          {paperInfo.displayName} - {paperInfo.displayPrice}
         </p>
-        <div className="flex gap-3 justify-center">
+        <div className="flex gap-3 justify-center flex-wrap">
           <button
             onClick={() => navigate('/pricing', { state: { from: `/quiz/${encodeURIComponent(paperInfo.originalName)}` } })}
-            className="px-6 py-3 bg-gradient-to-r from-yellow-500 to-yellow-600 text-white rounded-lg font-semibold hover:from-yellow-600 hover:to-yellow-700"
+            className="px-6 py-3 bg-gradient-to-r from-yellow-500 to-yellow-600 text-white rounded-lg font-semibold"
           >
-            Subscribe {paperInfo.displayPrice}
+            Subscribe ₹{paperInfo.price || 29}
+          </button>
+          <button
+            onClick={() => {
+              // Add to cart and go to cart
+              const { addToCart } = require('../contexts/CartContext').useCart();
+              addToCart({
+                id: paperInfo.id,
+                name: paperInfo.displayName,
+                price: paperInfo.price || 29,
+                type: 'quiz',
+                originalName: paperInfo.originalName
+              });
+              navigate('/pricing', { state: { activeTab: 'cart' } });
+            }}
+            className="px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold"
+          >
+            Buy Now (₹{paperInfo.price || 29})
           </button>
           <button
             onClick={() => navigate('/quizzes')}
-            className="px-6 py-3 bg-gray-500 text-white rounded-lg hover:bg-gray-600"
+            className="px-6 py-3 bg-gray-500 text-white rounded-lg"
           >
             Back to Quizzes
           </button>
@@ -313,7 +404,7 @@ function QuizExamPage() {
     );
   }
 
-  if (loading) {
+  if (loading || checkingAccess) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh]">
         <div className="w-12 h-12 border-4 border-purple-500 border-t-transparent rounded-full animate-spin"></div>

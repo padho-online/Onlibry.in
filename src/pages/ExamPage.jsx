@@ -1,11 +1,13 @@
 // src/pages/ExamPage.jsx
-// UPDATED - With premium access check before loading exam
+// UPDATED - With proper purchased item access check
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { getExamData, logExamResult, getAllPapers } from '../services/mockTestService';
 import { logMockTestResult } from '../services/loggerService';
 import { useAuth } from '../contexts/AuthContext';
+import { db } from '../config/firebase';
+import { doc, getDoc } from 'firebase/firestore';
 
 function ExamPage() {
   const { examName } = useParams();
@@ -24,8 +26,9 @@ function ExamPage() {
   const [examStartTime, setExamStartTime] = useState(null);
   const [paperInfo, setPaperInfo] = useState(null);
   const [accessDenied, setAccessDenied] = useState(false);
+  const [isPurchased, setIsPurchased] = useState(false);
+  const [checkingAccess, setCheckingAccess] = useState(true);
 
-  // Get exam name from URL (supports both param and query)
   const getDecodedExamName = () => {
     let decoded = examName ? decodeURIComponent(examName) : null;
     if (!decoded) {
@@ -37,33 +40,75 @@ function ExamPage() {
     return decoded;
   };
 
+  // 🔥 NEW: Check if user has purchased this specific mock test
+  const checkPurchasedMockTest = async (userId, testId) => {
+    if (!userId) return false;
+    try {
+      const userDoc = await getDoc(doc(db, 'users', userId));
+      const purchasedMockTests = userDoc.data()?.purchasedMockTests || [];
+      
+      // Check if 'all' (subscription) or specific test id
+      if (purchasedMockTests === 'all') return true;
+      if (Array.isArray(purchasedMockTests) && purchasedMockTests.includes(testId)) return true;
+      return false;
+    } catch (error) {
+      console.error('Error checking purchased mock test:', error);
+      return false;
+    }
+  };
+
   // Check if user can access this exam
   const checkAccess = async (decodedName) => {
-    const papers = await getAllPapers();
-    const paper = papers.find(p => p.originalName === decodedName);
-    setPaperInfo(paper);
-    
-    if (!paper) {
-      setError('Exam not found');
-      return false;
-    }
-    
-    if (paper.isFree) {
-      return true;
-    }
-    
-    // Premium exam - check subscription
-    if (!user) {
+    setCheckingAccess(true);
+    try {
+      const papers = await getAllPapers();
+      const paper = papers.find(p => p.originalName === decodedName);
+      setPaperInfo(paper);
+      
+      if (!paper) {
+        setError('Exam not found');
+        setCheckingAccess(false);
+        return false;
+      }
+      
+      // 🔥 CASE 1: Free test - always accessible
+      if (paper.isFree) {
+        setCheckingAccess(false);
+        return true;
+      }
+      
+      // 🔥 CASE 2: Premium user - all tests accessible
+      if (isSubscribed) {
+        setCheckingAccess(false);
+        return true;
+      }
+      
+      // 🔥 CASE 3: User not logged in
+      if (!user) {
+        setAccessDenied(true);
+        setCheckingAccess(false);
+        return false;
+      }
+      
+      // 🔥 CASE 4: Check if user purchased this specific test
+      const purchased = await checkPurchasedMockTest(user.uid, paper.id);
+      setIsPurchased(purchased);
+      
+      if (purchased) {
+        setCheckingAccess(false);
+        return true;
+      }
+      
+      // 🔥 CASE 5: Not subscribed and not purchased - deny access
       setAccessDenied(true);
+      setCheckingAccess(false);
+      return false;
+      
+    } catch (error) {
+      console.error('Error checking access:', error);
+      setCheckingAccess(false);
       return false;
     }
-    
-    if (!isSubscribed) {
-      setAccessDenied(true);
-      return false;
-    }
-    
-    return true;
   };
 
   useEffect(() => {
@@ -72,6 +117,7 @@ function ExamPage() {
       if (!decodedName) {
         setError('No exam specified');
         setLoading(false);
+        setCheckingAccess(false);
         return;
       }
       
@@ -124,7 +170,6 @@ function ExamPage() {
     
     try {
       const data = await getExamData(decodedName);
-      console.log('📚 Exam data received:', data);
       
       if (!data.questions || data.questions.length === 0) {
         setError('No questions found for this exam.');
@@ -137,7 +182,6 @@ function ExamPage() {
       setTimeLeft(duration * 60);
       setExamStartTime(Date.now());
       
-      // Load saved progress
       const saved = localStorage.getItem(`exam_progress_${decodedName}`);
       if (saved) {
         try {
@@ -285,28 +329,72 @@ function ExamPage() {
   const currentQ = examData.questions[currentQuestion];
   const displayName = getDecodedExamName() || 'Exam';
 
-  // 🔥 Access Denied State - Premium content
-  if (accessDenied && paperInfo && !paperInfo.isFree) {
+  // 🔥 Access Denied State - Premium content (not purchased, not subscribed)
+  if (accessDenied && paperInfo && !paperInfo.isFree && !checkingAccess) {
+    // Check if user is logged in
+    if (!user) {
+      return (
+        <div className="text-center py-20 max-w-md mx-auto">
+          <div className="text-yellow-500 text-6xl mb-4">🔒</div>
+          <h2 className="text-xl font-semibold text-gray-800 dark:text-white mb-2">Login Required</h2>
+          <p className="text-gray-600 dark:text-gray-400 mb-4">
+            Please login to access this mock test.
+          </p>
+          <div className="flex gap-3 justify-center">
+            <button
+              onClick={() => navigate('/login', { state: { from: `/mock-test/${encodeURIComponent(paperInfo.originalName)}` } })}
+              className="px-6 py-3 bg-green-600 text-white rounded-lg font-semibold"
+            >
+              Login Now
+            </button>
+            <button
+              onClick={() => navigate('/mock-tests')}
+              className="px-6 py-3 bg-gray-500 text-white rounded-lg"
+            >
+              Back to Tests
+            </button>
+          </div>
+        </div>
+      );
+    }
+    
     return (
       <div className="text-center py-20 max-w-md mx-auto">
         <div className="text-yellow-500 text-6xl mb-4">🔒</div>
         <h2 className="text-xl font-semibold text-gray-800 dark:text-white mb-2">Premium Content</h2>
         <p className="text-gray-600 dark:text-gray-400 mb-4">
-          This mock test is only available for premium subscribers.
+          This mock test is only available for premium subscribers or individual purchase.
         </p>
         <p className="text-sm text-gray-500 mb-6">
-          {paperInfo.displayName}
+          {paperInfo.displayName} - {paperInfo.displayPrice}
         </p>
-        <div className="flex gap-3 justify-center">
+        <div className="flex gap-3 justify-center flex-wrap">
           <button
             onClick={() => navigate('/pricing', { state: { from: `/mock-test/${encodeURIComponent(paperInfo.originalName)}` } })}
-            className="px-6 py-3 bg-gradient-to-r from-yellow-500 to-yellow-600 text-white rounded-lg font-semibold hover:from-yellow-600 hover:to-yellow-700"
+            className="px-6 py-3 bg-gradient-to-r from-yellow-500 to-yellow-600 text-white rounded-lg font-semibold"
           >
-            Subscribe {paperInfo.displayPrice}
+            Subscribe ₹{paperInfo.price || 49}
+          </button>
+          <button
+            onClick={() => {
+              // Add to cart and go to cart
+              const { addToCart } = require('../contexts/CartContext').useCart();
+              addToCart({
+                id: paperInfo.id,
+                name: paperInfo.displayName,
+                price: paperInfo.price || 49,
+                type: 'mocktest',
+                originalName: paperInfo.originalName
+              });
+              navigate('/pricing', { state: { activeTab: 'cart' } });
+            }}
+            className="px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold"
+          >
+            Buy Now (₹{paperInfo.price || 49})
           </button>
           <button
             onClick={() => navigate('/mock-tests')}
-            className="px-6 py-3 bg-gray-500 text-white rounded-lg hover:bg-gray-600"
+            className="px-6 py-3 bg-gray-500 text-white rounded-lg"
           >
             Back to Tests
           </button>
@@ -316,7 +404,7 @@ function ExamPage() {
   }
 
   // Loading State
-  if (loading) {
+  if (loading || checkingAccess) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh]">
         <div className="w-12 h-12 border-4 border-green-500 border-t-transparent rounded-full animate-spin"></div>
