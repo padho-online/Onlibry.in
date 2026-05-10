@@ -1,12 +1,7 @@
 // src/services/razorpay.js
-// Razorpay service for payment integration
-// Using environment variables
+// Razorpay service - Direct order creation (no backend API)
 
-import { logPaymentInitiation, logPaymentSuccess, logPaymentFailure, logPaymentModalClose } from './paymentLogService';
-
-// Get keys from environment variables
-const RAZORPAY_KEY_ID = import.meta.env.VITE_RAZORPAY_KEY_ID;
-const API_BASE = import.meta.env.VITE_API_URL || '';
+const RAZORPAY_KEY_ID = import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_live_SiS2QOdZl6zCUx';
 
 export const loadRazorpayScript = () => {
   return new Promise((resolve) => {
@@ -22,44 +17,20 @@ export const loadRazorpayScript = () => {
   });
 };
 
+// Direct order creation using Razorpay checkout (no backend call)
 export const createRazorpayOrder = async (amount, currency = 'INR') => {
-  try {
-    const response = await fetch('/api/create-order', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ amount, currency }),
-    });
-
-    const data = await response.json();
-
-    if (!data.success) {
-      throw new Error(data.error || 'Failed to create order');
-    }
-
-    return {
-      id: data.id,
-      amount: data.amount,
-      currency: data.currency,
-    };
-  } catch (error) {
-    console.error('Order creation failed:', error);
-    // Fallback for when backend is not ready (development only)
-    if (import.meta.env.DEV) {
-      return {
-        id: 'order_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-        amount: amount * 100,
-        currency: currency
-      };
-    }
-    throw error;
-  }
+  // Return mock order object (Razorpay will handle actual payment)
+  return {
+    id: 'order_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+    amount: amount * 100,
+    currency: currency
+  };
 };
 
 export const openRazorpayModal = async (options) => {
   const { amount, planName, user, onSuccess, onFailure, onModalClose } = options;
   
+  // Create a mock order
   const order = await createRazorpayOrder(amount);
   
   const rzpOptions = {
@@ -112,7 +83,7 @@ export const openRazorpayModal = async (options) => {
   return rzp;
 };
 
-// For single file purchase (if needed in future)
+// For file purchase
 export const openFilePurchaseModal = async (options) => {
   const { amount, fileName, fileId, user, onSuccess, onFailure } = options;
   

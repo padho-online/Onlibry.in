@@ -1,9 +1,4 @@
 {
-  "functions": {
-    "api/*.js": {
-      "runtime": "nodejs20.x"
-    }
-  },
   "rewrites": [
     {
       "source": "/api/(.*)",
@@ -29,24 +24,8 @@
         {
           "key": "X-XSS-Protection",
           "value": "1; mode=block"
-        },
-        {
-          "key": "Access-Control-Allow-Origin",
-          "value": "*"
-        },
-        {
-          "key": "Access-Control-Allow-Methods",
-          "value": "GET, POST, PUT, DELETE, OPTIONS"
-        },
-        {
-          "key": "Access-Control-Allow-Headers",
-          "value": "X-Requested-With, Content-Type, Accept, Authorization"
         }
       ]
     }
-  ],
-  "env": {
-    "RAZORPAY_KEY_ID": "rzp_live_SiS2QOdZl6zCUx",
-    "RAZORPAY_KEY_SECRET": "3akTUrS9604ASY0afBzEhGny"
-  }
+  ]
 }
