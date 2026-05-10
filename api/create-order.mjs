@@ -1,4 +1,4 @@
-// api/create-order.js
+// api/create-order.js (ES Module - .js file with package.json type:module)
 import Razorpay from 'razorpay';
 
 export default async function handler(req, res) {
@@ -6,12 +6,18 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
+  );
 
+  // Handle preflight request
   if (req.method === 'OPTIONS') {
     res.status(200).end();
     return;
   }
 
+  // Only allow POST method
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -23,7 +29,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Valid amount is required' });
     }
 
-    // ✅ Check if keys are present
+    // Check if keys are present
     if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
       console.error('❌ Razorpay keys missing');
       return res.status(500).json({ error: 'Payment gateway not configured' });
