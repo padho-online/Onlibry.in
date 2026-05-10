@@ -1,5 +1,6 @@
 // src/contexts/AuthContext.jsx
 // UPDATED - Removed cloudFunctions dependency, using direct Firestore
+// ADDED - Subscription purchase tracking (purchasedMockTests: 'all', purchasedQuizzes: 'all')
 
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { auth, db } from '../config/firebase';
@@ -13,6 +14,7 @@ import {
   doc,
   getDoc,
   setDoc,
+  updateDoc,
   serverTimestamp,
 } from 'firebase/firestore';
 import { logUserLogin, setCurrentUserGetter } from '../services/loggerService';
@@ -76,6 +78,9 @@ export function AuthProvider({ children }) {
           displayName: firebaseUser.displayName || firebaseUser.email.split('@')[0],
           createdAt: serverTimestamp(),
           savedFiles: [],
+          purchasedFiles: [],
+          purchasedMockTests: [],
+          purchasedQuizzes: [],
           subscription: {
             type: 'free',
             startDate: null,
@@ -115,6 +120,7 @@ export function AuthProvider({ children }) {
   };
 
   // Update subscription (for admin/payment)
+  // 🔥 UPDATED: When user buys subscription, give access to ALL mock tests and quizzes
   const updateSubscription = async (userId, planType, durationInDays) => {
     try {
       const endDate = new Date();
@@ -127,6 +133,10 @@ export function AuthProvider({ children }) {
           endDate: endDate.toISOString(),
           isActive: true,
         },
+        // 🔥 When user buys subscription, give access to all premium mock tests and quizzes
+        purchasedMockTests: 'all',
+        purchasedQuizzes: 'all',
+        lastSubscriptionAt: serverTimestamp()
       }, { merge: true });
 
       setIsSubscribed(true);

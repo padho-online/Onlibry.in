@@ -1,5 +1,5 @@
 // src/pages/PricingPage.jsx
-// COMPLETE FIXED - Razorpay Payment Working
+// COMPLETE FIXED - Razorpay Payment Working + Purchase Tracking
 
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
@@ -8,6 +8,8 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { loadRazorpayScript, createRazorpayOrder } from "../services/razorpay";
 import { logPaymentInitiation, logPaymentSuccess, logPaymentFailure, logPaymentModalClose } from '../services/paymentLogService';
 import { logPayment } from '../services/loggerService';
+import { doc, updateDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from '../config/firebase';
 
 function PricingPage() {
   const { user, isSubscribed, subscriptionType, updateSubscription } = useAuth();
@@ -227,9 +229,44 @@ function PricingPage() {
           
           await logPayment('cart_payment_success', 'Cart Purchase', totalAmount, 'success', response.razorpay_payment_id, response.razorpay_order_id);
           
+          // 🔥 NEW: Update user's purchased items in Firestore
+          try {
+            const userRef = doc(db, 'users', user.uid);
+            const userDoc = await getDoc(userRef);
+            const currentData = userDoc.data() || {};
+            
+            // Separate items by type
+            const purchasedFiles = [...(currentData.purchasedFiles || [])];
+            const purchasedMockTests = [...(currentData.purchasedMockTests || [])];
+            const purchasedQuizzes = [...(currentData.purchasedQuizzes || [])];
+            
+            for (const item of cartItems) {
+              if (item.type === 'file' && !purchasedFiles.includes(item.id)) {
+                purchasedFiles.push(item.id);
+              } else if (item.type === 'mocktest' && !purchasedMockTests.includes(item.id)) {
+                purchasedMockTests.push(item.id);
+              } else if (item.type === 'quiz' && !purchasedQuizzes.includes(item.id)) {
+                purchasedQuizzes.push(item.id);
+              }
+            }
+            
+            // Update Firestore
+            await updateDoc(userRef, {
+              purchasedFiles: purchasedFiles,
+              purchasedMockTests: purchasedMockTests,
+              purchasedQuizzes: purchasedQuizzes,
+              lastPurchaseAt: serverTimestamp()
+            });
+            
+            console.log('✅ Purchased items updated in Firestore');
+            
+          } catch (dbError) {
+            console.error('Failed to update Firestore:', dbError);
+          }
+          
           alert(`Successfully purchased ${cartItems.length} item(s)! 🎉`);
           clearCart();
-          navigate('/files');
+          navigate('/saved-files');
         },
         prefill: {
           name: user.displayName || '',
@@ -294,6 +331,41 @@ function PricingPage() {
           console.log('✅ Single file payment success:', response);
           
           await logPayment('single_file_payment_success', item.name, item.price, 'success', response.razorpay_payment_id, response.razorpay_order_id);
+          
+          // 🔥 NEW: Update user's purchased items in Firestore
+          try {
+            const userRef = doc(db, 'users', user.uid);
+            const userDoc = await getDoc(userRef);
+            const currentData = userDoc.data() || {};
+            
+            let purchasedFiles = [...(currentData.purchasedFiles || [])];
+            if (item.type === 'file' && !purchasedFiles.includes(item.id)) {
+              purchasedFiles.push(item.id);
+            }
+            
+            let purchasedMockTests = [...(currentData.purchasedMockTests || [])];
+            if (item.type === 'mocktest' && !purchasedMockTests.includes(item.id)) {
+              purchasedMockTests.push(item.id);
+            }
+            
+            let purchasedQuizzes = [...(currentData.purchasedQuizzes || [])];
+            if (item.type === 'quiz' && !purchasedQuizzes.includes(item.id)) {
+              purchasedQuizzes.push(item.id);
+            }
+            
+            await updateDoc(userRef, {
+              purchasedFiles: purchasedFiles,
+              purchasedMockTests: purchasedMockTests,
+              purchasedQuizzes: purchasedQuizzes,
+              lastPurchaseAt: serverTimestamp()
+            });
+            
+            console.log('✅ Purchased item added to Firestore');
+            
+          } catch (dbError) {
+            console.error('Failed to update Firestore:', dbError);
+          }
+          
           alert(`Successfully purchased "${item.name}"! 🎉`);
           removeFromCart(item.id);
           setLoading(false);
