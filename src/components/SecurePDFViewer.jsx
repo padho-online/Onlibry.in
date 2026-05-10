@@ -1,10 +1,11 @@
 // src/components/SecurePDFViewer.jsx
 // COMPLETE - PDF viewer with iframe and security
+// UPDATED - Added download loading state
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-function SecurePDFViewer({ fileUrl, fileName, showDownloadButton = false, onDownload, isPremium = false, onClose }) {
+function SecurePDFViewer({ fileUrl, fileName, showDownloadButton = false, onDownload, isDownloading = false, isPremium = false, onClose }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const navigate = useNavigate();
@@ -79,9 +80,10 @@ function SecurePDFViewer({ fileUrl, fileName, showDownloadButton = false, onDown
           {showDownloadButton && (
             <button
               onClick={onDownload}
-              className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded-lg transition text-sm"
+              disabled={isDownloading}
+              className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded-lg transition text-sm disabled:opacity-50 disabled:cursor-wait"
             >
-              ⬇️ Download
+              {isDownloading ? '⏳ Downloading...' : '⬇️ Download'}
             </button>
           )}
           <button 

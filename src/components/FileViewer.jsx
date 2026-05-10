@@ -1,6 +1,5 @@
 // src/components/FileViewer.jsx
-// UPDATED - With purchased items access check
-// DOWNLOAD BUTTON: ONLY for premium subscribers (NOT for single file purchase, NOT for free users)
+// FINAL - Download with query param (secure, no URL exposure)
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
@@ -28,7 +27,6 @@ function FileViewer() {
 
   const actualFileId = fileId || searchParams.get('fileId');
 
-  // Check if user has purchased this specific file
   const checkPurchasedFile = async (userId, fileIdentifier) => {
     if (!userId) return false;
     try {
@@ -67,23 +65,14 @@ function FileViewer() {
       
       setFile(fileData);
       
-      // 🔥 CHECK ACCESS LOGIC:
-      // 1. If file is free -> always accessible
-      // 2. If user is premium subscriber -> accessible
-      // 3. If user purchased this specific file -> accessible
-      // 4. Else -> not accessible
-      
       let hasAccess = false;
       
-      // Case 1: Free file
       if (!fileData.isPremium) {
         hasAccess = true;
       }
-      // Case 2: Premium user
       else if (isSubscribed) {
         hasAccess = true;
       }
-      // Case 3: Check if user purchased this file
       else if (user) {
         const purchased = await checkPurchasedFile(user.uid, actualFileId);
         setIsPurchased(purchased);
@@ -95,7 +84,8 @@ function FileViewer() {
       
       if (hasAccess) {
         const workerFileId = fileData.cloudflareKey || fileData.id;
-        const viewUrl = `${WORKER_URL}/view/${workerFileId}`;
+        const isPremiumParam = fileData.isPremium ? 'true' : 'false';
+        const viewUrl = `${WORKER_URL}/view/${workerFileId}?isPremium=${isPremiumParam}`;
         setPdfUrl(viewUrl);
       }
       
@@ -108,45 +98,30 @@ function FileViewer() {
     }
   };
 
-  // 🔥 DOWNLOAD HANDLER - ONLY for premium subscribers
-  const handleDownload = async () => {
-    // Only premium subscribers can download
+  // 🔥 FINAL: Download with query param (secure, no fetch)
+  const handleDownload = () => {
     if (!isSubscribed) {
-      alert('📥 Download feature is only available for premium subscribers. Upgrade to download files.');
+      alert('📥 Download only for premium subscribers');
       navigate('/pricing', { state: { activeTab: 'subscription' } });
       return;
     }
     
     if (!file) return;
     
-    try {
-      const downloadUrl = `${WORKER_URL}/download/${file.cloudflareKey || file.id}`;
-      const response = await fetch(downloadUrl, {
-        headers: {
-          'X-User-Id': user?.uid || '',
-          'X-Is-Subscribed': isSubscribed ? 'true' : 'false'
-        }
-      });
-      
-      if (!response.ok) throw new Error('Download failed');
-      
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `Onlibry.in_"${file.name || 'document'}.pdf"`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Download error:', error);
-      alert('Download failed. Please try again.');
-    }
+    const fileKey = file.cloudflareKey || file.id;
+    const downloadUrl = `${WORKER_URL}/download/${encodeURIComponent(fileKey)}?subscribed=true`;
+    
+    // Create hidden anchor and trigger download
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = `Onlibry.in_${file.name || 'document'}.pdf`;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const handlePurchase = () => {
-    // Add to cart first
     const { addToCart } = require('../contexts/CartContext').useCart();
     addToCart({
       id: actualFileId,
@@ -193,7 +168,6 @@ function FileViewer() {
   }
 
   if (!canView && file?.isPremium && !isSubscribed && !isPurchased) {
-    // User not logged in
     if (!user) {
       return (
         <div className="text-center py-20 max-w-md mx-auto">
@@ -209,10 +183,7 @@ function FileViewer() {
             >
               Login Now
             </button>
-            <button
-              onClick={handleGoBack}
-              className="px-6 py-3 bg-gray-500 text-white rounded-lg"
-            >
+            <button onClick={handleGoBack} className="px-6 py-3 bg-gray-500 text-white rounded-lg">
               Go Back
             </button>
           </div>
@@ -241,10 +212,7 @@ function FileViewer() {
           >
             Subscribe for Full Access
           </button>
-          <button
-            onClick={handleGoBack}
-            className="px-6 py-3 bg-gray-500 text-white rounded-lg"
-          >
+          <button onClick={handleGoBack} className="px-6 py-3 bg-gray-500 text-white rounded-lg">
             Go Back
           </button>
         </div>
@@ -253,7 +221,6 @@ function FileViewer() {
   }
 
   if (pdfUrl) {
-    // 🔥 DOWNLOAD BUTTON: ONLY for premium subscribers (NOT for single file purchase)
     const showDownloadButton = isSubscribed === true;
     
     return (
