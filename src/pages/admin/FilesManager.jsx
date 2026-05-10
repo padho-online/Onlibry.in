@@ -1,477 +1,749 @@
-import React, { useState, useEffect } from 'react';
-import { db, auth } from '../../config/firebase';
-import { doc, getDoc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+// src/pages/admin/FilesManager.jsx
+// FINAL FIXED - Cloudflare R2 Delete Working
 
-const GOOGLE_CLIENT_ID = '279268985463-013b4esq66rfkuojg1ssrb9t0evsh1e0.apps.googleusercontent.com';
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../../contexts/AuthContext';
+
+// Cloudflare Worker Config
+const WORKER_URL = 'https://onlibry.mdhabibul12212141.workers.dev';
+const ADMIN_SECRET_KEY = 'Habibul@812922112';
+
+// Google Sheet API URL
+const SHEET_API_URL = 'https://script.google.com/macros/s/AKfycbz9O81mdzlpxPgcuMrZHnNgPLEE7Th-04Cfe5GKe0UA1ZoVqgdGXRYhn4lFn9hKPfCm/exec';
 
 function FilesManager() {
+  const { user } = useAuth();
   const [files, setFiles] = useState([]);
-  const [allDriveFolders, setAllDriveFolders] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedFolder, setSelectedFolder] = useState('root');
-  const [isGoogleAuth, setIsGoogleAuth] = useState(false);
-  const [isLoadingAuth, setIsLoadingAuth] = useState(false);
-  const [selectedFiles, setSelectedFiles] = useState(new Set());
-  const [accessToken, setAccessToken] = useState(null);
-  const [tokenClient, setTokenClient] = useState(null);
-  
-  // Pagination state
-  const [nextPageToken, setNextPageToken] = useState(null);
-  const [hasMore, setHasMore] = useState(false);
-  const [totalFileCount, setTotalFileCount] = useState(0);
+  const [editingFile, setEditingFile] = useState(null);
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [bulkUpdating, setBulkUpdating] = useState(false);
+  const [editForm, setEditForm] = useState({
+    name: '',
+    price: 29,
+    isPremium: true,
+    showOnWebsite: true,
+    tags: ''
+  });
+  const [message, setMessage] = useState({ type: '', text: '' });
 
-  // Check admin on mount
-  useEffect(() => {
-    checkAdminAndLoad();
-  }, []);
-
-  const checkAdminAndLoad = async () => {
-    const user = auth.currentUser;
-    if (!user) {
-      alert('Please login as admin first');
-      return;
-    }
-    
-    const userDoc = await getDoc(doc(db, 'users', user.uid));
-    if (!userDoc.exists() || !userDoc.data().isAdmin) {
-      alert('Admin access required');
-      return;
-    }
-    
-    await loadGoogleScripts();
-  };
-
-  const loadGoogleScripts = () => {
-    return new Promise((resolve) => {
-      if (window.gapi && window.google) {
-        initTokenClient();
-        resolve();
-        return;
-      }
-      
-      const gapiScript = document.createElement('script');
-      gapiScript.src = 'https://apis.google.com/js/api.js';
-      gapiScript.onload = () => {
-        const gisScript = document.createElement('script');
-        gisScript.src = 'https://accounts.google.com/gsi/client';
-        gisScript.onload = () => {
-          initTokenClient();
-          resolve();
-        };
-        document.head.appendChild(gisScript);
-      };
-      document.head.appendChild(gapiScript);
-    });
-  };
-
-  const initTokenClient = () => {
-    const client = google.accounts.oauth2.initTokenClient({
-      client_id: GOOGLE_CLIENT_ID,
-      scope: 'https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/drive.file',
-      callback: async (resp) => {
-        if (resp.error) {
-          console.error('Auth error:', resp);
-          setIsGoogleAuth(false);
-          setIsLoadingAuth(false);
-          return;
-        }
-        setAccessToken(resp.access_token);
-        setIsGoogleAuth(true);
-        setIsLoadingAuth(false);
-        await loadDriveFiles('root', resp.access_token, false);
-      },
-    });
-    setTokenClient(client);
-  };
-
-  const authenticate = () => {
-    setIsLoadingAuth(true);
-    if (tokenClient) {
-      tokenClient.requestAccessToken();
-    } else {
-      initTokenClient();
-      tokenClient?.requestAccessToken();
-    }
-  };
-
-  // Load Drive Files with Pagination Support
-  const loadDriveFiles = async (folderId = 'root', token = accessToken, loadMore = false) => {
-    if (!token) return;
-    
-    if (!loadMore) {
-      setLoading(true);
-      setFiles([]);
-      setNextPageToken(null);
-      setHasMore(false);
-    } else {
-      setLoadingMore(true);
-    }
-    
-    try {
-      // First, get total count and folders
-      const foldersResponse = await fetch(
-        `https://www.googleapis.com/drive/v3/files?q=mimeType='application/vnd.google-apps.folder' and trashed=false&fields=files(id,name,parents)&pageSize=100`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      const foldersData = await foldersResponse.json();
-      const folders = foldersData.files || [];
-      setAllDriveFolders(folders);
-      
-      // Build URL with pagination
-      let url = `https://www.googleapis.com/drive/v3/files?q='${folderId}' in parents and mimeType!='application/vnd.google-apps.folder' and trashed=false&fields=files(id,name,webViewLink,parents,createdTime,modifiedTime),nextPageToken&pageSize=200&orderBy=name`;
-      
-      if (loadMore && nextPageToken) {
-        url += `&pageToken=${nextPageToken}`;
-      }
-      
-      const filesResponse = await fetch(url, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const filesData = await filesResponse.json();
-      const driveFiles = filesData.files || [];
-      const newNextPageToken = filesData.nextPageToken || null;
-      
-      setNextPageToken(newNextPageToken);
-      setHasMore(!!newNextPageToken);
-      
-      // Get Firestore metadata for each file
-      const filesWithMeta = [];
-      for (const file of driveFiles) {
-        const docSnap = await getDoc(doc(db, 'files', file.id));
-        const fileData = docSnap.exists() ? docSnap.data() : {};
-        const folder = folders.find(f => f.id === (file.parents?.[0]));
-        
-        filesWithMeta.push({
-          id: file.id,
-          name: file.name,
-          webViewLink: file.webViewLink,
-          folderName: folder ? folder.name : 'Root',
-          ...fileData,
-          tags: fileData.tags || { 
-            university: [], course: [], year: [], semester: [], 
-            subject: [], title: [], other: [] 
-          },
-          showOnWebsite: fileData.showOnWebsite || false,
-          isPremium: fileData.isPremium || false,
-          price: fileData.price || 29,
-        });
-      }
-      
-      if (loadMore) {
-        setFiles(prev => [...prev, ...filesWithMeta]);
-      } else {
-        setFiles(filesWithMeta);
-      }
-      
-      setTotalFileCount(prev => loadMore ? prev + driveFiles.length : driveFiles.length);
-      
-    } catch (error) {
-      console.error('Error loading files:', error);
-      if (error.status === 401) {
-        setIsGoogleAuth(false);
-        alert('Session expired. Please reconnect.');
-      }
-    } finally {
-      setLoading(false);
-      setLoadingMore(false);
-    }
-  };
-
-  // Load ALL files recursively (for full export)
-  const loadAllFilesRecursively = async (folderId = 'root', token = accessToken) => {
-    if (!token) return [];
-    
-    let allFiles = [];
-    let pageToken = null;
-    let hasMorePages = true;
-    
-    try {
-      while (hasMorePages) {
-        let url = `https://www.googleapis.com/drive/v3/files?q='${folderId}' in parents and mimeType!='application/vnd.google-apps.folder' and trashed=false&fields=files(id,name,webViewLink,parents,createdTime,modifiedTime),nextPageToken&pageSize=200&orderBy=name`;
-        
-        if (pageToken) {
-          url += `&pageToken=${pageToken}`;
-        }
-        
-        const response = await fetch(url, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        const data = await response.json();
-        const driveFiles = data.files || [];
-        
-        allFiles = [...allFiles, ...driveFiles];
-        pageToken = data.nextPageToken;
-        hasMorePages = !!pageToken;
-      }
-      
-      return allFiles;
-    } catch (error) {
-      console.error('Error loading all files:', error);
-      return allFiles;
-    }
-  };
-
-  const updateFileMetadata = async (fileId, updates) => {
-    try {
-      await setDoc(doc(db, 'files', fileId), { ...updates, lastUpdated: serverTimestamp() }, { merge: true });
-      setFiles(prev => prev.map(f => f.id === fileId ? { ...f, ...updates } : f));
-    } catch (error) {
-      console.error('Error updating file:', error);
-    }
-  };
-
-  const updateTag = async (fileId, tagField, value) => {
-    const file = files.find(f => f.id === fileId);
-    if (!file) return;
-    const tags = { ...file.tags };
-    tags[tagField] = value.split(',').map(t => t.trim()).filter(t => t);
-    await updateFileMetadata(fileId, { tags });
-  };
-
-  const renderTagInput = (file, tagField) => {
-    const value = file.tags?.[tagField]?.join(', ') || '';
-    return (
-      <input
-        type="text"
-        defaultValue={value}
-        onBlur={(e) => updateTag(file.id, tagField, e.target.value)}
-        className="w-full px-2 py-1 text-xs border rounded bg-white dark:bg-gray-700"
-        placeholder={`${tagField}s (comma separated)`}
-      />
-    );
-  };
-
-  const handleFolderChange = async (e) => {
-    const folderId = e.target.value;
-    setSelectedFolder(folderId);
-    setNextPageToken(null);
-    setHasMore(false);
-    await loadDriveFiles(folderId, accessToken, false);
-  };
-
-  const handleLoadMore = () => {
-    if (hasMore && !loadingMore) {
-      loadDriveFiles(selectedFolder, accessToken, true);
-    }
-  };
-
-  const handleExportAll = async () => {
-    if (!accessToken) return;
+  // Load ALL files from Google Sheet (including hidden ones)
+  const loadFiles = async () => {
     setLoading(true);
-    const allFiles = await loadAllFilesRecursively(selectedFolder, accessToken);
-    alert(`Total files in this folder: ${allFiles.length}`);
-    console.log('All files:', allFiles);
+    try {
+      console.log('📡 Loading ALL files from sheet...');
+      const response = await fetch(`${SHEET_API_URL}?admin=true`);
+      const data = await response.json();
+      
+      console.log('✅ Raw data received:', data);
+      
+      if (data.success && data.files) {
+        const allFiles = data.files.map(file => ({
+          ...file,
+          id: file.cloudflareKey || file.id,
+          downloadUrl: `${WORKER_URL}/${encodeURIComponent(file.cloudflareKey || file.id)}`,
+          viewerUrl: `${WORKER_URL}/${encodeURIComponent(file.cloudflareKey || file.id)}`
+        }));
+        console.log(`📊 Loaded ${allFiles.length} files`);
+        setFiles(allFiles);
+      } else {
+        console.log('⚠️ No files found or API issue');
+        setFiles([]);
+      }
+    } catch (error) {
+      console.error('❌ Error loading files:', error);
+      setMessage({ type: 'error', text: 'Failed to load files: ' + error.message });
+    }
     setLoading(false);
   };
 
-  const toggleFileSelection = (fileId) => {
-    const newSelected = new Set(selectedFiles);
-    if (newSelected.has(fileId)) {
-      newSelected.delete(fileId);
-    } else {
-      newSelected.add(fileId);
+  useEffect(() => {
+    loadFiles();
+  }, []);
+
+  // ============================================
+  // CONVERT TAGS TO STRING
+  // ============================================
+  const tagsToString = (tags, tagsString) => {
+    if (tagsString && typeof tagsString === 'string' && tagsString !== '') {
+      return tagsString;
     }
-    setSelectedFiles(newSelected);
+    if (typeof tags === 'string' && tags !== '') {
+      return tags;
+    }
+    if (tags && typeof tags === 'object') {
+      const parts = [];
+      for (const [key, values] of Object.entries(tags)) {
+        if (values && Array.isArray(values) && values.length > 0) {
+          parts.push(`${key}:${values.join(',')}`);
+        } else if (values && typeof values === 'string') {
+          parts.push(`${key}:${values}`);
+        }
+      }
+      return parts.join(', ');
+    }
+    return '';
   };
 
-  const selectAllFiles = () => {
-    if (selectedFiles.size === files.length && files.length > 0) {
-      setSelectedFiles(new Set());
-    } else {
-      setSelectedFiles(new Set(files.map(f => f.id)));
+  // Get client IP
+  const getClientIP = async () => {
+    try {
+      const response = await fetch('https://api.ipify.org?format=json');
+      const data = await response.json();
+      return data.ip;
+    } catch (error) {
+      return 'unknown';
     }
+  };
+
+  // ============================================
+  // SEND TO SHEET (Helper)
+  // ============================================
+  const sendToSheet = async (data) => {
+    try {
+      await fetch(SHEET_API_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        body: JSON.stringify(data)
+      });
+      return true;
+    } catch (error) {
+      console.error('Send to sheet error:', error);
+      return false;
+    }
+  };
+
+  // ============================================
+  // DELETE FROM CLOUDFLARE R2
+  // ============================================
+  const deleteFromCloudflare = async (fileId) => {
+    if (!fileId) {
+      console.error('No fileId provided for deletion');
+      return false;
+    }
+    
+    try {
+      console.log(`🗑️ Deleting from Cloudflare R2: ${fileId}`);
+      const response = await fetch(`${WORKER_URL}/delete/${encodeURIComponent(fileId)}`, {
+        method: 'DELETE',
+        headers: { 'X-Admin-Key': ADMIN_SECRET_KEY }
+      });
+      
+      const result = await response.json();
+      console.log(`Delete response:`, result);
+      
+      if (result.success) {
+        console.log(`✅ Deleted from Cloudflare: ${fileId}`);
+        return true;
+      } else {
+        console.warn(`⚠️ Cloudflare delete failed: ${result.message}`);
+        return false;
+      }
+    } catch (error) {
+      console.error(`❌ Cloudflare delete error for ${fileId}:`, error);
+      return false;
+    }
+  };
+
+  // ============================================
+  // BULK UPDATE FROM EDITOR SHEET (With Cloudflare Delete - FINAL FIX)
+  // ============================================
+  const handleBulkUpdateFromSheet = async () => {
+    if (!window.confirm('This will update/delete ALL files from "Editor" sheet. Continue?')) return;
+    
+    setBulkUpdating(true);
+    setMessage({ type: 'info', text: '🔄 Processing Editor sheet...' });
+    
+    try {
+      const userIp = await getClientIP();
+      
+      // Get editor sheet data
+      console.log('📡 Fetching editor sheet data...');
+      const editorResponse = await fetch(`${SHEET_API_URL}?admin=true`);
+      const editorData = await editorResponse.json();
+      
+      console.log('📊 Editor data:', editorData);
+      
+      if (editorData.success && editorData.files && editorData.files.length > 0) {
+        console.log(`📋 Total rows in editor: ${editorData.files.length}`);
+        
+        // Log each file's structure
+        editorData.files.forEach((f, idx) => {
+          console.log(`   Row ${idx + 1}: fileId="${f.fileId}", status="${f.status}"`);
+        });
+        
+        // 🔥 KEY FIX - Using 'fileId' field from Apps Script
+        const toDelete = editorData.files.filter(f => {
+          const status = f.status || f.Status;
+          return status === 'deleted';
+        });
+        
+        console.log(`🗑️ Files marked for deletion: ${toDelete.length}`);
+        
+        if (toDelete.length > 0) {
+          setMessage({ type: 'info', text: `🗑️ Deleting ${toDelete.length} files from Cloudflare...` });
+          
+          for (const file of toDelete) {
+            // 🔥 KEY FIX - Use 'fileId' field (NOT file.id)
+            const fileId = file.fileId;
+            console.log(`   Attempting to delete: ${fileId}`);
+            
+            if (fileId) {
+              try {
+                const deleteRes = await fetch(`${WORKER_URL}/delete/${encodeURIComponent(fileId)}`, {
+                  method: 'DELETE',
+                  headers: { 'X-Admin-Key': ADMIN_SECRET_KEY }
+                });
+                const deleteResult = await deleteRes.json();
+                console.log(`   Delete result:`, deleteResult);
+                
+                if (deleteResult.success) {
+                  console.log(`   ✅ Deleted from Cloudflare: ${fileId}`);
+                } else {
+                  console.warn(`   ⚠️ Failed to delete ${fileId}: ${deleteResult.message}`);
+                }
+              } catch (err) {
+                console.error(`   ❌ Error deleting ${fileId}:`, err);
+              }
+            } else {
+              console.warn(`   ⚠️ No fileId found for row:`, file);
+            }
+          }
+        } else {
+          console.log('📝 No files marked with status="deleted"');
+        }
+      } else {
+        console.log('📭 No data found in editor sheet');
+      }
+      
+      // Send bulk update to sheet
+      const sheetData = {
+        action: 'bulkUpdate',
+        performedBy: user?.email,
+        performedByName: user?.displayName || user?.email?.split('@')[0],
+        userIp: await getClientIP(),
+        userAgent: navigator.userAgent
+      };
+      await sendToSheet(sheetData);
+      
+      setMessage({ type: 'success', text: '✅ Bulk update completed!' });
+      setTimeout(() => loadFiles(), 2000);
+      setTimeout(() => clearEditorSheetNoResponse(), 3000);
+      
+    } catch (error) {
+      console.error('Bulk update error:', error);
+      setMessage({ type: 'error', text: '❌ Bulk update failed: ' + error.message });
+    } finally {
+      setBulkUpdating(false);
+    }
+  };
+
+  // ============================================
+  // CLEAR EDITOR SHEET (Silent)
+  // ============================================
+  const clearEditorSheetNoResponse = async () => {
+    try {
+      const sheetData = { action: 'clearEditor' };
+      await fetch(SHEET_API_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        body: JSON.stringify(sheetData)
+      });
+      console.log('✅ Editor sheet cleared');
+    } catch (error) {
+      console.error('Clear editor error:', error);
+    }
+  };
+
+  // ============================================
+  // CLEAR EDITOR SHEET (Manual)
+  // ============================================
+  const handleClearEditorSheet = async () => {
+    if (!window.confirm('Clear all rows from "Editor" sheet? (Headers will remain)')) return;
+    
+    setMessage({ type: 'info', text: '🔄 Clearing Editor sheet...' });
+    try {
+      const sheetData = { action: 'clearEditor' };
+      await sendToSheet(sheetData);
+      setMessage({ type: 'success', text: '✅ Editor sheet cleared!' });
+    } catch (error) {
+      console.error('Clear editor error:', error);
+      setMessage({ type: 'error', text: '❌ Failed to clear Editor sheet' });
+    }
+  };
+
+  // Upload file to Cloudflare + Google Sheet
+  const handleUpload = async () => {
+    if (!selectedFile) {
+      setMessage({ type: 'error', text: 'Please select a file' });
+      return;
+    }
+
+    setUploading(true);
+    setMessage({ type: 'info', text: 'Uploading to Cloudflare...' });
+
+    try {
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+      formData.append('fileName', selectedFile.name);
+
+      const uploadRes = await fetch(`${WORKER_URL}/upload`, {
+        method: 'POST',
+        headers: { 'X-Admin-Key': ADMIN_SECRET_KEY },
+        body: formData
+      });
+
+      const uploadResult = await uploadRes.json();
+
+      if (!uploadResult.success) {
+        throw new Error(uploadResult.error);
+      }
+
+      setMessage({ type: 'info', text: 'File uploaded to Cloudflare. Adding to Google Sheet...' });
+
+      const sheetData = {
+        action: 'add',
+        fileId: uploadResult.key,
+        fileName: editForm.name || selectedFile.name,
+        fileSize: uploadResult.size,
+        mimeType: uploadResult.mimeType,
+        price: editForm.price,
+        isPremium: editForm.isPremium,
+        showOnWebsite: editForm.showOnWebsite,
+        tags: editForm.tags || '',
+        cloudflareKey: uploadResult.key,
+        uploadedBy: user?.email,
+        uploadedByName: user?.displayName || user?.email?.split('@')[0],
+        userIp: await getClientIP(),
+        userAgent: navigator.userAgent
+      };
+
+      await sendToSheet(sheetData);
+      setMessage({ type: 'success', text: '✅ File uploaded successfully!' });
+      
+      setSelectedFile(null);
+      setEditForm({ name: '', price: 29, isPremium: true, showOnWebsite: true, tags: '' });
+      setShowUploadModal(false);
+      loadFiles();
+      
+    } catch (error) {
+      console.error('Upload error:', error);
+      setMessage({ type: 'error', text: '❌ Upload failed: ' + error.message });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // Update file metadata
+  const handleUpdateFile = async (file) => {
+    setMessage({ type: 'info', text: 'Updating file metadata...' });
+
+    try {
+      const sheetData = {
+        action: 'update',
+        fileId: file.cloudflareKey || file.id,
+        fileName: editForm.name,
+        price: editForm.price,
+        isPremium: editForm.isPremium,
+        showOnWebsite: editForm.showOnWebsite,
+        tags: editForm.tags,
+        updatedBy: user?.email,
+        updatedByName: user?.displayName || user?.email?.split('@')[0],
+        userIp: await getClientIP(),
+        userAgent: navigator.userAgent
+      };
+
+      await sendToSheet(sheetData);
+      setMessage({ type: 'success', text: '✅ File updated successfully!' });
+      setEditingFile(null);
+      loadFiles();
+      
+    } catch (error) {
+      console.error('Update error:', error);
+      setMessage({ type: 'error', text: '❌ Update failed: ' + error.message });
+    }
+  };
+
+  // ============================================
+  // DELETE FILE (Manual via button)
+  // ============================================
+  const handleDeleteFile = async (file) => {
+    if (!window.confirm(`Delete "${file.name}" permanently from Cloudflare and Sheet?`)) return;
+
+    setMessage({ type: 'info', text: 'Deleting file...' });
+
+    try {
+      const fileId = file.cloudflareKey || file.id;
+      
+      // Delete from Cloudflare R2
+      const deleted = await deleteFromCloudflare(fileId);
+      
+      if (deleted) {
+        // Soft delete in Google Sheet
+        const sheetData = {
+          action: 'delete',
+          fileId: fileId,
+          fileName: file.name,
+          deletedBy: user?.email,
+          deletedByName: user?.displayName || user?.email?.split('@')[0],
+          userIp: await getClientIP(),
+          userAgent: navigator.userAgent,
+          reason: 'Manual delete from admin panel'
+        };
+        await sendToSheet(sheetData);
+        
+        setMessage({ type: 'success', text: '✅ File deleted successfully from Cloudflare and Sheet!' });
+        loadFiles();
+      } else {
+        setMessage({ type: 'error', text: '❌ Failed to delete from Cloudflare. Check console for details.' });
+      }
+      
+    } catch (error) {
+      console.error('Delete error:', error);
+      setMessage({ type: 'error', text: '❌ Delete failed: ' + error.message });
+    }
+  };
+
+  // Get file URL
+  const getFileUrl = (file) => {
+    const key = file.cloudflareKey || file.id;
+    return `${WORKER_URL}/${encodeURIComponent(key)}`;
   };
 
   const filteredFiles = files.filter(file =>
     file.name?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  if (isLoadingAuth) {
-    return (
-      <div className="text-center py-20">
-        <div className="animate-spin w-8 h-8 border-4 border-green-500 border-t-transparent rounded-full mx-auto"></div>
-        <p className="mt-4">Connecting to Google Drive...</p>
-      </div>
-    );
-  }
-
-  if (!isGoogleAuth) {
-    return (
-      <div className="text-center py-20">
-        <div className="text-6xl mb-4">🔐</div>
-        <h2 className="text-xl font-semibold mb-2">Google Drive Access Required</h2>
-        <p className="text-gray-500 mb-4">Click below to connect your Google Drive account.</p>
-        <button
-          onClick={authenticate}
-          className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-        >
-          Connect Google Drive
-        </button>
-      </div>
-    );
-  }
-
   return (
-    <div>
-      <div className="flex justify-between mb-6">
-        <h2 className="text-xl font-bold">Google Drive Files Manager</h2>
+    <div className="p-4">
+      {/* Header */}
+      <div className="flex justify-between items-center mb-6 flex-wrap gap-4">
+        <h2 className="text-xl font-bold text-gray-800 dark:text-white">
+          📁 Cloudflare Files Manager
+        </h2>
         <div className="flex gap-2">
-          <button 
-            onClick={handleExportAll}
-            className="px-3 py-1 bg-purple-600 text-white rounded hover:bg-purple-700"
-            title="Count all files in folder"
+          <button
+            onClick={() => setShowUploadModal(true)}
+            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
           >
-            Count All
+            + Upload New File
           </button>
-          <button 
-            onClick={() => loadDriveFiles(selectedFolder, accessToken, false)} 
-            className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700"
+          <button
+            onClick={handleBulkUpdateFromSheet}
+            disabled={bulkUpdating}
+            className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
           >
-            Refresh
+            {bulkUpdating ? '⏳ Updating...' : '📥 Bulk Update from Sheet'}
+          </button>
+          <button
+            onClick={handleClearEditorSheet}
+            className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700"
+          >
+            🗑️ Clear Editor Sheet
+          </button>
+          <button
+            onClick={loadFiles}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            🔄 Refresh
           </button>
         </div>
       </div>
 
-      <div className="flex gap-4 mb-6">
-        <input
-          type="text"
-          placeholder="Search files..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="flex-1 px-4 py-2 border rounded-lg"
-        />
-        <select 
-          value={selectedFolder} 
-          onChange={handleFolderChange} 
-          className="px-4 py-2 border rounded-lg w-64"
-        >
-          <option value="root">Root Folder</option>
-          {allDriveFolders.map(folder => (
-            <option key={folder.id} value={folder.id}>{folder.name}</option>
-          ))}
-        </select>
-      </div>
+      {/* Message */}
+      {message.text && (
+        <div className={`mb-4 p-3 rounded-lg ${
+          message.type === 'success' ? 'bg-green-100 text-green-700' :
+          message.type === 'error' ? 'bg-red-100 text-red-700' :
+          'bg-blue-100 text-blue-700'
+        }`}>
+          {message.text}
+        </div>
+      )}
 
       {/* Stats */}
-      <div className="grid grid-cols-5 gap-3 mb-6">
-        <div className="bg-blue-100 p-3 rounded text-center">
-          <div className="text-xl font-bold">{files.length}</div>
-          <div className="text-xs">Displayed</div>
+      <div className="grid grid-cols-4 gap-3 mb-6">
+        <div className="bg-purple-100 dark:bg-purple-900/30 rounded-lg p-3 text-center">
+          <div className="text-xl font-bold text-purple-600">{files.length}</div>
+          <div className="text-xs text-gray-500">Total Files</div>
         </div>
-        <div className="bg-green-100 p-3 rounded text-center">
-          <div className="text-xl font-bold">{files.filter(f => f.showOnWebsite).length}</div>
-          <div className="text-xs">Visible</div>
+        <div className="bg-green-100 dark:bg-green-900/30 rounded-lg p-3 text-center">
+          <div className="text-xl font-bold text-green-600">{files.filter(f => f.showOnWebsite).length}</div>
+          <div className="text-xs text-gray-500">Visible on Website</div>
         </div>
-        <div className="bg-yellow-100 p-3 rounded text-center">
-          <div className="text-xl font-bold">{files.filter(f => f.isPremium).length}</div>
-          <div className="text-xs">Premium</div>
+        <div className="bg-yellow-100 dark:bg-yellow-900/30 rounded-lg p-3 text-center">
+          <div className="text-xl font-bold text-yellow-600">{files.filter(f => f.isPremium).length}</div>
+          <div className="text-xs text-gray-500">Premium</div>
         </div>
-        <div className="bg-purple-100 p-3 rounded text-center">
-          <div className="text-xl font-bold">₹{files.reduce((s, f) => s + (f.isPremium ? f.price : 0), 0)}</div>
-          <div className="text-xs">Value</div>
+        <div className="bg-red-100 dark:bg-red-900/30 rounded-lg p-3 text-center">
+          <div className="text-xl font-bold text-red-600">{files.filter(f => !f.showOnWebsite).length}</div>
+          <div className="text-xs text-gray-500">Hidden</div>
         </div>
-        <div className="bg-red-100 p-3 rounded text-center">
-          <div className="text-xl font-bold">{selectedFiles.size}</div>
-          <div className="text-xs">Selected</div>
-        </div>
+      </div>
+
+      {/* Search */}
+      <div className="mb-4">
+        <input
+          type="text"
+          placeholder="Search files by name..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800"
+        />
       </div>
 
       {/* Files Table */}
       {loading ? (
         <div className="flex justify-center py-12">
-          <div className="animate-spin w-8 h-8 border-4 border-green-500 border-t-transparent rounded-full"></div>
+          <div className="w-8 h-8 border-4 border-green-500 border-t-transparent rounded-full animate-spin"></div>
         </div>
       ) : (
-        <>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm border-collapse">
-              <thead className="bg-gray-100 sticky top-0">
-                <tr>
-                  <th className="p-2 w-10">
-                    <input type="checkbox" checked={selectedFiles.size === files.length && files.length > 0} onChange={selectAllFiles} />
-                  </th>
-                  <th className="p-2">File Name</th>
-                  <th className="p-2">Folder</th>
-                  <th className="p-2">University</th>
-                  <th className="p-2">Course</th>
-                  <th className="p-2">Year</th>
-                  <th className="p-2">Semester</th>
-                  <th className="p-2">Subject</th>
-                  <th className="p-2">Title</th>
-                  <th className="p-2">Other Tags</th>
-                  <th className="p-2">Price</th>
-                  <th className="p-2">Premium</th>
-                  <th className="p-2">Visible</th>
-                  <th className="p-2">Actions</th>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-100 dark:bg-gray-700 sticky top-0">
+              <tr>
+                <th className="p-2 text-left">File Name</th>
+                <th className="p-2 text-left">Size</th>
+                <th className="p-2 text-left">Price</th>
+                <th className="p-2 text-left">Premium</th>
+                <th className="p-2 text-left">Visible</th>
+                <th className="p-2 text-left">Tags</th>
+                <th className="p-2 text-left">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredFiles.map((file) => (
+                <tr key={file.id} className={`border-b hover:bg-gray-50 dark:hover:bg-gray-800 ${!file.showOnWebsite ? 'opacity-60 bg-gray-50 dark:bg-gray-900/30' : ''}`}>
+                  {editingFile === file.id ? (
+                    <>
+                      <td className="p-2">
+                        <input
+                          type="text"
+                          value={editForm.name}
+                          onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                          className="w-full px-2 py-1 border rounded"
+                        />
+                      </td>
+                      <td className="p-2 text-gray-500 text-xs">
+                        {(file.size / 1024).toFixed(2)} KB
+                      </td>
+                      <td className="p-2">
+                        <input
+                          type="number"
+                          value={editForm.price}
+                          onChange={(e) => setEditForm({ ...editForm, price: parseInt(e.target.value) || 0 })}
+                          className="w-20 px-2 py-1 border rounded"
+                        />
+                      </td>
+                      <td className="p-2">
+                        <input
+                          type="checkbox"
+                          checked={editForm.isPremium}
+                          onChange={(e) => setEditForm({ ...editForm, isPremium: e.target.checked })}
+                          className="w-4 h-4"
+                        />
+                      </td>
+                      <td className="p-2">
+                        <input
+                          type="checkbox"
+                          checked={editForm.showOnWebsite}
+                          onChange={(e) => setEditForm({ ...editForm, showOnWebsite: e.target.checked })}
+                          className="w-4 h-4"
+                        />
+                      </td>
+                      <td className="p-2">
+                        <input
+                          type="text"
+                          value={editForm.tags}
+                          onChange={(e) => setEditForm({ ...editForm, tags: e.target.value })}
+                          placeholder="subject:Maths, course:BCA"
+                          className="w-full px-2 py-1 text-xs border rounded"
+                        />
+                      </td>
+                      <td className="p-2">
+                        <button
+                          onClick={() => handleUpdateFile(file)}
+                          className="px-2 py-1 bg-green-500 text-white rounded text-xs mr-1"
+                        >
+                          Save
+                        </button>
+                        <button
+                          onClick={() => setEditingFile(null)}
+                          className="px-2 py-1 bg-gray-500 text-white rounded text-xs"
+                        >
+                          Cancel
+                        </button>
+                      </td>
+                    </>
+                  ) : (
+                    <>
+                      <td className="p-2">
+                        <a 
+                          href={getFileUrl(file)} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:underline"
+                        >
+                          {file.name}
+                        </a>
+                        <div className="text-xs text-gray-400 font-mono mt-1">
+                          {file.cloudflareKey?.slice(0, 30)}...
+                        </div>
+                        {!file.showOnWebsite && (
+                          <span className="inline-block mt-1 px-1.5 py-0.5 bg-red-100 text-red-600 text-xs rounded">Hidden</span>
+                        )}
+                      </td>
+                      <td className="p-2 text-gray-500 text-xs">
+                        {(file.size / 1024).toFixed(2)} KB
+                       </td>
+                      <td className="p-2 font-medium">₹{file.price || 29}</td>
+                      <td className="p-2">
+                        {file.isPremium ? (
+                          <span className="px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs">Premium</span>
+                        ) : (
+                          <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded-full text-xs">Free</span>
+                        )}
+                       </td>
+                      <td className="p-2">
+                        {file.showOnWebsite ? (
+                          <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs">Visible</span>
+                        ) : (
+                          <span className="px-2 py-1 bg-red-100 text-red-700 rounded-full text-xs">Hidden</span>
+                        )}
+                       </td>
+                      <td className="p-2 text-xs text-gray-500 max-w-[250px]">
+                        {(() => {
+                          const displayTags = tagsToString(file.tags, file.tagsString);
+                          return displayTags ? (
+                            <span className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 rounded text-xs break-words">
+                              {displayTags}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400 text-xs">—</span>
+                          );
+                        })()}
+                       </td>
+                      <td className="p-2">
+                        <button
+                          onClick={() => {
+                            setEditingFile(file.id);
+                            setEditForm({
+                              name: file.name || '',
+                              price: file.price || 29,
+                              isPremium: file.isPremium || false,
+                              showOnWebsite: file.showOnWebsite !== false,
+                              tags: tagsToString(file.tags, file.tagsString)
+                            });
+                          }}
+                          className="px-2 py-1 bg-blue-500 text-white rounded text-xs mr-1"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDeleteFile(file)}
+                          className="px-2 py-1 bg-red-500 text-white rounded text-xs"
+                        >
+                          Delete
+                        </button>
+                       </td>
+                    </>
+                  )}
                 </tr>
-              </thead>
-              <tbody>
-                {filteredFiles.map((file) => (
-                  <tr key={file.id} className="border-b hover:bg-gray-50">
-                    <td className="p-2">
-                      <input type="checkbox" checked={selectedFiles.has(file.id)} onChange={() => toggleFileSelection(file.id)} />
-                    </td>
-                    <td className="p-2">
-                      <input type="text" defaultValue={file.name} onBlur={(e) => updateFileMetadata(file.id, { name: e.target.value })} className="w-full px-2 py-1 border rounded text-sm" />
-                      <div className="text-xs text-gray-400 mt-1">{file.id?.slice(0, 8)}...</div>
-                    </td>
-                    <td className="p-2 text-sm">{file.folderName}</td>
-                    <td className="p-2">{renderTagInput(file, 'university')}</td>
-                    <td className="p-2">{renderTagInput(file, 'course')}</td>
-                    <td className="p-2">{renderTagInput(file, 'year')}</td>
-                    <td className="p-2">{renderTagInput(file, 'semester')}</td>
-                    <td className="p-2">{renderTagInput(file, 'subject')}</td>
-                    <td className="p-2">{renderTagInput(file, 'title')}</td>
-                    <td className="p-2">{renderTagInput(file, 'other')}</td>
-                    <td className="p-2">
-                      <input type="number" value={file.price} onChange={(e) => updateFileMetadata(file.id, { price: parseInt(e.target.value) || 0 })} min="0" max="999" className="w-20 px-2 py-1 text-sm border rounded" disabled={!file.isPremium} />
-                    </td>
-                    <td className="p-2">
-                      <button onClick={() => updateFileMetadata(file.id, { isPremium: !file.isPremium })} className={`px-2 py-1 rounded text-xs font-medium ${file.isPremium ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-600'}`}>
-                        {file.isPremium ? 'Premium' : 'Free'}
-                      </button>
-                    </td>
-                    <td className="p-2">
-                      <button onClick={() => updateFileMetadata(file.id, { showOnWebsite: !file.showOnWebsite })} className={`px-2 py-1 rounded text-xs font-medium ${file.showOnWebsite ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                        {file.showOnWebsite ? 'Visible' : 'Hidden'}
-                      </button>
-                    </td>
-                    <td className="p-2">
-                      <a href={file.webViewLink} target="_blank" rel="noopener noreferrer" className="text-blue-600 text-sm mr-2">View</a>
-                      <button onClick={() => { if(confirm('Delete this file?')) deleteDoc(doc(db, 'files', file.id)).then(() => setFiles(files.filter(f => f.id !== file.id))); }} className="text-red-600 text-sm">Delete</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            
-            {filteredFiles.length === 0 && (
-              <div className="text-center py-12 text-gray-500">No files found in this folder</div>
-            )}
-          </div>
-          
-          {/* Load More Button */}
-          {hasMore && (
-            <div className="text-center mt-4">
-              <button 
-                onClick={handleLoadMore}
-                disabled={loadingMore}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+              ))}
+            </tbody>
+          </table>
+
+          {filteredFiles.length === 0 && (
+            <div className="text-center py-12 text-gray-500">
+              No files found. Click "Upload New File" to add files.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Upload Modal */}
+      {showUploadModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl max-w-md w-full p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-bold">Upload New File</h3>
+              <button onClick={() => setShowUploadModal(false)} className="text-gray-500 hover:text-gray-700">✕</button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Select File:</label>
+                <input
+                  type="file"
+                  onChange={(e) => setSelectedFile(e.target.files[0])}
+                  className="w-full p-2 border rounded"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Display Name:</label>
+                <input
+                  type="text"
+                  value={editForm.name}
+                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                  placeholder="File display name"
+                  className="w-full p-2 border rounded"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Price (₹):</label>
+                <input
+                  type="number"
+                  value={editForm.price}
+                  onChange={(e) => setEditForm({ ...editForm, price: parseInt(e.target.value) || 0 })}
+                  className="w-full p-2 border rounded"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Tags:</label>
+                <input
+                  type="text"
+                  value={editForm.tags}
+                  onChange={(e) => setEditForm({ ...editForm, tags: e.target.value })}
+                  placeholder="subject:Maths, course:BCA, semester:3"
+                  className="w-full p-2 border rounded text-sm"
+                />
+              </div>
+
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={editForm.isPremium}
+                    onChange={(e) => setEditForm({ ...editForm, isPremium: e.target.checked })}
+                  />
+                  Premium File
+                </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={editForm.showOnWebsite}
+                    onChange={(e) => setEditForm({ ...editForm, showOnWebsite: e.target.checked })}
+                  />
+                  Show on Website
+                </label>
+              </div>
+
+              <button
+                onClick={handleUpload}
+                disabled={uploading || !selectedFile}
+                className="w-full py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
               >
-                {loadingMore ? 'Loading...' : 'Load More Files'}
+                {uploading ? 'Uploading...' : '⬆️ Upload to Cloudflare'}
               </button>
             </div>
-          )}
-          
-          {/* Show total count if more files exist */}
-          {hasMore && (
-            <div className="text-center mt-2 text-xs text-gray-500">
-              Showing {files.length} files. Click "Load More" to see more.
-            </div>
-          )}
-        </>
+          </div>
+        </div>
       )}
     </div>
   );

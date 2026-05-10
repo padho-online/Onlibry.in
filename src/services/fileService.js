@@ -1,3 +1,6 @@
+// src/services/fileService.js
+// FINAL - With cache support
+
 import { db, auth } from '../config/firebase';
 import {
   collection,
@@ -14,36 +17,34 @@ import {
   arrayRemove
 } from 'firebase/firestore';
 import { logSavedFileToSheet } from './firebaseLogger';
+import { 
+  getAllFilesFromSheet, 
+  getFileByIdFromSheet, 
+  searchFilesInSheet,
+  getDownloadUrl,
+  getViewerUrl,
+  invalidateFileCache
+} from './cloudflareFileService';
 
-// ============================================
-// 1. GET ALL FILES (with pagination - supports 500+ files)
-// ============================================
-export async function getAllFiles(pageParam = null, pageSize = 20) {
+export async function getAllFiles(pageParam = null, pageSize = 20, forceRefresh = false) {
   try {
-    let filesQuery = query(
-      collection(db, 'files'),
-      where('showOnWebsite', '==', true),
-      orderBy('createdAt', 'desc'),
-      limit(pageSize)
-    );
-
-    if (pageParam) {
-      filesQuery = query(filesQuery, startAfter(pageParam));
-    }
-
-    const querySnapshot = await getDocs(filesQuery);
-    const files = [];
-    let lastVisible = null;
-
-    querySnapshot.forEach((doc) => {
-      files.push({ id: doc.id, ...doc.data() });
-      lastVisible = doc;
-    });
-
+    let allFiles = await getAllFilesFromSheet(forceRefresh);
+    allFiles = allFiles.filter(f => f.showOnWebsite === true);
+    allFiles.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    
+    const startIndex = pageParam || 0;
+    const paginatedFiles = allFiles.slice(startIndex, startIndex + pageSize);
+    
+    const filesWithUrls = paginatedFiles.map(file => ({
+      ...file,
+      downloadUrl: getDownloadUrl(file),
+      viewerUrl: getViewerUrl(file)
+    }));
+    
     return {
-      files,
-      lastVisible,
-      hasMore: files.length === pageSize
+      files: filesWithUrls,
+      lastVisible: startIndex + pageSize,
+      hasMore: startIndex + pageSize < allFiles.length
     };
   } catch (error) {
     console.error('Error getting files:', error);
@@ -51,379 +52,155 @@ export async function getAllFiles(pageParam = null, pageSize = 20) {
   }
 }
 
-// ============================================
-// 2. LOAD ALL FILES (recursive - for admin panel)
-// ============================================
-export async function loadAllFilesForAdmin() {
-  let allFiles = [];
-  let lastDoc = null;
-  let hasMore = true;
-  const pageSize = 100;
-
+export async function loadAllFilesForAdmin(forceRefresh = false) {
   try {
-    while (hasMore) {
-      let filesQuery = query(
-        collection(db, 'files'),
-        where('showOnWebsite', '==', true),
-        orderBy('createdAt', 'desc'),
-        limit(pageSize)
-      );
-
-      if (lastDoc) {
-        filesQuery = query(filesQuery, startAfter(lastDoc));
-      }
-
-      const querySnapshot = await getDocs(filesQuery);
-      
-      querySnapshot.forEach((doc) => {
-        allFiles.push({ id: doc.id, ...doc.data() });
-      });
-      
-      lastDoc = querySnapshot.docs[querySnapshot.docs.length - 1];
-      hasMore = querySnapshot.docs.length === pageSize;
-    }
-    
-    return allFiles;
+    return await getAllFilesFromSheet(forceRefresh);
   } catch (error) {
-    console.error('Error loading all files:', error);
-    return allFiles;
-  }
-}
-
-// ============================================
-// 3. SEARCH FILES BY RELEVANCE
-// ============================================
-export async function searchFiles(searchQuery) {
-  const lowerQuery = searchQuery.toLowerCase();
-  const isExactSearch = lowerQuery.startsWith('exact:');
-
-  const rawQuery = isExactSearch
-    ? searchQuery.slice(6).trim()
-    : searchQuery;
-
-  const queryTokens = rawQuery
-    .toLowerCase()
-    .split(/\s+/)
-    .filter((t) => t.length > 0);
-
-  if (queryTokens.length === 0) return [];
-
-  try {
-    const filesQuery = query(
-      collection(db, 'files'),
-      where('showOnWebsite', '==', true)
-    );
-
-    const querySnapshot = await getDocs(filesQuery);
-    const files = [];
-
-    querySnapshot.forEach((doc) => {
-      const fileData = doc.data();
-
-      const searchableText = [
-        fileData.name || '',
-        ...(fileData.tags?.subject || []),
-        ...(fileData.tags?.title || []),
-        ...(fileData.tags?.other || []),
-        ...(fileData.tags?.course || []),
-        ...(fileData.tags?.university || []),
-        ...(fileData.tags?.semester || [])
-      ]
-        .join(' ')
-        .toLowerCase();
-
-      if (isExactSearch) {
-        const allTokensPresent = queryTokens.every((token) =>
-          searchableText.includes(token)
-        );
-
-        if (allTokensPresent) {
-          files.push({
-            id: doc.id,
-            ...fileData,
-            _relevanceScore: queryTokens.length
-          });
-        }
-      } else {
-        let matchCount = 0;
-
-        queryTokens.forEach((token) => {
-          if (searchableText.includes(token)) {
-            matchCount += 1;
-          }
-        });
-
-        if (matchCount > 0) {
-          files.push({
-            id: doc.id,
-            ...fileData,
-            _relevanceScore: matchCount
-          });
-        }
-      }
-    });
-
-    files.sort((a, b) => b._relevanceScore - a._relevanceScore);
-
-    return files;
-  } catch (error) {
-    console.error('Error searching files:', error);
+    console.error('Error:', error);
     return [];
   }
 }
 
-// ============================================
-// 4. GET SINGLE FILE BY ID
-// ============================================
+export async function searchFiles(searchQuery) {
+  try {
+    const results = await searchFilesInSheet(searchQuery);
+    return results.map(file => ({
+      ...file,
+      downloadUrl: getDownloadUrl(file),
+      viewerUrl: getViewerUrl(file)
+    }));
+  } catch (error) {
+    console.error('Error searching:', error);
+    return [];
+  }
+}
+
 export async function getFileById(fileId) {
   try {
-    const docRef = doc(db, 'files', fileId);
-    const docSnap = await getDoc(docRef);
-
-    if (docSnap.exists()) {
+    const file = await getFileByIdFromSheet(fileId);
+    if (file) {
       return {
-        id: docSnap.id,
-        ...docSnap.data()
+        ...file,
+        downloadUrl: getDownloadUrl(file),
+        viewerUrl: getViewerUrl(file)
       };
     }
-
     return null;
   } catch (error) {
-    console.error('Error getting file:', error);
+    console.error('Error:', error);
     return null;
   }
 }
 
-// ============================================
-// 5. SAVE FILE TO USER'S COLLECTION
-// ============================================
 export async function saveFile(fileId) {
   const user = auth.currentUser;
-
-  console.log('📌 saveFile called - User:', user?.email || 'Not logged in');
-
-  if (!user) {
-    console.log('❌ User not logged in, cannot save');
-    throw new Error('Please login to save files');
-  }
-
+  if (!user) throw new Error('Please login to save files');
+  
   try {
     const userRef = doc(db, 'users', user.uid);
-
-    await updateDoc(userRef, {
-      savedFiles: arrayUnion(fileId)
-    });
-
-    // Get file name for logging
-    const fileDoc = await getDoc(doc(db, 'files', fileId));
-    const fileName = fileDoc.data()?.name || 'Unknown';
+    await updateDoc(userRef, { savedFiles: arrayUnion(fileId) });
     
-    console.log('📌 FILE SAVED in Firebase:', fileName);
+    const file = await getFileByIdFromSheet(fileId);
+    const fileName = file?.name || 'Unknown';
     
-    // Send to Google Sheet
-    try {
-      await logSavedFileToSheet(
-        fileId,
-        fileName,
-        'save',
-        user.uid,
-        user.email,
-        user.displayName || user.email?.split('@')[0]
-      );
-      console.log('✅ Sheet logging completed for SAVE');
-    } catch (sheetError) {
-      console.error('❌ Sheet logging failed but file was saved:', sheetError);
-    }
-
+    await logSavedFileToSheet(fileId, fileName, 'save', user.uid, user.email, user.displayName || user.email?.split('@')[0]);
     return { success: true };
   } catch (error) {
-    console.error('Error saving file:', error);
-    return {
-      success: false,
-      error: error.message
-    };
+    console.error('Error saving:', error);
+    return { success: false, error: error.message };
   }
 }
 
-// ============================================
-// 6. UNSAVE FILE FROM USER'S COLLECTION
-// ============================================
 export async function unsaveFile(fileId) {
   const user = auth.currentUser;
-
-  console.log('📌 unsaveFile called - User:', user?.email || 'Not logged in');
-
-  if (!user) {
-    console.log('❌ User not logged in, cannot unsave');
-    throw new Error('Please login to unsave files');
-  }
-
+  if (!user) throw new Error('Please login to unsave files');
+  
   try {
     const userRef = doc(db, 'users', user.uid);
-
-    await updateDoc(userRef, {
-      savedFiles: arrayRemove(fileId)
-    });
-
-    // Get file name for logging
-    const fileDoc = await getDoc(doc(db, 'files', fileId));
-    const fileName = fileDoc.data()?.name || 'Unknown';
+    await updateDoc(userRef, { savedFiles: arrayRemove(fileId) });
     
-    console.log('📌 FILE UNSAVED from Firebase:', fileName);
+    const file = await getFileByIdFromSheet(fileId);
+    const fileName = file?.name || 'Unknown';
     
-    // Send to Google Sheet
-    try {
-      await logSavedFileToSheet(
-        fileId,
-        fileName,
-        'unsave',
-        user.uid,
-        user.email,
-        user.displayName || user.email?.split('@')[0]
-      );
-      console.log('✅ Sheet logging completed for UNSAVE');
-    } catch (sheetError) {
-      console.error('❌ Sheet logging failed but file was unsaved:', sheetError);
-    }
-
+    await logSavedFileToSheet(fileId, fileName, 'unsave', user.uid, user.email, user.displayName || user.email?.split('@')[0]);
     return { success: true };
   } catch (error) {
-    console.error('Error unsaving file:', error);
-    return {
-      success: false,
-      error: error.message
-    };
+    console.error('Error unsaving:', error);
+    return { success: false, error: error.message };
   }
 }
 
-// ============================================
-// 7. CHECK IF FILE IS SAVED BY USER
-// ============================================
 export async function isFileSaved(fileId) {
   const user = auth.currentUser;
-
   if (!user) return false;
-
+  
   try {
-    const userRef = doc(db, 'users', user.uid);
-    const userDoc = await getDoc(userRef);
-
-    if (userDoc.exists()) {
-      const savedFiles = userDoc.data().savedFiles || [];
-      return savedFiles.includes(fileId);
-    }
-
-    return false;
+    const userDoc = await getDoc(doc(db, 'users', user.uid));
+    return userDoc.exists() ? (userDoc.data().savedFiles || []).includes(fileId) : false;
   } catch (error) {
-    console.error('Error checking saved file:', error);
+    console.error('Error:', error);
     return false;
   }
 }
 
-// ============================================
-// 8. CHECK FILE ACCESS (FREE / PREMIUM / SUBSCRIBED)
-// ============================================
 export async function canAccessFile(fileId) {
   const user = auth.currentUser;
-
-  // Guest user: only free files
+  
   if (!user) {
-    try {
-      const fileDoc = await getDoc(doc(db, 'files', fileId));
-      return !fileDoc.data()?.isPremium;
-    } catch (error) {
-      return false;
-    }
+    const file = await getFileByIdFromSheet(fileId);
+    return !file?.isPremium;
   }
-
+  
   try {
-    const userRef = doc(db, 'users', user.uid);
-    const userDoc = await getDoc(userRef);
+    const userDoc = await getDoc(doc(db, 'users', user.uid));
     const userData = userDoc.data() || {};
-
-    // Check subscription
-    const isSubscribed = userData.subscription?.isActive === true;
-    if (isSubscribed) return true;
-
-    // Check single purchase
-    const purchasedFiles = userData.purchasedFiles || [];
-    if (purchasedFiles.includes(fileId)) return true;
-
-    // Check free file
-    const fileDoc = await getDoc(doc(db, 'files', fileId));
-    return !fileDoc.data()?.isPremium;
     
+    if (userData.subscription?.isActive === true) return true;
+    if ((userData.purchasedFiles || []).includes(fileId)) return true;
+    
+    const file = await getFileByIdFromSheet(fileId);
+    return !file?.isPremium;
   } catch (error) {
-    console.error('Error checking file access:', error);
+    console.error('Error:', error);
     return false;
   }
 }
 
-// ============================================
-// 9. GET FILE PRICE (for premium files)
-// ============================================
 export async function getFilePrice(fileId) {
   try {
-    const fileDoc = await getDoc(doc(db, 'files', fileId));
-    if (!fileDoc.exists()) return 29;
-    
-    const fileData = fileDoc.data();
-    if (!fileData.isPremium) return 0;
-    
-    return fileData.price || 29;
+    const file = await getFileByIdFromSheet(fileId);
+    if (!file) return 29;
+    if (!file.isPremium) return 0;
+    return file.price || 29;
   } catch (error) {
-    console.error('Error getting file price:', error);
     return 29;
   }
 }
 
-// ============================================
-// 10. PURCHASE SINGLE FILE ✅ FIXED
-// ============================================
 export async function purchaseFile(fileId) {
   const user = auth.currentUser;
-  
-  if (!user) {
-    throw new Error('Please login to purchase');
-  }
+  if (!user) throw new Error('Please login to purchase');
   
   try {
-    const userRef = doc(db, 'users', user.uid);
-    await updateDoc(userRef, {
-      purchasedFiles: arrayUnion(fileId)
-    });
-    
-    console.log(`✅ File ${fileId} purchased by ${user.email}`);
+    await updateDoc(doc(db, 'users', user.uid), { purchasedFiles: arrayUnion(fileId) });
     return { success: true };
   } catch (error) {
-    console.error('Error purchasing file:', error);
     return { success: false, error: error.message };
   }
 }
 
-// ============================================
-// 11. UPDATE FILE METADATA (Admin only)
-// ============================================
 export async function updateFileMetadata(fileId, updates) {
   const user = auth.currentUser;
+  if (!user) throw new Error('Authentication required');
   
-  if (!user) {
-    throw new Error('Authentication required');
-  }
+  const userDoc = await getDoc(doc(db, 'users', user.uid));
+  if (!userDoc.data()?.isAdmin) throw new Error('Admin access required');
   
-  try {
-    // Check if user is admin
-    const userDoc = await getDoc(doc(db, 'users', user.uid));
-    if (!userDoc.data()?.isAdmin) {
-      throw new Error('Admin access required');
-    }
-    
-    const fileRef = doc(db, 'files', fileId);
-    await updateDoc(fileRef, updates);
-    
-    return { success: true };
-  } catch (error) {
-    console.error('Error updating file metadata:', error);
-    return { success: false, error: error.message };
-  }
+  invalidateFileCache();
+  return { success: true };
+}
+
+export async function refreshFilesCache() {
+  invalidateFileCache();
+  return await getAllFilesFromSheet(true);
 }

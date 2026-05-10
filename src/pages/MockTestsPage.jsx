@@ -1,94 +1,210 @@
+// src/pages/MockTestsPage.jsx
+// COMPLETE FIXED - Subscribe button adds to cart and redirects to pricing cart tab
+
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { getAllExams, processExamPapers, getExamCategories, getSubCategories } from '../services/mockTestService';
+import { useNavigate } from 'react-router-dom';
+import { getAllPapers, getAllCategories, getSubCategoriesForCategory, refreshMockTests } from '../services/mockTestService';
+import { useAuth } from '../contexts/AuthContext';
+import { useCart } from '../contexts/CartContext';
 
 function MockTestsPage() {
-  const [allPapers, setAllPapers] = useState([]);
+  const navigate = useNavigate();
+  const { user, isSubscribed } = useAuth();
+  const { addToCart, isInCart, removeFromCart } = useCart();
+  const [papers, setPapers] = useState([]);
   const [filteredPapers, setFilteredPapers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedExam, setSelectedExam] = useState('all');
-  const [selectedSub, setSelectedSub] = useState('all');
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [selectedSubCategory, setSelectedSubCategory] = useState('all');
   const [categories, setCategories] = useState([]);
   const [subCategories, setSubCategories] = useState([]);
+  const [cartStatus, setCartStatus] = useState({});
 
-  useEffect(() => {
-    loadExams();
-  }, []);
-
-  useEffect(() => {
-    applyFilters();
-  }, [selectedExam, selectedSub, searchQuery, allPapers]);
-
-  useEffect(() => {
-    if (selectedExam !== 'all') {
-      const subs = getSubCategories(allPapers, selectedExam);
-      setSubCategories(subs);
-      setSelectedSub('all');
-    } else {
-      setSubCategories([]);
-      setSelectedSub('all');
-    }
-  }, [selectedExam, allPapers]);
-
-  const loadExams = async () => {
+  // Load data
+  const loadData = async () => {
     setLoading(true);
-    const exams = await getAllExams();
-    const processed = processExamPapers(exams);
-    setAllPapers(processed);
-    setFilteredPapers(processed);
-    
-    const cats = getExamCategories(processed);
-    setCategories(cats);
-    setLoading(false);
+    try {
+      const allPapers = await getAllPapers();
+      const allCategories = await getAllCategories();
+      
+      console.log('📊 Mock Tests:', allPapers.length);
+      console.log('📊 Free:', allPapers.filter(p => p.isFree).length);
+      console.log('📊 Premium:', allPapers.filter(p => !p.isFree).length);
+      
+      setPapers(allPapers);
+      setFilteredPapers(allPapers);
+      setCategories(allCategories);
+      
+      // Check cart status for each paper
+      const status = {};
+      allPapers.forEach(paper => {
+        status[paper.id] = isInCart(paper.id);
+      });
+      setCartStatus(status);
+    } catch (error) {
+      console.error('Error:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const applyFilters = () => {
-    let filtered = [...allPapers];
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  // Update cart status when cart changes
+  useEffect(() => {
+    const status = {};
+    papers.forEach(paper => {
+      status[paper.id] = isInCart(paper.id);
+    });
+    setCartStatus(status);
+  }, [isInCart, papers]);
+
+  // Apply filters
+  useEffect(() => {
+    let filtered = [...papers];
     
-    // Filter by exam category
-    if (selectedExam !== 'all') {
-      filtered = filtered.filter(p => p.baseKey === selectedExam);
+    if (selectedCategory !== 'all') {
+      filtered = filtered.filter(p => p.category === selectedCategory);
     }
     
-    // Filter by sub category
-    if (selectedSub !== 'all') {
-      filtered = filtered.filter(p => p.subKey === selectedSub);
+    if (selectedSubCategory !== 'all') {
+      filtered = filtered.filter(p => p.subCategory === selectedSubCategory);
     }
     
-    // Filter by search query
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(paper =>
-        paper.displayName.toLowerCase().includes(query) ||
-        paper.description.toLowerCase().includes(query)
+      filtered = filtered.filter(p =>
+        p.displayName.toLowerCase().includes(query) ||
+        p.category.toLowerCase().includes(query) ||
+        (p.subCategory && p.subCategory.toLowerCase().includes(query))
       );
     }
     
+    // Sort: Free first, then premium
+    filtered.sort((a, b) => {
+      if (a.isFree === b.isFree) return 0;
+      return a.isFree ? -1 : 1;
+    });
+    
     setFilteredPapers(filtered);
-  };
+  }, [selectedCategory, selectedSubCategory, searchQuery, papers]);
+
+  // Load sub-categories when category changes
+  useEffect(() => {
+    const loadSubs = async () => {
+      if (selectedCategory !== 'all') {
+        const subs = await getSubCategoriesForCategory(selectedCategory);
+        setSubCategories(subs);
+        setSelectedSubCategory('all');
+      } else {
+        setSubCategories([]);
+        setSelectedSubCategory('all');
+      }
+    };
+    loadSubs();
+  }, [selectedCategory]);
 
   const handleClearFilters = () => {
-    setSelectedExam('all');
-    setSelectedSub('all');
+    setSelectedCategory('all');
+    setSelectedSubCategory('all');
     setSearchQuery('');
+  };
+
+  const handleRefresh = async () => {
+    setLoading(true);
+    await refreshMockTests();
+    await loadData();
+  };
+
+  // Handle test action (Start Test)
+  const handleTestAction = (paper) => {
+    // Free test - direct access
+    if (paper.isFree) {
+      navigate(`/mock-test/${encodeURIComponent(paper.originalName)}`);
+      return;
+    }
+    
+    // Premium test - check subscription
+    if (!user) {
+      navigate('/login', { state: { from: '/mock-tests' } });
+      return;
+    }
+    
+    if (isSubscribed) {
+      // Subscribed user - direct access
+      navigate(`/mock-test/${encodeURIComponent(paper.originalName)}`);
+      return;
+    }
+    
+    // Not subscribed - should not reach here (buttons handle it)
+  };
+
+  // Handle add to cart
+  const handleAddToCart = (paper, e) => {
+    e.stopPropagation();
+    if (!user) {
+      navigate('/login', { state: { from: '/mock-tests' } });
+      return;
+    }
+    
+    addToCart({
+      id: paper.id,
+      name: paper.displayName,
+      price: paper.price || 49,
+      type: 'mocktest',
+      originalName: paper.originalName,
+      duration: paper.duration,
+      positiveMark: paper.positiveMark,
+      negativeMark: paper.negativeMark
+    });
+    setCartStatus(prev => ({ ...prev, [paper.id]: true }));
+    alert(`✅ "${paper.displayName}" added to cart!`);
+  };
+
+  // Handle remove from cart
+  const handleRemoveFromCart = (paperId, e) => {
+    e.stopPropagation();
+    removeFromCart(paperId);
+    setCartStatus(prev => ({ ...prev, [paperId]: false }));
+    alert(`🗑️ Removed from cart`);
+  };
+
+  // 🔥 FIXED: Handle subscribe - Add to cart AND redirect to pricing cart tab
+  const handleSubscribe = (paper, e) => {
+    e.stopPropagation();
+    if (!user) {
+      navigate('/login', { state: { from: '/mock-tests' } });
+      return;
+    }
+    
+    // Add to cart first
+    addToCart({
+      id: paper.id,
+      name: paper.displayName,
+      price: paper.price || 49,
+      type: 'mocktest',
+      originalName: paper.originalName,
+      duration: paper.duration,
+      positiveMark: paper.positiveMark,
+      negativeMark: paper.negativeMark
+    });
+    
+    // Redirect to pricing page with cart tab active
+    navigate('/pricing', { state: { activeTab: 'cart' } });
   };
 
   return (
     <div className="py-6">
-      {/* Header */}
       <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-800 dark:text-white mb-2">
-          Mock Tests
-        </h1>
-        <p className="text-gray-600 dark:text-gray-400">
-          Practice with real exam patterns and boost your preparation
-        </p>
+        <h1 className="text-3xl font-bold text-gray-800 dark:text-white mb-2">Mock Tests</h1>
+        <p className="text-gray-600 dark:text-gray-400">Practice with real exam patterns and boost your preparation</p>
       </div>
 
-      {/* Search and Filters */}
+      {/* Filters */}
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-4 mb-8">
-        {/* Search Bar */}
         <div className="mb-4">
           <input
             type="text"
@@ -99,81 +215,89 @@ function MockTestsPage() {
           />
         </div>
         
-        {/* Exam Filters */}
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => setSelectedExam('all')}
-            className={`px-4 py-2 rounded-full text-sm font-medium transition ${
-              selectedExam === 'all'
-                ? 'bg-green-600 text-white'
-                : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
-            }`}
-          >
-            All
-          </button>
-          {categories.map(cat => (
+        {/* Categories */}
+        <div className="mb-3">
+          <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">Select Exam Category:</label>
+          <div className="flex flex-wrap gap-2">
             <button
-              key={cat}
-              onClick={() => setSelectedExam(cat)}
+              onClick={() => setSelectedCategory('all')}
               className={`px-4 py-2 rounded-full text-sm font-medium transition ${
-                selectedExam === cat
+                selectedCategory === 'all'
                   ? 'bg-green-600 text-white'
                   : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
               }`}
             >
-              {cat.toUpperCase()}
+              All
             </button>
-          ))}
-        </div>
-        
-        {/* Sub Filters (if any) */}
-        {subCategories.length > 0 && (
-          <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
-            <button
-              onClick={() => setSelectedSub('all')}
-              className={`px-3 py-1 rounded-full text-xs font-medium transition ${
-                selectedSub === 'all'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
-              }`}
-            >
-              All Sub
-            </button>
-            {subCategories.map(sub => (
+            {categories.map(cat => (
               <button
-                key={sub}
-                onClick={() => setSelectedSub(sub)}
-                className={`px-3 py-1 rounded-full text-xs font-medium transition ${
-                  selectedSub === sub
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+                key={cat}
+                onClick={() => setSelectedCategory(cat)}
+                className={`px-4 py-2 rounded-full text-sm font-medium transition ${
+                  selectedCategory === cat
+                    ? 'bg-green-600 text-white'
+                    : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
                 }`}
               >
-                {sub}
+                {cat}
               </button>
             ))}
           </div>
+        </div>
+        
+        {/* Sub-categories */}
+        {subCategories.length > 0 && (
+          <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">Select Subject:</label>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setSelectedSubCategory('all')}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition ${
+                  selectedSubCategory === 'all'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+                }`}
+              >
+                All {selectedCategory}
+              </button>
+              {subCategories.map(sub => (
+                <button
+                  key={sub}
+                  onClick={() => setSelectedSubCategory(sub)}
+                  className={`px-3 py-1 rounded-full text-xs font-medium transition ${
+                    selectedSubCategory === sub
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+                  }`}
+                >
+                  {sub}
+                </button>
+              ))}
+            </div>
+          </div>
         )}
         
-        {/* Clear Filters Button */}
-        {(selectedExam !== 'all' || selectedSub !== 'all' || searchQuery) && (
-          <button
-            onClick={handleClearFilters}
-            className="mt-4 text-sm text-red-600 dark:text-red-400 hover:underline"
-          >
-            Clear all filters
+        {/* Actions */}
+        <div className="flex justify-between items-center mt-4">
+          {(selectedCategory !== 'all' || selectedSubCategory !== 'all' || searchQuery) && (
+            <button onClick={handleClearFilters} className="text-sm text-red-600 dark:text-red-400 hover:underline">
+              Clear all filters
+            </button>
+          )}
+          <button onClick={handleRefresh} className="text-sm text-blue-600 dark:text-blue-400 hover:underline ml-auto">
+            🔄 Refresh
           </button>
-        )}
+        </div>
       </div>
 
-      {/* Results Count */}
+      {/* Results count */}
       {!loading && (
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
           Found {filteredPapers.length} test{filteredPapers.length !== 1 ? 's' : ''}
         </p>
       )}
 
-      {/* Loading State */}
+      {/* Loading */}
       {loading && (
         <div className="flex justify-center items-center py-20">
           <div className="w-12 h-12 border-4 border-green-500 border-t-transparent rounded-full animate-spin"></div>
@@ -183,56 +307,99 @@ function MockTestsPage() {
       {/* Papers Grid */}
       {!loading && filteredPapers.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredPapers.map((paper, index) => (
-            <div
-              key={paper.id}
-              className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden hover:shadow-lg transition border border-gray-200 dark:border-gray-700"
+          {filteredPapers.map((paper) => (
+            <div 
+              key={paper.id} 
+              className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden hover:shadow-lg transition border border-gray-200 dark:border-gray-700 cursor-pointer"
+              onClick={() => handleTestAction(paper)}
             >
               <div className="p-5">
-                <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-2">
-                  {paper.displayName}
-                </h3>
-                
-                <div className="flex flex-wrap gap-3 mb-3 text-sm">
-                  <span className="flex items-center gap-1 text-gray-600 dark:text-gray-400">
-                    ⏱️ {paper.duration} min
-                  </span>
-                  <span className="flex items-center gap-1 text-green-600 dark:text-green-400">
-                    ✅ +{paper.positiveMark}
-                  </span>
-                  <span className="flex items-center gap-1 text-red-600 dark:text-red-400">
-                    ❌ -{paper.negativeMark}
-                  </span>
+                {/* Price Badge */}
+                <div className="flex justify-between items-start mb-2">
+                  <h3 className="text-lg font-bold text-gray-800 dark:text-white">
+                    {paper.displayName}
+                  </h3>
+                  {!paper.isFree && (
+                    <span className="px-2 py-1 text-xs font-semibold text-yellow-700 bg-yellow-100 dark:bg-yellow-900/50 rounded-full">
+                      ₹{paper.price || 49}
+                    </span>
+                  )}
+                  {paper.isFree && (
+                    <span className="px-2 py-1 text-xs font-semibold text-green-700 bg-green-100 dark:bg-green-900/50 rounded-full">
+                      Free
+                    </span>
+                  )}
                 </div>
                 
-                <p className="text-gray-600 dark:text-gray-400 text-sm mb-4">
-                  {paper.description}
-                </p>
+                {/* Duration and marks */}
+                <div className="flex flex-wrap gap-3 mb-3 text-sm">
+                  <span className="flex items-center gap-1 text-gray-600 dark:text-gray-400">⏱️ {paper.duration} min</span>
+                  <span className="flex items-center gap-1 text-green-600 dark:text-green-400">✅ +{paper.positiveMark}</span>
+                  <span className="flex items-center gap-1 text-red-600 dark:text-red-400">❌ -{paper.negativeMark}</span>
+                </div>
                 
-                <Link
-                  to={`/mock-test/${encodeURIComponent(paper.originalName)}`}
-                  className="block w-full text-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition"
-                >
-                  Start Test
-                </Link>
+                {/* Action Buttons */}
+                <div className="flex gap-2 mt-2" onClick={(e) => e.stopPropagation()}>
+                  {paper.isFree ? (
+                    // Free test - Start button
+                    <button
+                      onClick={() => handleTestAction(paper)}
+                      className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition"
+                    >
+                      📝 Start Test
+                    </button>
+                  ) : (
+                    // Premium test
+                    isSubscribed ? (
+                      // Subscribed user - Start button
+                      <button
+                        onClick={() => handleTestAction(paper)}
+                        className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition"
+                      >
+                        📝 Start Test
+                      </button>
+                    ) : (
+                      // Unsubscribed user - Subscribe + Add to Cart
+                      <>
+                        <button
+                          onClick={(e) => handleSubscribe(paper, e)}
+                          className="flex-1 px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white font-medium rounded-lg transition"
+                        >
+                          🔒 Subscribe ₹{paper.price || 49}
+                        </button>
+                        {cartStatus[paper.id] ? (
+                          <button
+                            onClick={(e) => handleRemoveFromCart(paper.id, e)}
+                            className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition"
+                            title="Remove from Cart"
+                          >
+                            🗑️
+                          </button>
+                        ) : (
+                          <button
+                            onClick={(e) => handleAddToCart(paper, e)}
+                            className="px-3 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg transition"
+                            title="Add to Cart"
+                          >
+                            🛒
+                          </button>
+                        )}
+                      </>
+                    )
+                  )}
+                </div>
               </div>
             </div>
           ))}
         </div>
       )}
 
-      {/* No Results */}
+      {/* No results */}
       {!loading && filteredPapers.length === 0 && (
         <div className="text-center py-20">
-          <p className="text-gray-500 dark:text-gray-400">
-            No mock tests found matching your criteria.
-          </p>
-          <button
-            onClick={handleClearFilters}
-            className="mt-4 text-green-600 dark:text-green-400 hover:underline"
-          >
-            Clear filters
-          </button>
+          <div className="text-6xl mb-4">📚</div>
+          <p className="text-gray-500 dark:text-gray-400 text-lg">No mock tests found matching your criteria.</p>
+          <button onClick={handleClearFilters} className="mt-4 text-green-600 dark:text-green-400 hover:underline">Clear filters</button>
         </div>
       )}
     </div>

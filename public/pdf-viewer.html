@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Viewer - Onlibry</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background-color: #525659;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        
+        .toolbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: #323639;
+            color: white;
+            padding: 8px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 100;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        
+        .toolbar button {
+            background: #4a4e52;
+            border: none;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 0 4px;
+        }
+        
+        .toolbar button:hover {
+            background: #5a5e62;
+        }
+        
+        .toolbar .page-info {
+            font-size: 14px;
+        }
+        
+        .container {
+            margin-top: 50px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        .page {
+            position: relative;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            background: white;
+        }
+        
+        /* Watermark Container */
+        .watermark-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            pointer-events: none;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        /* Center Logo Watermark */
+        .center-watermark {
+            text-align: center;
+            opacity: 0.15;
+            pointer-events: auto;
+            cursor: pointer;
+            transition: opacity 0.3s;
+        }
+        
+        .center-watermark:hover {
+            opacity: 0.25;
+        }
+        
+        .center-watermark img {
+            width: 120px;
+            height: auto;
+        }
+        
+        .center-watermark p {
+            font-size: 14px;
+            color: #000;
+            margin-top: 8px;
+        }
+        
+        /* Footer Watermark */
+        .footer-watermark {
+            position: absolute;
+            bottom: 30px;
+            left: 0;
+            right: 0;
+            text-align: center;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 8px 16px;
+            font-size: 11px;
+            color: #333;
+            pointer-events: auto;
+            cursor: pointer;
+            border-top: 1px solid #ddd;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        .footer-watermark:hover {
+            background: white;
+            text-decoration: underline;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 50px;
+            color: white;
+        }
+        
+        canvas {
+            display: block;
+            margin: 0 auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <div>
+            <button id="prevBtn">◀ Previous</button>
+            <button id="nextBtn">Next ▶</button>
+        </div>
+        <div class="page-info">
+            Page <span id="pageNum">1</span> of <span id="pageCount">0</span>
+        </div>
+        <div>
+            <button id="downloadBtn">⬇️ Download PDF</button>
+        </div>
+    </div>
+    <div class="container" id="container"></div>
+    <div class="loading" id="loading">Loading PDF...</div>
+
+    <script>
+        // Get URL parameter
+        const urlParams = new URLSearchParams(window.location.search);
+        const pdfUrl = decodeURIComponent(urlParams.get('url') || '');
+        const fileName = decodeURIComponent(urlParams.get('fileName') || 'document.pdf');
+        
+        let pdfDoc = null;
+        let pageNum = 1;
+        let pageRendering = false;
+        let pageNumPending = null;
+        let scale = 1.3;
+        let container = document.getElementById('container');
+        
+        // Set up PDF.js worker
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+        
+        // Download button
+        document.getElementById('downloadBtn').addEventListener('click', () => {
+            const link = document.createElement('a');
+            link.href = pdfUrl;
+            link.download = `Onlibry.in_"${fileName}"`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        });
+        
+        // Navigation buttons
+        document.getElementById('prevBtn').addEventListener('click', () => {
+            if (pageNum <= 1) return;
+            pageNum--;
+            queueRenderPage(pageNum);
+        });
+        
+        document.getElementById('nextBtn').addEventListener('click', () => {
+            if (pageNum >= pdfDoc.numPages) return;
+            pageNum++;
+            queueRenderPage(pageNum);
+        });
+        
+        function queueRenderPage(num) {
+            if (pageRendering) {
+                pageNumPending = num;
+            } else {
+                renderPage(num);
+            }
+        }
+        
+        function renderPage(num) {
+            pageRendering = true;
+            document.getElementById('pageNum').textContent = num;
+            
+            pdfDoc.getPage(num).then(page => {
+                const viewport = page.getViewport({ scale: scale });
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
+                
+                const pageDiv = document.createElement('div');
+                pageDiv.className = 'page';
+                pageDiv.style.position = 'relative';
+                
+                // Add watermark container
+                const watermarkDiv = document.createElement('div');
+                watermarkDiv.className = 'watermark-container';
+                
+                // Center watermark (clickable logo)
+                const centerWatermark = document.createElement('div');
+                centerWatermark.className = 'center-watermark';
+                centerWatermark.innerHTML = `
+                    <div style="text-align: center;">
+                        <svg width="80" height="80" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <rect x="10" y="10" width="80" height="80" rx="15" fill="#22c55e" opacity="0.9"/>
+                            <text x="50" y="65" text-anchor="middle" fill="white" font-size="32" font-weight="bold" font-family="Arial">O</text>
+                        </svg>
+                        <p style="font-size: 12px; font-weight: bold; color: #22c55e;">onlibry.in</p>
+                    </div>
+                `;
+                centerWatermark.onclick = () => {
+                    window.open('https://onlibry.in', '_blank');
+                };
+                
+                // Footer watermark (clickable text)
+                const footerWatermark = document.createElement('div');
+                footerWatermark.className = 'footer-watermark';
+                footerWatermark.innerHTML = `📚 Visit onlibry.in for Educational Resources (PDFs, Books, PYQs, Mock Tests, Materials and updates)`;
+                footerWatermark.onclick = () => {
+                    window.open('https://onlibry.in', '_blank');
+                };
+                
+                watermarkDiv.appendChild(centerWatermark);
+                watermarkDiv.appendChild(footerWatermark);
+                
+                const renderTask = page.render({
+                    canvasContext: context,
+                    viewport: viewport
+                });
+                
+                renderTask.promise.then(() => {
+                    pageDiv.appendChild(canvas);
+                    pageDiv.appendChild(watermarkDiv);
+                    container.appendChild(pageDiv);
+                    pageRendering = false;
+                    
+                    if (pageNumPending !== null) {
+                        renderPage(pageNumPending);
+                        pageNumPending = null;
+                    }
+                });
+                
+                canvas.onload = () => {
+                    pageDiv.style.height = viewport.height + 'px';
+                    pageDiv.style.width = viewport.width + 'px';
+                };
+            });
+            
+            document.getElementById('pageNum').textContent = num;
+            updatePageCount();
+        }
+        
+        function updatePageCount() {
+            if (pdfDoc) {
+                document.getElementById('pageCount').textContent = pdfDoc.numPages;
+            }
+        }
+        
+        // Load PDF
+        if (pdfUrl) {
+            document.getElementById('loading').style.display = 'block';
+            pdfjsLib.getDocument(pdfUrl).promise.then(pdf => {
+                pdfDoc = pdf;
+                document.getElementById('loading').style.display = 'none';
+                updatePageCount();
+                renderPage(pageNum);
+            }).catch(err => {
+                console.error('Error loading PDF:', err);
+                document.getElementById('loading').innerHTML = 'Failed to load PDF. Please try again.';
+            });
+        } else {
+            document.getElementById('loading').innerHTML = 'No PDF URL provided';
+        }
+    </script>
+</body>
+</html>

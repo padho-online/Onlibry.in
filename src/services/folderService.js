@@ -1,40 +1,119 @@
-import { db } from '../config/firebase';
-import { collection, query, getDocs, orderBy } from 'firebase/firestore';
+// src/services/folderService.js
+// UPDATED: Now fetches folders from Google Sheet (No Firestore)
 
-// Get all folders from Firestore
-export async function getAllFolders() {
-  try {
-    const foldersQuery = query(collection(db, 'folders'), orderBy('level1'));
-    const querySnapshot = await getDocs(foldersQuery);
-    
-    const folders = [];
-    querySnapshot.forEach(doc => {
-      const data = doc.data();
-      const folder = {
-        id: doc.id,
-        levels: [],
-        link: data.link || ''
-      };
+// Google Sheet API URL - Same as cloudflareFileService
+const SHEET_API_URL = 'https://script.google.com/macros/s/AKfycbz9O81mdzlpxPgcuMrZHnNgPLEE7Th-04Cfe5GKe0UA1ZoVqgdGXRYhn4lFn9hKPfCm/exec';
+
+// ============================================
+// CACHE SYSTEM (5 minutes cache)
+// ============================================
+let cachedFolders = null;
+let lastFetchTime = null;
+let pendingRequest = null;
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+function isCacheValid() {
+  if (!cachedFolders || !lastFetchTime) return false;
+  return (Date.now() - lastFetchTime) < CACHE_DURATION;
+}
+
+export function invalidateFoldersCache() {
+  console.log('🔄 Folders cache invalidated');
+  cachedFolders = null;
+  lastFetchTime = null;
+  pendingRequest = null;
+}
+
+// ============================================
+// Get all folders from Google Sheet
+// ============================================
+export async function getAllFolders(forceRefresh = false) {
+  if (forceRefresh) {
+    invalidateFoldersCache();
+  }
+  
+  // Return cached data if valid
+  if (isCacheValid() && cachedFolders) {
+    console.log('📦 Using cached folders (last fetch:', new Date(lastFetchTime).toLocaleTimeString(), ')');
+    return cachedFolders;
+  }
+  
+  // Prevent multiple simultaneous requests
+  if (pendingRequest) {
+    console.log('⏳ Waiting for pending folders request...');
+    return pendingRequest;
+  }
+  
+  pendingRequest = (async () => {
+    try {
+      console.log('📡 Fetching folders from Google Sheet...');
+      const response = await fetch(`${SHEET_API_URL}?action=getFolders`);
+      const data = await response.json();
       
-      // Collect levels 1-10
-      for (let i = 1; i <= 10; i++) {
-        const level = data[`level${i}`];
-        if (level && level.trim()) {
-          folder.levels.push(level.trim());
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to load folders');
+      }
+      
+      const foldersData = data.folders || [];
+      const folders = [];
+      
+      for (let i = 0; i < foldersData.length; i++) {
+        const row = foldersData[i];
+        const folder = {
+          id: `folder_${i}`,
+          levels: [],
+          link: row.link || ''
+        };
+        
+        // Collect levels 1-10 (only non-empty values)
+        const levelValues = [
+          row.level1, row.level2, row.level3, row.level4, row.level5,
+          row.level6, row.level7, row.level8, row.level9, row.level10
+        ];
+        
+        for (let j = 0; j < levelValues.length; j++) {
+          const level = levelValues[j];
+          if (level && level.trim()) {
+            folder.levels.push(level.trim());
+          } else {
+            // Stop at first empty level (don't add further empty levels)
+            break;
+          }
+        }
+        
+        // Only add if at least one level exists
+        if (folder.levels.length > 0) {
+          folders.push(folder);
         }
       }
       
-      folders.push(folder);
-    });
-    
-    return folders;
-  } catch (error) {
-    console.error("Error loading folders:", error);
-    return [];
-  }
+      console.log(`✅ Loaded ${folders.length} folders from sheet`);
+      
+      // Store in cache
+      cachedFolders = folders;
+      lastFetchTime = Date.now();
+      
+      return folders;
+      
+    } catch (error) {
+      console.error("Error loading folders from sheet:", error);
+      // Return cached data if available, even if expired
+      if (cachedFolders) {
+        console.log('⚠️ Using stale cache due to error');
+        return cachedFolders;
+      }
+      return [];
+    } finally {
+      pendingRequest = null;
+    }
+  })();
+  
+  return pendingRequest;
 }
 
+// ============================================
 // Build folder tree structure
+// ============================================
 export function buildFolderTree(folders) {
   const tree = {};
   let folderCount = 0;
@@ -49,8 +128,11 @@ export function buildFolderTree(folders) {
           link: idx === folder.levels.length - 1 ? folder.link : '',
           isLeaf: idx === folder.levels.length - 1
         };
-        if (idx === folder.levels.length - 1) fileCount++;
-        else folderCount++;
+        if (idx === folder.levels.length - 1) {
+          fileCount++;
+        } else {
+          folderCount++;
+        }
       }
       current = current[level].children;
     });
@@ -59,7 +141,9 @@ export function buildFolderTree(folders) {
   return { tree, folderCount, fileCount };
 }
 
+// ============================================
 // Search folders by query
+// ============================================
 export function searchFolders(folders, queryStr) {
   const lowerQuery = queryStr.toLowerCase();
   const isExact = lowerQuery.startsWith('exact:');
@@ -92,8 +176,18 @@ export function searchFolders(folders, queryStr) {
   return matched;
 }
 
+// ============================================
 // Generate auto link for file search
+// ============================================
 export function generateFolderLink(path) {
   const searchTerm = encodeURIComponent(`subpage:${path.join(' ').toLowerCase()}`);
   return `/files?search=${searchTerm}`;
+}
+
+// ============================================
+// Force refresh folders cache
+// ============================================
+export async function refreshFolders() {
+  console.log('🔄 Force refreshing folders...');
+  return await getAllFolders(true);
 }

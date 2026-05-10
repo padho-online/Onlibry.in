@@ -1,16 +1,20 @@
+// src/App.jsx
+// UPDATED - Added CartProvider + FileUploadManager route
+
 import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider } from './contexts/AuthContext';
+import { CartProvider } from './contexts/CartContext'; // 🔥 ADD THIS
+
 import { initPageViewLogger } from './services/loggerService';
 
 import MainLayout from './layouts/MainLayout';
 import ProtectedRoute from './components/ProtectedRoute';
 import AdminGuard from './components/AdminGuard';
 
-// =====================
-// PUBLIC PAGES
-// =====================
+// Public Pages
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import PricingPage from './pages/PricingPage';
@@ -25,17 +29,16 @@ import QuizExamPage from './pages/QuizExamPage';
 import QuizResultsPage from './pages/QuizResultsPage';
 import ViewerPage from './pages/ViewerPage';
 import NotFoundPage from './pages/NotFoundPage';
-import PurchasePage from './pages/PurchasePage';  // ✅ ADD THIS
+import PurchasePage from './pages/PurchasePage';
 
-// =====================
-// ADMIN PAGES
-// =====================
+// Admin Pages
 import AdminDashboard from './pages/admin/AdminDashboard';
 import PaymentLogs from './pages/admin/PaymentLogs';
 import UsersManagement from './pages/admin/UsersManagement';
 import SubscriptionsManagement from './pages/admin/SubscriptionsManagement';
 import PlansEditor from './pages/admin/PlansEditor';
 import FilesManager from './pages/admin/FilesManager';
+import FileUploadManager from './pages/admin/FileUploadManager';
 
 function App() {
   useEffect(() => {
@@ -45,74 +48,66 @@ function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <Router>
-          <MainLayout>
-            <Routes>
-              {/* ===================== */}
-              {/* PUBLIC ROUTES */}
-              {/* ===================== */}
-              <Route path="/" element={<HomePage />} />
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="/pricing" element={<PricingPage />} />
-              <Route path="/files" element={<FilesPage />} />
-              <Route path="/folders" element={<FoldersPage />} />
-              <Route path="/mock-tests" element={<MockTestsPage />} />
-              <Route path="/mock-test/:examName" element={<ExamPage />} />
-              <Route path="/mock-test-results" element={<ExamResultsPage />}/>
-              <Route path="/quizzes" element={<QuizzesPage />} />
-              <Route path="/quiz/:quizName" element={<QuizExamPage />} />
-              <Route path="/quiz-results" element={<QuizResultsPage />} />
+        <CartProvider> {/* 🔥 ADDED */}
+          <Router>
+            <MainLayout>
+              <Routes>
 
-              {/* ===================== */}
-              {/* PROTECTED ROUTES */}
-              {/* ===================== */}
-              <Route
-                path="/saved-files"
-                element={
-                  <ProtectedRoute>
-                    <SavedFilesPage />
-                  </ProtectedRoute>
-                }
-              />
-              
-              {/* ✅ SINGLE FILE PURCHASE ROUTE */}
-              <Route path="/purchase/:fileId" element={<PurchasePage />} />
+                {/* Public Routes */}
+                <Route path="/" element={<HomePage />} />
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="/pricing" element={<PricingPage />} />
+                <Route path="/files" element={<FilesPage />} />
+                <Route path="/folders" element={<FoldersPage />} />
+                <Route path="/mock-tests" element={<MockTestsPage />} />
+                <Route path="/mock-test/:examName" element={<ExamPage />} />
+                <Route path="/mock-test-results" element={<ExamResultsPage />} />
+                <Route path="/quizzes" element={<QuizzesPage />} />
+                <Route path="/quiz/:quizName" element={<QuizExamPage />} />
+                <Route path="/quiz-results" element={<QuizResultsPage />} />
 
-              {/* ===================== */}
-              {/* VIEWER ROUTES */}
-              {/* ===================== */}
-              <Route path="/viewer/:fileId" element={<ViewerPage />} />
-              <Route path="/viewer" element={<ViewerPage />} />
-
-              {/* ===================== */}
-              {/* ADMIN ROUTES */}
-              {/* ===================== */}
-              <Route
-                path="/admin"
-                element={
-                  <AdminGuard>
-                    <AdminDashboard />
-                  </AdminGuard>
-                }
-              >
-                <Route index element={<PaymentLogs />} />
-                <Route path="logs" element={<PaymentLogs />} />
-                <Route path="users" element={<UsersManagement />} />
+                {/* Protected Routes */}
                 <Route
-                  path="subscriptions"
-                  element={<SubscriptionsManagement />}
+                  path="/saved-files"
+                  element={
+                    <ProtectedRoute>
+                      <SavedFilesPage />
+                    </ProtectedRoute>
+                  }
                 />
-                <Route path="plans" element={<PlansEditor />} />
-                <Route path="files" element={<FilesManager />} />
-              </Route>
 
-              {/* ===================== */}
-              {/* 404 */}
-              {/* ===================== */}
-              <Route path="*" element={<NotFoundPage />} />
-            </Routes>
-          </MainLayout>
-        </Router>
+                {/* Purchase */}
+                <Route path="/purchase/:fileId" element={<PurchasePage />} />
+
+                {/* Viewer */}
+                <Route path="/viewer/:fileId" element={<ViewerPage />} />
+                <Route path="/viewer" element={<ViewerPage />} />
+
+                {/* Admin Routes */}
+                <Route
+                  path="/admin"
+                  element={
+                    <AdminGuard>
+                      <AdminDashboard />
+                    </AdminGuard>
+                  }
+                >
+                  <Route index element={<FileUploadManager />} />
+                  <Route path="upload" element={<FileUploadManager />} />
+                  <Route path="files" element={<FilesManager />} />
+                  <Route path="logs" element={<PaymentLogs />} />
+                  <Route path="users" element={<UsersManagement />} />
+                  <Route path="subscriptions" element={<SubscriptionsManagement />} />
+                  <Route path="plans" element={<PlansEditor />} />
+                </Route>
+
+                {/* 404 */}
+                <Route path="*" element={<NotFoundPage />} />
+
+              </Routes>
+            </MainLayout>
+          </Router>
+        </CartProvider>
       </AuthProvider>
     </ThemeProvider>
   );

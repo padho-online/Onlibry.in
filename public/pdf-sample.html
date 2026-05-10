@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sample PDF - Onlibry</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background-color: #525659;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        
+        .sample-banner {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: #f59e0b;
+            color: white;
+            text-align: center;
+            padding: 8px;
+            font-size: 14px;
+            font-weight: bold;
+            z-index: 100;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        
+        .container {
+            margin-top: 45px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        .page {
+            position: relative;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            background: white;
+        }
+        
+        /* Watermark Container */
+        .watermark-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            pointer-events: none;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        /* SAMPLE Overlay - Red and prominent */
+        .sample-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: repeating-linear-gradient(
+                45deg,
+                rgba(245, 158, 11, 0.15),
+                rgba(245, 158, 11, 0.15) 20px,
+                rgba(234, 88, 12, 0.15) 20px,
+                rgba(234, 88, 12, 0.15) 40px
+            );
+            pointer-events: none;
+            z-index: 5;
+        }
+        
+        .sample-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) rotate(-25deg);
+            font-size: 48px;
+            font-weight: bold;
+            color: rgba(245, 158, 11, 0.3);
+            white-space: nowrap;
+            pointer-events: none;
+            z-index: 6;
+            font-family: Arial, sans-serif;
+            text-transform: uppercase;
+            letter-spacing: 5px;
+        }
+        
+        /* Center Logo Watermark */
+        .center-watermark {
+            text-align: center;
+            opacity: 0.15;
+            pointer-events: auto;
+            cursor: pointer;
+            transition: opacity 0.3s;
+            z-index: 20;
+        }
+        
+        .center-watermark:hover {
+            opacity: 0.25;
+        }
+        
+        .center-watermark img {
+            width: 100px;
+            height: auto;
+        }
+        
+        .center-watermark p {
+            font-size: 12px;
+            font-weight: bold;
+            color: #22c55e;
+            margin-top: 5px;
+        }
+        
+        /* Footer Watermark */
+        .footer-watermark {
+            position: absolute;
+            bottom: 20px;
+            left: 0;
+            right: 0;
+            text-align: center;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 6px 12px;
+            font-size: 10px;
+            color: #333;
+            pointer-events: auto;
+            cursor: pointer;
+            border-top: 1px solid #ddd;
+            z-index: 20;
+        }
+        
+        .footer-watermark:hover {
+            background: white;
+            text-decoration: underline;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 50px;
+            color: white;
+        }
+        
+        canvas {
+            display: block;
+            margin: 0 auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="sample-banner">
+        ⚡ SAMPLE PREVIEW - Only first 3 pages shown. Purchase full version for complete access ⚡
+    </div>
+    <div class="container" id="container"></div>
+    <div class="loading" id="loading">Loading sample preview...</div>
+
+    <script>
+        // Get URL parameter
+        const urlParams = new URLSearchParams(window.location.search);
+        const pdfUrl = decodeURIComponent(urlParams.get('url') || '');
+        const fileName = decodeURIComponent(urlParams.get('fileName') || 'document.pdf');
+        const maxPages = parseInt(urlParams.get('maxPages') || '3');
+        
+        let pdfDoc = null;
+        let pageNum = 1;
+        let pageRendering = false;
+        let pageNumPending = null;
+        let scale = 1.2;
+        let container = document.getElementById('container');
+        
+        // Set up PDF.js worker
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+        
+        function queueRenderPage(num) {
+            if (num > maxPages) return;
+            if (pageRendering) {
+                pageNumPending = num;
+            } else {
+                renderPage(num);
+            }
+        }
+        
+        function renderPage(num) {
+            if (num > maxPages) {
+                // All done
+                return;
+            }
+            
+            pageRendering = true;
+            
+            pdfDoc.getPage(num).then(page => {
+                const viewport = page.getViewport({ scale: scale });
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
+                
+                const pageDiv = document.createElement('div');
+                pageDiv.className = 'page';
+                pageDiv.style.position = 'relative';
+                
+                // Add sample overlay (diagonal lines)
+                const sampleOverlay = document.createElement('div');
+                sampleOverlay.className = 'sample-overlay';
+                
+                const sampleText = document.createElement('div');
+                sampleText.className = 'sample-text';
+                sampleText.textContent = 'SAMPLE';
+                
+                // Add watermark container
+                const watermarkDiv = document.createElement('div');
+                watermarkDiv.className = 'watermark-container';
+                
+                // Center watermark (clickable logo)
+                const centerWatermark = document.createElement('div');
+                centerWatermark.className = 'center-watermark';
+                centerWatermark.innerHTML = `
+                    <div style="text-align: center;">
+                        <svg width="70" height="70" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <rect x="10" y="10" width="80" height="80" rx="15" fill="#22c55e" opacity="0.9"/>
+                            <text x="50" y="65" text-anchor="middle" fill="white" font-size="32" font-weight="bold" font-family="Arial">O</text>
+                        </svg>
+                        <p>onlibry.in</p>
+                    </div>
+                `;
+                centerWatermark.onclick = () => {
+                    window.open('https://onlibry.in', '_blank');
+                };
+                
+                // Footer watermark (clickable text)
+                const footerWatermark = document.createElement('div');
+                footerWatermark.className = 'footer-watermark';
+                footerWatermark.innerHTML = `📚 Visit onlibry.in for Educational Resources (PDFs, Books, PYQs, Mock Tests, Materials and updates)`;
+                footerWatermark.onclick = () => {
+                    window.open('https://onlibry.in', '_blank');
+                };
+                
+                watermarkDiv.appendChild(centerWatermark);
+                watermarkDiv.appendChild(footerWatermark);
+                
+                const renderTask = page.render({
+                    canvasContext: context,
+                    viewport: viewport
+                });
+                
+                renderTask.promise.then(() => {
+                    pageDiv.appendChild(canvas);
+                    pageDiv.appendChild(sampleOverlay);
+                    pageDiv.appendChild(sampleText);
+                    pageDiv.appendChild(watermarkDiv);
+                    container.appendChild(pageDiv);
+                    pageRendering = false;
+                    
+                    if (pageNumPending !== null) {
+                        renderPage(pageNumPending);
+                        pageNumPending = null;
+                    } else if (num < maxPages) {
+                        // Render next page
+                        renderPage(num + 1);
+                    }
+                });
+                
+                canvas.onload = () => {
+                    pageDiv.style.height = viewport.height + 'px';
+                    pageDiv.style.width = viewport.width + 'px';
+                };
+            }).catch(err => {
+                console.error('Error rendering page:', err);
+                pageRendering = false;
+            });
+        }
+        
+        // Load PDF
+        if (pdfUrl) {
+            document.getElementById('loading').style.display = 'block';
+            pdfjsLib.getDocument(pdfUrl).promise.then(pdf => {
+                pdfDoc = pdf;
+                document.getElementById('loading').style.display = 'none';
+                const pagesToShow = Math.min(pdf.numPages, maxPages);
+                renderPage(1);
+            }).catch(err => {
+                console.error('Error loading PDF:', err);
+                document.getElementById('loading').innerHTML = 'Failed to load sample preview. Please try again.';
+            });
+        } else {
+            document.getElementById('loading').innerHTML = 'No PDF URL provided';
+        }
+    </script>
+</body>
+</html>

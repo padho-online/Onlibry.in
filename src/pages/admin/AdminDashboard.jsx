@@ -1,3 +1,6 @@
+// src/pages/admin/AdminDashboard.jsx
+// UPDATED - Added File Upload Manager tab
+
 import React, { useState, useEffect } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
@@ -5,20 +8,23 @@ import { useAuth } from '../../contexts/AuthContext';
 function AdminDashboard() {
   const { user } = useAuth();
   const location = useLocation();
-  const [activeTab, setActiveTab] = useState('logs');
+  const [activeTab, setActiveTab] = useState('upload');
 
   const tabs = [
-    { id: 'logs', name: 'Payment Logs', path: '/admin/logs' },
-    { id: 'users', name: 'Users', path: '/admin/users' },
-    { id: 'subscriptions', name: 'Subscriptions', path: '/admin/subscriptions' },
-    { id: 'plans', name: 'Plans', path: '/admin/plans' },
-    { id: 'files', name: 'Files Manager', path: '/admin/files' }
+    { id: 'upload', name: '📤 Upload Files', path: '/admin/upload' },
+    { id: 'files', name: '📁 Files Manager', path: '/admin/files' },
+    { id: 'logs', name: '💰 Payment Logs', path: '/admin/logs' },
+    { id: 'users', name: '👥 Users', path: '/admin/users' },
+    { id: 'subscriptions', name: '📅 Subscriptions', path: '/admin/subscriptions' },
+    { id: 'plans', name: '🏷️ Plans', path: '/admin/plans' }
   ];
 
   useEffect(() => {
     const currentTab = tabs.find(tab => location.pathname === tab.path);
     if (currentTab) {
       setActiveTab(currentTab.id);
+    } else if (location.pathname === '/admin') {
+      setActiveTab('upload');
     }
   }, [location.pathname]);
 

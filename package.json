@@ -1,5 +1,6 @@
 {
   "name": "onlibry-react",
+  "type": "module",
   "private": true,
   "version": "0.0.0",
   "scripts": {
@@ -14,9 +15,12 @@
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "firebase": "^12.12.1",
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^5.6.205",
     "razorpay": "^2.9.6",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
+    "react-pdf": "^10.4.1",
     "react-router-dom": "^7.14.2",
     "tailwindcss": "^4.2.4"
   },

@@ -1,30 +1,98 @@
+// src/pages/QuizExamPage.jsx
+// UPDATED - With premium access check before loading quiz
+
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { getQuizData, logQuizResult } from '../services/quizService';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { getQuizData, logQuizResult, getAllPapers } from '../services/quizService';
+import { logQuizResult as logQuizResultToLogger } from '../services/loggerService';
+import { useAuth } from '../contexts/AuthContext';
 
 function QuizExamPage() {
   const { quizName } = useParams();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { user, isSubscribed } = useAuth();
+  
   const [quizData, setQuizData] = useState({ questions: [], config: {} });
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState({});
   const [markedQuestions, setMarkedQuestions] = useState({});
   const [timeLeft, setTimeLeft] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [showSubmitModal, setShowSubmitModal] = useState(false);
-  const [examStartTime, setExamStartTime] = useState(null);
+  const [quizStartTime, setQuizStartTime] = useState(null);
+  const [paperInfo, setPaperInfo] = useState(null);
+  const [accessDenied, setAccessDenied] = useState(false);
+
+  const getDecodedQuizName = () => {
+    let decoded = quizName ? decodeURIComponent(quizName) : null;
+    if (!decoded) {
+      const sheetParam = searchParams.get('sheet');
+      if (sheetParam) {
+        decoded = decodeURIComponent(sheetParam);
+      }
+    }
+    return decoded;
+  };
+
+  // Check if user can access this quiz
+  const checkAccess = async (decodedName) => {
+    const papers = await getAllPapers();
+    const paper = papers.find(p => p.originalName === decodedName);
+    setPaperInfo(paper);
+    
+    if (!paper) {
+      setError('Quiz not found');
+      return false;
+    }
+    
+    if (paper.isFree) {
+      return true;
+    }
+    
+    // Premium quiz - check subscription
+    if (!user) {
+      setAccessDenied(true);
+      return false;
+    }
+    
+    if (!isSubscribed) {
+      setAccessDenied(true);
+      return false;
+    }
+    
+    return true;
+  };
 
   useEffect(() => {
-    loadQuiz();
+    const init = async () => {
+      const decodedName = getDecodedQuizName();
+      if (!decodedName) {
+        setError('No quiz specified');
+        setLoading(false);
+        return;
+      }
+      
+      const hasAccess = await checkAccess(decodedName);
+      if (hasAccess) {
+        await loadQuiz();
+      } else {
+        setLoading(false);
+      }
+    };
+    
+    init();
+    
     return () => {
-      if (examStartTime) {
+      if (quizStartTime) {
         saveProgressToLocal();
       }
     };
   }, []);
 
   useEffect(() => {
-    if (timeLeft > 0) {
+    if (timeLeft > 0 && timeLeft !== null) {
       const timer = setInterval(() => {
         setTimeLeft(prev => {
           if (prev <= 1) {
@@ -41,37 +109,69 @@ function QuizExamPage() {
 
   const loadQuiz = async () => {
     setLoading(true);
-    const decodedName = decodeURIComponent(quizName);
-    const data = await getQuizData(decodedName);
-    setQuizData(data);
-    setTimeLeft(data.config.Duration * 60);
-    setExamStartTime(Date.now());
+    setError(null);
     
-    // Load saved progress if any
-    const saved = localStorage.getItem(`quiz_progress_${decodedName}`);
-    if (saved) {
-      const progress = JSON.parse(saved);
-      setAnswers(progress.answers || {});
-      setMarkedQuestions(progress.markedQuestions || {});
-      setCurrentQuestion(progress.currentQuestion || 0);
-      const elapsed = Math.floor((Date.now() - progress.startTime) / 1000);
-      setTimeLeft(Math.max(0, (data.config.Duration * 60) - elapsed));
+    const decodedName = getDecodedQuizName();
+    
+    if (!decodedName) {
+      setError('No quiz specified');
+      setLoading(false);
+      return;
     }
     
-    setLoading(false);
+    console.log('📚 Loading quiz:', decodedName);
+    
+    try {
+      const data = await getQuizData(decodedName);
+      console.log('📚 Quiz data received:', data);
+      
+      if (!data.questions || data.questions.length === 0) {
+        setError('No questions found for this quiz.');
+        setLoading(false);
+        return;
+      }
+      
+      setQuizData(data);
+      const duration = data.config?.Duration || 30;
+      setTimeLeft(duration * 60);
+      setQuizStartTime(Date.now());
+      
+      const saved = localStorage.getItem(`quiz_progress_${decodedName}`);
+      if (saved) {
+        try {
+          const progress = JSON.parse(saved);
+          setAnswers(progress.answers || {});
+          setMarkedQuestions(progress.markedQuestions || {});
+          setCurrentQuestion(progress.currentQuestion || 0);
+          const elapsed = Math.floor((Date.now() - progress.startTime) / 1000);
+          setTimeLeft(Math.max(0, (duration * 60) - elapsed));
+        } catch (e) {
+          console.error('Error parsing saved progress:', e);
+        }
+      }
+      
+    } catch (err) {
+      console.error('Error loading quiz:', err);
+      setError(err.message || 'Failed to load quiz');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const saveProgressToLocal = () => {
-    const decodedName = decodeURIComponent(quizName);
-    localStorage.setItem(`quiz_progress_${decodedName}`, JSON.stringify({
-      answers,
-      markedQuestions,
-      currentQuestion,
-      startTime: examStartTime
-    }));
+    const decodedName = getDecodedQuizName();
+    if (decodedName && quizStartTime) {
+      localStorage.setItem(`quiz_progress_${decodedName}`, JSON.stringify({
+        answers,
+        markedQuestions,
+        currentQuestion,
+        startTime: quizStartTime
+      }));
+    }
   };
 
   const formatTime = (seconds) => {
+    if (!seconds && seconds !== 0) return '00:00';
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
@@ -129,34 +229,46 @@ function QuizExamPage() {
       }
     });
     
-    const timeTaken = Math.floor((Date.now() - examStartTime) / 1000);
-    
+    const timeTaken = Math.floor((Date.now() - quizStartTime) / 1000);
     return { correct, incorrect, unanswered, totalQuestions: quizData.questions.length, timeTaken };
   };
 
   const submitQuiz = async () => {
     const results = calculateResults();
-    const decodedName = decodeURIComponent(quizName);
+    const decodedName = getDecodedQuizName();
+    if (!decodedName) return;
+    
+    console.log('📊 Submitting quiz:', decodedName);
+    console.log('📊 Results:', results);
     
     const resultPayload = {
+      quizName: decodedName,
+      totalQuestions: results.totalQuestions,
+      correct: results.correct,
+      incorrect: results.incorrect,
+      unanswered: results.unanswered,
+      score: results.correct,
+      timeTaken: Math.floor(results.timeTaken / 60),
+      percentage: ((results.correct / results.totalQuestions) * 100).toFixed(2)
+    };
+    
+    await logQuizResultToLogger(resultPayload);
+    await logQuizResult(resultPayload);
+    
+    const quizResultPayload = {
       score: results.correct,
       answeredCount: results.correct + results.incorrect,
       unansweredCount: results.unanswered,
       totalQuestions: results.totalQuestions,
       timeTaken: results.timeTaken,
       answers: answers,
-      year: decodedName,
       config: quizData.config
     };
     
-    // Save to localStorage for results page
-    localStorage.setItem(`quiz_result_${decodedName}`, JSON.stringify(resultPayload));
+    localStorage.setItem(`quiz_result_${decodedName}`, JSON.stringify(quizResultPayload));
     localStorage.setItem('activeQuizResultKey', `quiz_result_${decodedName}`);
-    
-    // Clear progress
     localStorage.removeItem(`quiz_progress_${decodedName}`);
     
-    // Redirect to results page
     navigate(`/quiz-results?quiz=${encodeURIComponent(decodedName)}`);
   };
 
@@ -167,24 +279,68 @@ function QuizExamPage() {
 
   const answeredCount = Object.keys(answers).length;
   const totalQuestions = quizData.questions.length;
-  const progressPercent = (answeredCount / totalQuestions) * 100;
+  const progressPercent = totalQuestions > 0 ? (answeredCount / totalQuestions) * 100 : 0;
   const currentQ = quizData.questions[currentQuestion];
+  const displayName = getDecodedQuizName() || 'Quiz';
+
+  // 🔥 Access Denied State - Premium content
+  if (accessDenied && paperInfo && !paperInfo.isFree) {
+    return (
+      <div className="text-center py-20 max-w-md mx-auto">
+        <div className="text-yellow-500 text-6xl mb-4">🔒</div>
+        <h2 className="text-xl font-semibold text-gray-800 dark:text-white mb-2">Premium Content</h2>
+        <p className="text-gray-600 dark:text-gray-400 mb-4">
+          This quiz is only available for premium subscribers.
+        </p>
+        <p className="text-sm text-gray-500 mb-6">
+          {paperInfo.displayName}
+        </p>
+        <div className="flex gap-3 justify-center">
+          <button
+            onClick={() => navigate('/pricing', { state: { from: `/quiz/${encodeURIComponent(paperInfo.originalName)}` } })}
+            className="px-6 py-3 bg-gradient-to-r from-yellow-500 to-yellow-600 text-white rounded-lg font-semibold hover:from-yellow-600 hover:to-yellow-700"
+          >
+            Subscribe {paperInfo.displayPrice}
+          </button>
+          <button
+            onClick={() => navigate('/quizzes')}
+            className="px-6 py-3 bg-gray-500 text-white rounded-lg hover:bg-gray-600"
+          >
+            Back to Quizzes
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center min-h-[60vh]">
+      <div className="flex flex-col items-center justify-center min-h-[60vh]">
         <div className="w-12 h-12 border-4 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
+        <p className="mt-4 text-gray-600 dark:text-gray-400">Loading quiz...</p>
+      </div>
+    );
+  }
+
+  if (error || !quizData.questions || quizData.questions.length === 0) {
+    return (
+      <div className="text-center py-20">
+        <div className="text-red-500 text-6xl mb-4">⚠️</div>
+        <h2 className="text-xl font-semibold text-gray-800 dark:text-white mb-2">Quiz Not Found</h2>
+        <p className="text-gray-600 dark:text-gray-400 mb-6">{error || 'No questions available for this quiz.'}</p>
+        <button onClick={() => navigate('/quizzes')} className="px-6 py-2 bg-purple-600 text-white rounded-lg">
+          Back to Quizzes
+        </button>
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-900 py-4">
-      {/* Header */}
       <div className="sticky top-0 z-10 bg-white dark:bg-gray-800 shadow-md p-4 mb-4">
         <div className="flex justify-between items-center max-w-7xl mx-auto">
-          <h2 className="text-lg font-semibold text-gray-800 dark:text-white truncate">
-            Quiz: {decodeURIComponent(quizName)}
+          <h2 className="text-lg font-semibold text-gray-800 dark:text-white truncate max-w-md">
+            {displayName}
           </h2>
           <div className="text-xl font-bold text-white bg-purple-600 px-4 py-1 rounded-full">
             {formatTime(timeLeft)}
@@ -194,7 +350,6 @@ function QuizExamPage() {
 
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex flex-col lg:flex-row gap-6">
-          {/* Question Section */}
           <div className="flex-1">
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6">
               <div className="mb-4 pb-2 border-b border-gray-200 dark:border-gray-700">
@@ -257,12 +412,9 @@ function QuizExamPage() {
             </div>
           </div>
           
-          {/* Navigation Sidebar */}
           <div className="lg:w-80">
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-4 sticky top-24">
-              <h3 className="font-semibold text-gray-800 dark:text-white mb-3">
-                Question Navigation
-              </h3>
+              <h3 className="font-semibold text-gray-800 dark:text-white mb-3">Question Navigation</h3>
               
               <div className="mb-3 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                 <div className="h-full bg-purple-500 transition-all" style={{ width: `${progressPercent}%` }}></div>
@@ -304,28 +456,19 @@ function QuizExamPage() {
         </div>
       </div>
 
-      {/* Submit Modal */}
       {showSubmitModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-md w-full">
-            <h3 className="text-xl font-bold text-gray-800 dark:text-white mb-4">
-              Submit Quiz?
-            </h3>
+            <h3 className="text-xl font-bold text-gray-800 dark:text-white mb-4">Submit Quiz?</h3>
             <p className="text-gray-600 dark:text-gray-400 mb-4">
               You have answered {answeredCount} out of {totalQuestions} questions.
               {totalQuestions - answeredCount > 0 && ` ${totalQuestions - answeredCount} questions remain unanswered.`}
             </p>
             <div className="flex gap-3">
-              <button
-                onClick={() => setShowSubmitModal(false)}
-                className="flex-1 px-4 py-2 bg-gray-500 text-white rounded-lg"
-              >
+              <button onClick={() => setShowSubmitModal(false)} className="flex-1 px-4 py-2 bg-gray-500 text-white rounded-lg">
                 Continue
               </button>
-              <button
-                onClick={submitQuiz}
-                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
-              >
+              <button onClick={submitQuiz} className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">
                 Submit
               </button>
             </div>

@@ -1,11 +1,10 @@
 // src/services/downloadService.js
+// PHASE 7 - Fixed filename format: Onlibry.in_"actual_name"
+
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { app } from '../config/firebase';
 
-// Get functions instance with region
 const functions = getFunctions(app);
-// For local emulator:
-// const functions = getFunctions(app, 'asia-south1');
 
 // Call cloud function to get secure download URL
 export async function requestSecureDownload(fileId) {
@@ -19,13 +18,19 @@ export async function requestSecureDownload(fileId) {
   }
 }
 
-// Trigger actual download
+// Trigger actual download with proper filename format
 export function triggerDownload(downloadUrl, fileName) {
   try {
+    // Format filename: Onlibry.in_"actual_name"
+    let formattedFileName = fileName;
+    if (fileName && !fileName.startsWith('Onlibry.in')) {
+      formattedFileName = `Onlibry.in_"${fileName}"`;
+    }
+    
     // Create hidden anchor and trigger download
     const link = document.createElement('a');
     link.href = downloadUrl;
-    link.download = fileName || 'download';
+    link.download = formattedFileName;
     link.target = '_blank';
     document.body.appendChild(link);
     link.click();
@@ -34,5 +39,24 @@ export function triggerDownload(downloadUrl, fileName) {
     console.error('Trigger download error:', error);
     // Fallback: open in new window
     window.open(downloadUrl, '_blank');
+  }
+}
+
+// Direct download with filename formatting
+export async function downloadFile(downloadUrl, fileName) {
+  try {
+    const response = await fetch(downloadUrl);
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Onlibry.in_"${fileName}"`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error('Download error:', error);
+    throw error;
   }
 }

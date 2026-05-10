@@ -1,24 +1,91 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { getExamData, logExamResult } from '../services/mockTestService';
-import { logMockTestResult } from '../services/loggerService'; // STEP 7: Import logger service
+// src/pages/ExamPage.jsx
+// UPDATED - With premium access check before loading exam
+
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { getExamData, logExamResult, getAllPapers } from '../services/mockTestService';
+import { logMockTestResult } from '../services/loggerService';
+import { useAuth } from '../contexts/AuthContext';
 
 function ExamPage() {
   const { examName } = useParams();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { user, isSubscribed } = useAuth();
+  
   const [examData, setExamData] = useState({ questions: [], config: {} });
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState({});
   const [markedQuestions, setMarkedQuestions] = useState({});
   const [timeLeft, setTimeLeft] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [examStartTime, setExamStartTime] = useState(null);
+  const [paperInfo, setPaperInfo] = useState(null);
+  const [accessDenied, setAccessDenied] = useState(false);
+
+  // Get exam name from URL (supports both param and query)
+  const getDecodedExamName = () => {
+    let decoded = examName ? decodeURIComponent(examName) : null;
+    if (!decoded) {
+      const sheetParam = searchParams.get('sheet');
+      if (sheetParam) {
+        decoded = decodeURIComponent(sheetParam);
+      }
+    }
+    return decoded;
+  };
+
+  // Check if user can access this exam
+  const checkAccess = async (decodedName) => {
+    const papers = await getAllPapers();
+    const paper = papers.find(p => p.originalName === decodedName);
+    setPaperInfo(paper);
+    
+    if (!paper) {
+      setError('Exam not found');
+      return false;
+    }
+    
+    if (paper.isFree) {
+      return true;
+    }
+    
+    // Premium exam - check subscription
+    if (!user) {
+      setAccessDenied(true);
+      return false;
+    }
+    
+    if (!isSubscribed) {
+      setAccessDenied(true);
+      return false;
+    }
+    
+    return true;
+  };
 
   useEffect(() => {
-    loadExam();
+    const init = async () => {
+      const decodedName = getDecodedExamName();
+      if (!decodedName) {
+        setError('No exam specified');
+        setLoading(false);
+        return;
+      }
+      
+      const hasAccess = await checkAccess(decodedName);
+      if (hasAccess) {
+        await loadExam();
+      } else {
+        setLoading(false);
+      }
+    };
+    
+    init();
+    
     return () => {
-      // Cleanup
       if (examStartTime) {
         saveProgressToLocal();
       }
@@ -26,7 +93,7 @@ function ExamPage() {
   }, []);
 
   useEffect(() => {
-    if (timeLeft > 0) {
+    if (timeLeft > 0 && timeLeft !== null) {
       const timer = setInterval(() => {
         setTimeLeft(prev => {
           if (prev <= 1) {
@@ -43,37 +110,70 @@ function ExamPage() {
 
   const loadExam = async () => {
     setLoading(true);
-    const decodedName = decodeURIComponent(examName);
-    const data = await getExamData(decodedName);
-    setExamData(data);
-    setTimeLeft(data.config.Duration * 60);
-    setExamStartTime(Date.now());
+    setError(null);
     
-    // Load saved progress if any
-    const saved = localStorage.getItem(`exam_progress_${decodedName}`);
-    if (saved) {
-      const progress = JSON.parse(saved);
-      setAnswers(progress.answers || {});
-      setMarkedQuestions(progress.markedQuestions || {});
-      setCurrentQuestion(progress.currentQuestion || 0);
-      const elapsed = Math.floor((Date.now() - progress.startTime) / 1000);
-      setTimeLeft(Math.max(0, (data.config.Duration * 60) - elapsed));
+    const decodedName = getDecodedExamName();
+    
+    if (!decodedName) {
+      setError('No exam specified');
+      setLoading(false);
+      return;
     }
     
-    setLoading(false);
+    console.log('📚 Loading exam:', decodedName);
+    
+    try {
+      const data = await getExamData(decodedName);
+      console.log('📚 Exam data received:', data);
+      
+      if (!data.questions || data.questions.length === 0) {
+        setError('No questions found for this exam.');
+        setLoading(false);
+        return;
+      }
+      
+      setExamData(data);
+      const duration = data.config?.Duration || 90;
+      setTimeLeft(duration * 60);
+      setExamStartTime(Date.now());
+      
+      // Load saved progress
+      const saved = localStorage.getItem(`exam_progress_${decodedName}`);
+      if (saved) {
+        try {
+          const progress = JSON.parse(saved);
+          setAnswers(progress.answers || {});
+          setMarkedQuestions(progress.markedQuestions || {});
+          setCurrentQuestion(progress.currentQuestion || 0);
+          const elapsed = Math.floor((Date.now() - progress.startTime) / 1000);
+          setTimeLeft(Math.max(0, (duration * 60) - elapsed));
+        } catch (e) {
+          console.error('Error parsing saved progress:', e);
+        }
+      }
+      
+    } catch (err) {
+      console.error('Error loading exam:', err);
+      setError(err.message || 'Failed to load exam');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const saveProgressToLocal = () => {
-    const decodedName = decodeURIComponent(examName);
-    localStorage.setItem(`exam_progress_${decodedName}`, JSON.stringify({
-      answers,
-      markedQuestions,
-      currentQuestion,
-      startTime: examStartTime
-    }));
+    const decodedName = getDecodedExamName();
+    if (decodedName && examStartTime) {
+      localStorage.setItem(`exam_progress_${decodedName}`, JSON.stringify({
+        answers,
+        markedQuestions,
+        currentQuestion,
+        startTime: examStartTime
+      }));
+    }
   };
 
   const formatTime = (seconds) => {
+    if (!seconds && seconds !== 0) return '00:00';
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
@@ -138,9 +238,10 @@ function ExamPage() {
 
   const submitExam = async () => {
     const results = calculateResults();
-    const decodedName = decodeURIComponent(examName);
+    const decodedName = getDecodedExamName();
     
-    // STEP 7: Log mock test result using the new logger service
+    if (!decodedName) return;
+    
     const resultPayload = {
       testName: decodedName,
       totalQuestions: results.totalQuestions,
@@ -151,10 +252,8 @@ function ExamPage() {
       timeTaken: results.timeTaken
     };
     
-    // Log to Google Sheets using loggerService (STEP 7)
     await logMockTestResult(resultPayload);
     
-    // Also maintain the original logging for backward compatibility
     const examResultPayload = {
       score: results.correct,
       answeredCount: results.correct + results.incorrect,
@@ -166,17 +265,12 @@ function ExamPage() {
       config: examData.config
     };
     
-    // Save to localStorage for results page
     localStorage.setItem(`exam_result_${decodedName}`, JSON.stringify(examResultPayload));
     localStorage.setItem('activeResultKey', `exam_result_${decodedName}`);
     
-    // Log using the existing service (optional, for backward compatibility)
     await logExamResult(examResultPayload, 'mock');
-    
-    // Clear progress
     localStorage.removeItem(`exam_progress_${decodedName}`);
     
-    // Redirect to results page
     navigate(`/mock-test-results?exam=${encodeURIComponent(decodedName)}`);
   };
 
@@ -187,13 +281,74 @@ function ExamPage() {
 
   const answeredCount = Object.keys(answers).length;
   const totalQuestions = examData.questions.length;
-  const progressPercent = (answeredCount / totalQuestions) * 100;
+  const progressPercent = totalQuestions > 0 ? (answeredCount / totalQuestions) * 100 : 0;
   const currentQ = examData.questions[currentQuestion];
+  const displayName = getDecodedExamName() || 'Exam';
 
+  // 🔥 Access Denied State - Premium content
+  if (accessDenied && paperInfo && !paperInfo.isFree) {
+    return (
+      <div className="text-center py-20 max-w-md mx-auto">
+        <div className="text-yellow-500 text-6xl mb-4">🔒</div>
+        <h2 className="text-xl font-semibold text-gray-800 dark:text-white mb-2">Premium Content</h2>
+        <p className="text-gray-600 dark:text-gray-400 mb-4">
+          This mock test is only available for premium subscribers.
+        </p>
+        <p className="text-sm text-gray-500 mb-6">
+          {paperInfo.displayName}
+        </p>
+        <div className="flex gap-3 justify-center">
+          <button
+            onClick={() => navigate('/pricing', { state: { from: `/mock-test/${encodeURIComponent(paperInfo.originalName)}` } })}
+            className="px-6 py-3 bg-gradient-to-r from-yellow-500 to-yellow-600 text-white rounded-lg font-semibold hover:from-yellow-600 hover:to-yellow-700"
+          >
+            Subscribe {paperInfo.displayPrice}
+          </button>
+          <button
+            onClick={() => navigate('/mock-tests')}
+            className="px-6 py-3 bg-gray-500 text-white rounded-lg hover:bg-gray-600"
+          >
+            Back to Tests
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Loading State
   if (loading) {
     return (
-      <div className="flex justify-center items-center min-h-[60vh]">
+      <div className="flex flex-col items-center justify-center min-h-[60vh]">
         <div className="w-12 h-12 border-4 border-green-500 border-t-transparent rounded-full animate-spin"></div>
+        <p className="mt-4 text-gray-600 dark:text-gray-400">Loading exam...</p>
+      </div>
+    );
+  }
+
+  // Error State
+  if (error) {
+    return (
+      <div className="text-center py-20">
+        <div className="text-red-500 text-6xl mb-4">⚠️</div>
+        <h2 className="text-xl font-semibold text-gray-800 dark:text-white mb-2">Error Loading Exam</h2>
+        <p className="text-gray-600 dark:text-gray-400 mb-6">{error}</p>
+        <button onClick={() => navigate('/mock-tests')} className="px-6 py-2 bg-green-600 text-white rounded-lg">
+          Back to Mock Tests
+        </button>
+      </div>
+    );
+  }
+
+  // No Questions State
+  if (!examData.questions || examData.questions.length === 0) {
+    return (
+      <div className="text-center py-20">
+        <div className="text-yellow-500 text-6xl mb-4">📝</div>
+        <h2 className="text-xl font-semibold text-gray-800 dark:text-white mb-2">No Questions Found</h2>
+        <p className="text-gray-600 dark:text-gray-400 mb-6">This exam doesn't have any questions yet.</p>
+        <button onClick={() => navigate('/mock-tests')} className="px-6 py-2 bg-green-600 text-white rounded-lg">
+          Back to Mock Tests
+        </button>
       </div>
     );
   }
@@ -203,8 +358,8 @@ function ExamPage() {
       {/* Header */}
       <div className="sticky top-0 z-10 bg-white dark:bg-gray-800 shadow-md p-4 mb-4">
         <div className="flex justify-between items-center max-w-7xl mx-auto">
-          <h2 className="text-lg font-semibold text-gray-800 dark:text-white truncate">
-            {decodeURIComponent(examName)}
+          <h2 className="text-lg font-semibold text-gray-800 dark:text-white truncate max-w-md">
+            {displayName}
           </h2>
           <div className="text-xl font-bold text-white bg-red-600 px-4 py-1 rounded-full">
             {formatTime(timeLeft)}

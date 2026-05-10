@@ -92,3 +92,14 @@ color: orange;
 h1{
   color: orange;
 }
+
+main{
+
+  min-width: 100vw !important;
+}
+
+
+/* Hide folder stats completely */
+.grid.grid-cols-2.gap-4.max-w-md.mx-auto.mb-8 {
+  display: none;
+}
