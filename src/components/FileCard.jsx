@@ -1,5 +1,5 @@
 // src/components/FileCard.jsx
-// FIXED - Save button working in single click
+// UPDATED - Check purchased status before showing Subscribe button
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -7,6 +7,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
 import { saveFile, unsaveFile, isFileSaved, canAccessFile } from '../services/fileService';
 import SampleViewer from './SampleViewer';
+import { db } from '../config/firebase';
+import { doc, getDoc } from 'firebase/firestore';
 
 function FileCard({ file }) {
   const { user, isSubscribed } = useAuth();
@@ -18,6 +20,21 @@ function FileCard({ file }) {
   const [isSaving, setIsSaving] = useState(false);
   const [showSample, setShowSample] = useState(false);
   const [inCart, setInCart] = useState(false);
+  const [isPurchased, setIsPurchased] = useState(false);
+  const [checkingPurchase, setCheckingPurchase] = useState(true);
+
+  // 🔥 Check if user has purchased this specific file
+  const checkPurchasedFile = async (userId, fileId) => {
+    if (!userId) return false;
+    try {
+      const userDoc = await getDoc(doc(db, 'users', userId));
+      const purchasedFiles = userDoc.data()?.purchasedFiles || [];
+      return purchasedFiles.includes(fileId);
+    } catch (error) {
+      console.error('Error checking purchased file:', error);
+      return false;
+    }
+  };
 
   useEffect(() => {
     const checkStatus = async () => {
@@ -27,11 +44,18 @@ function FileCard({ file }) {
           setIsSaved(saved);
           const access = await canAccessFile(file.id);
           setCanAccess(access);
+          
+          // 🔥 Check if purchased
+          const purchased = await checkPurchasedFile(user.uid, file.id);
+          setIsPurchased(purchased);
+          setCheckingPurchase(false);
         } catch (error) {
           console.error('Error checking status:', error);
+          setCheckingPurchase(false);
         }
       } else {
         setCanAccess(false);
+        setCheckingPurchase(false);
       }
       setInCart(isInCart(file.id));
     };
@@ -91,7 +115,6 @@ function FileCard({ file }) {
     setInCart(false);
   };
 
-  // 🔥 FIXED: Save button - single click working
   const handleSaveToggle = async (e) => {
     e.stopPropagation();
     e.preventDefault();
@@ -101,37 +124,106 @@ function FileCard({ file }) {
       return;
     }
     
-    // Prevent multiple clicks while saving
     if (isSaving) return;
     
     setIsSaving(true);
     
     try {
       if (isSaved) {
-        console.log('📌 Unsaving file:', file.name);
         const result = await unsaveFile(file.id);
         if (result.success) {
           setIsSaved(false);
-          console.log('✅ File unsaved successfully');
-        } else {
-          console.error('❌ Unsave failed:', result.error);
         }
       } else {
-        console.log('📌 Saving file:', file.name);
         const result = await saveFile(file.id);
         if (result.success) {
           setIsSaved(true);
-          console.log('✅ File saved successfully');
-        } else {
-          console.error('❌ Save failed:', result.error);
         }
       }
     } catch (error) {
-      console.error('❌ Save toggle error:', error);
+      console.error('Save toggle error:', error);
     } finally {
       setIsSaving(false);
     }
   };
+
+  // ============================================
+  // BUTTON CONFIGURATION
+  // ============================================
+  const getButtonConfig = () => {
+    // Not logged in
+    if (!user) {
+      return { 
+        showView: true, 
+        showSubscribe: false, 
+        showSample: false, 
+        showAddToCart: false, 
+        showSave: false, 
+        viewText: 'View', 
+        viewAction: handleViewFullFile, 
+        viewColor: 'bg-green-600' 
+      };
+    }
+    
+    // 🔥 CASE 1: User is premium subscriber
+    if (isSubscribed) {
+      return { 
+        showView: true, 
+        showSubscribe: false, 
+        showSample: false, 
+        showAddToCart: false, 
+        showSave: true, 
+        viewText: '📖 View Full', 
+        viewAction: handleViewFullFile, 
+        viewColor: 'bg-green-600' 
+      };
+    }
+    
+    // 🔥 CASE 2: User purchased this specific file
+    if (isPurchased) {
+      return { 
+        showView: true, 
+        showSubscribe: false, 
+        showSample: false, 
+        showAddToCart: false, 
+        showSave: true, 
+        viewText: '📖 View', 
+        viewAction: handleViewFullFile, 
+        viewColor: 'bg-green-600' 
+      };
+    }
+    
+    // 🔥 CASE 3: Free file (not premium)
+    if (!file.isPremium) {
+      return { 
+        showView: true, 
+        showSubscribe: false, 
+        showSample: false, 
+        showAddToCart: false, 
+        showSave: true, 
+        viewText: '📖 View', 
+        viewAction: handleViewFullFile, 
+        viewColor: 'bg-green-600' 
+      };
+    }
+    
+    // 🔥 CASE 4: Premium file, not subscribed, not purchased
+    return { 
+      showView: false, 
+      showSubscribe: true, 
+      showSample: true, 
+      showAddToCart: !inCart, 
+      showRemoveFromCart: inCart, 
+      showSave: false, 
+      subscribeText: `🔒 Subscribe ₹${file.price || 29}`, 
+      subscribeAction: handleSubscribe, 
+      sampleAction: handleViewSample, 
+      addToCartAction: handleAddToCart, 
+      removeFromCartAction: handleRemoveFromCart 
+    };
+  };
+
+  const buttonConfig = getButtonConfig();
 
   // ============================================
   // RENDER TAGS
@@ -165,22 +257,14 @@ function FileCard({ file }) {
     );
   };
 
-  const getButtonConfig = () => {
-    if (!user) {
-      return { showView: true, showSubscribe: false, showSample: false, showAddToCart: false, showSave: false, viewText: 'View', viewAction: handleViewFullFile, viewColor: 'bg-green-600' };
-    }
-    
-    if (!isSubscribed) {
-      if (!file.isPremium) {
-        return { showView: true, showSubscribe: false, showSample: false, showAddToCart: false, showSave: true, viewText: '📖 View', viewAction: handleViewFullFile, viewColor: 'bg-green-600' };
-      }
-      return { showView: false, showSubscribe: true, showSample: true, showAddToCart: !inCart, showRemoveFromCart: inCart, showSave: false, subscribeText: `🔒 Subscribe ₹${file.price || 29}`, subscribeAction: handleSubscribe, sampleAction: handleViewSample, addToCartAction: handleAddToCart, removeFromCartAction: handleRemoveFromCart };
-    }
-    
-    return { showView: true, showSubscribe: false, showSample: false, showAddToCart: false, showSave: true, viewText: '📖 View Full', viewAction: handleViewFullFile, viewColor: 'bg-green-600' };
-  };
-
-  const buttonConfig = getButtonConfig();
+  // Loading state while checking purchase status
+  if (checkingPurchase && user && file.isPremium && !isSubscribed) {
+    return (
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden h-full flex flex-col items-center justify-center p-4">
+        <div className="w-6 h-6 border-2 border-green-500 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -252,7 +336,7 @@ function FileCard({ file }) {
 
       {showSample && (
         <SampleViewer
-          fileUrl={`https://onlibry.mdhabibul12212141.workers.dev/${encodeURIComponent(file.cloudflareKey || file.id)}`}
+          fileUrl={`${WORKER_URL}/${encodeURIComponent(file.cloudflareKey || file.id)}`}
           fileName={file.name}
           fileId={file.id}
           filePrice={file.price}
