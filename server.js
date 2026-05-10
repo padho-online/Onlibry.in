@@ -1,32 +1,59 @@
-// server.js - Simple test server for API
-const express = require('express');
-const Razorpay = require('razorpay');
-require('dotenv').config();
+// server.js - Local development server for Razorpay API
+import express from 'express';
+import Razorpay from 'razorpay';
+import cors from 'cors';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const app = express();
+app.use(cors());
 app.use(express.json());
 
+// Initialize Razorpay
+const razorpay = new Razorpay({
+  key_id: process.env.VITE_RAZORPAY_KEY_ID || process.env.RAZORPAY_KEY_ID || 'rzp_live_SiS2QOdZl6zCUx',
+  key_secret: process.env.RAZORPAY_KEY_SECRET || '3akTUrS9604ASY0afBzEhGny',
+});
+
+// Create Order API
 app.post('/api/create-order', async (req, res) => {
   const { amount, currency = 'INR' } = req.body;
   
+  console.log('📦 Creating order for amount:', amount);
+  
   try {
-    const razorpay = new Razorpay({
-      key_id: process.env.RAZORPAY_KEY_ID,
-      key_secret: process.env.RAZORPAY_KEY_SECRET,
-    });
-
     const options = {
-      amount: amount * 100,
+      amount: Math.round(amount * 100),
       currency: currency,
       receipt: `receipt_${Date.now()}`,
+      payment_capture: 1,
     };
-
+    
     const order = await razorpay.orders.create(options);
-    res.json({ success: true, id: order.id, amount: order.amount, currency: order.currency });
+    console.log('✅ Order created:', order.id);
+    
+    res.json({
+      success: true,
+      id: order.id,
+      amount: order.amount,
+      currency: order.currency,
+    });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, error: error.message });
+    console.error('❌ Order creation failed:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
   }
 });
 
-app.listen(3000, () => console.log('Server running on port 3000'));
+// Health check
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on http://localhost:${PORT}`);
+});

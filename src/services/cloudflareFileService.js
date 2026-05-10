@@ -1,8 +1,8 @@
 // src/services/cloudflareFileService.js
-// FINAL - Fixed tags display from tagsString field
+// FINAL - Using environment variables
 
-const SHEET_API_URL = 'https://script.google.com/macros/s/AKfycbz9O81mdzlpxPgcuMrZHnNgPLEE7Th-04Cfe5GKe0UA1ZoVqgdGXRYhn4lFn9hKPfCm/exec';
-const WORKER_URL = 'https://onlibry.mdhabibul12212141.workers.dev';
+const SHEET_API_URL = import.meta.env.VITE_SHEET_API_URL;
+const WORKER_URL = import.meta.env.VITE_CLOUDFLARE_WORKER_URL;
 
 // Cache System
 let cachedFiles = null;
@@ -44,16 +44,13 @@ export async function getAllFilesFromSheet(forceRefresh = false) {
       
       if (data.success && data.files) {
         const filesWithUrl = data.files.map(file => {
-          // 🔥 FIX: Get tags from tagsString if tags object is empty
           let tagsArray = [];
           let finalTags = {};
           
-          // Check if tagsString has value (sheet column H)
           if (file.tagsString && file.tagsString.trim()) {
             tagsArray = file.tagsString.split(',').map(t => t.trim()).filter(t => t);
             finalTags = { tags: tagsArray };
           }
-          // Fallback to tags object
           else if (file.tags && typeof file.tags === 'object' && Object.keys(file.tags).length > 0) {
             Object.values(file.tags).forEach(values => {
               if (Array.isArray(values)) tagsArray.push(...values);

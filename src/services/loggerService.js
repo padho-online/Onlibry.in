@@ -1,6 +1,7 @@
 // src/services/loggerService.js
-// Google Sheets Web App URL
-const LOGGER_API_URL = 'https://script.google.com/macros/s/AKfycbyHujfaaRZTsH6FBKplt4EdpURVrLPC-Efrd1gaQ-NqGQydfhMloAGsnHAaKSdgj0w/exec';
+// Google Sheets Web App URL - Using environment variable
+
+const LOGGER_API_URL = import.meta.env.VITE_SHEET_API_URL;
 
 // ============================================
 // FILE VIEW DURATION TRACKING
@@ -288,4 +289,4 @@ export async function testLogger() {
   });
   
   console.log('✅ Test log sent! Check your Google Sheet.');
-}
+} 

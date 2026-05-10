@@ -1,9 +1,13 @@
+// src/pages/SavedFilesPage.jsx
+// UPDATED - Fetch files from Google Sheet instead of Firestore
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../config/firebase';
-import { doc, getDoc, collection, getDocs, query, where } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 import { unsaveFile, canAccessFile } from '../services/fileService';
+import { getAllFilesFromSheet } from '../services/cloudflareFileService';
 import { checkViewLimit } from '../utils/helpers';
 
 function SavedFilesPage() {
@@ -24,7 +28,7 @@ function SavedFilesPage() {
   const loadSavedFiles = async () => {
     setLoading(true);
     try {
-      // Get user's saved file IDs
+      // 1. Get user's saved file IDs from Firestore
       const userRef = doc(db, 'users', user.uid);
       const userDoc = await getDoc(userRef);
       const savedFileIds = userDoc.data()?.savedFiles || [];
@@ -35,26 +39,39 @@ function SavedFilesPage() {
         return;
       }
       
-      // Fetch each file's details
+      console.log('📌 Saved file IDs:', savedFileIds);
+      
+      // 2. Fetch ALL files from Google Sheet
+      const allFiles = await getAllFilesFromSheet();
+      console.log('📚 Total files from sheet:', allFiles.length);
+      
+      // 3. Filter only saved files
       const files = [];
       for (const fileId of savedFileIds) {
-        const fileRef = doc(db, 'files', fileId);
-        const fileDoc = await getDoc(fileRef);
+        // Find file in Google Sheet data
+        const fileData = allFiles.find(f => 
+          f.id === fileId || 
+          f.cloudflareKey === fileId || 
+          f.originalId === fileId
+        );
         
-        if (fileDoc.exists()) {
-          const fileData = { id: fileDoc.id, ...fileDoc.data() };
-          // Only show files that are visible on website
-          if (fileData.showOnWebsite !== false) {
-            files.push(fileData);
-            
-            // Check access status for each file
-            const hasAccess = await canAccessFile(fileId);
-            setAccessStatus(prev => ({ ...prev, [fileId]: hasAccess }));
-          }
+        if (fileData && fileData.showOnWebsite !== false) {
+          files.push({
+            id: fileData.cloudflareKey || fileData.id,
+            ...fileData
+          });
+          
+          // Check access status for each file
+          const hasAccess = await canAccessFile(fileId);
+          setAccessStatus(prev => ({ ...prev, [fileId]: hasAccess }));
+        } else {
+          console.warn(`⚠️ File not found in sheet: ${fileId}`);
         }
       }
       
+      console.log('✅ Saved files loaded:', files.length);
       setSavedFiles(files);
+      
     } catch (error) {
       console.error('Error loading saved files:', error);
     } finally {
@@ -71,17 +88,13 @@ function SavedFilesPage() {
     }
     
     const hasAccess = accessStatus[file.id];
-    if (!hasAccess && !isSubscribed) {
+    if (!hasAccess && !isSubscribed && file.isPremium) {
       navigate('/pricing', { state: { from: '/saved-files', fileId: file.id } });
       return;
     }
     
     // Open file viewer
-    if (file.webViewLink) {
-      window.open(file.webViewLink, '_blank');
-    } else {
-      navigate(`/viewer/${file.id}`);
-    }
+    navigate(`/viewer/${file.id}`);
   };
 
   const handleUnsave = async (fileId) => {
@@ -95,7 +108,7 @@ function SavedFilesPage() {
   };
 
   const handleShare = async (file) => {
-    const shareUrl = file.webViewLink || `https://onlibry.in/viewer.html?fileId=${file.id}`;
+    const shareUrl = `https://onlibry.in/viewer/${file.id}`;
     try {
       await navigator.clipboard.writeText(shareUrl);
       alert('📋 Link copied!');
@@ -104,18 +117,19 @@ function SavedFilesPage() {
     }
   };
 
-  const renderTags = (tags) => {
-    if (!tags) return null;
-    const allTags = [];
-    Object.entries(tags).forEach(([category, values]) => {
-      if (values && values.length > 0) {
-        allTags.push(...values);
-      }
-    });
+  const renderTags = (tags, tagsList) => {
+    const allTags = tagsList || [];
+    
+    if (allTags.length === 0 && tags && typeof tags === 'object') {
+      Object.values(tags).forEach(values => {
+        if (Array.isArray(values)) allTags.push(...values);
+        else if (typeof values === 'string') allTags.push(values);
+      });
+    }
     
     return allTags.slice(0, 3).map((tag, idx) => (
       <span key={idx} className="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded-full">
-        {tag}
+        {tag.length > 25 ? tag.substring(0, 22) + '...' : tag}
       </span>
     ));
   };
@@ -161,6 +175,7 @@ function SavedFilesPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {savedFiles.map((file) => {
             const hasAccess = accessStatus[file.id];
+            const isPremiumFile = file.isPremium === true;
             
             return (
               <div
@@ -175,8 +190,8 @@ function SavedFilesPage() {
                     </h3>
                     
                     {/* Premium Badge */}
-                    {file.isPremium && !isSubscribed && !hasAccess && (
-                      <span className="ml-2 px-2 py-1 text-xs font-semibold text-yellow-700 bg-yellow-100 dark:bg-yellow-900/50 rounded-full">
+                    {isPremiumFile && !isSubscribed && !hasAccess && (
+                      <span className="ml-2 px-2 py-1 text-xs font-semibold text-yellow-700 bg-yellow-100 dark:bg-yellow-900/50 rounded-full whitespace-nowrap">
                         Premium
                       </span>
                     )}
@@ -184,7 +199,7 @@ function SavedFilesPage() {
                   
                   {/* Tags */}
                   <div className="flex flex-wrap gap-2 mb-3">
-                    {renderTags(file.tags)}
+                    {renderTags(file.tags, file.tagsList)}
                   </div>
                   
                   {/* Description */}
@@ -199,12 +214,12 @@ function SavedFilesPage() {
                     <button
                       onClick={() => handleViewFile(file)}
                       className={`flex-1 px-3 py-2 rounded-lg text-white text-sm font-medium transition ${
-                        hasAccess || isSubscribed || !file.isPremium
+                        hasAccess || isSubscribed || !isPremiumFile
                           ? 'bg-green-600 hover:bg-green-700'
                           : 'bg-yellow-500 hover:bg-yellow-600'
                       }`}
                     >
-                      {hasAccess || isSubscribed || !file.isPremium ? '📖 View' : '🔒 Unlock'}
+                      {hasAccess || isSubscribed || !isPremiumFile ? '📖 View' : '🔒 Unlock'}
                     </button>
                     
                     <button

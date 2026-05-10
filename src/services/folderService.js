@@ -1,8 +1,8 @@
 // src/services/folderService.js
-// UPDATED: Now fetches folders from Google Sheet (No Firestore)
+// UPDATED: Using environment variables for Google Sheet URL
 
-// Google Sheet API URL - Same as cloudflareFileService
-const SHEET_API_URL = 'https://script.google.com/macros/s/AKfycbz9O81mdzlpxPgcuMrZHnNgPLEE7Th-04Cfe5GKe0UA1ZoVqgdGXRYhn4lFn9hKPfCm/exec';
+// Google Sheet API URL - Using environment variable
+const SHEET_API_URL = import.meta.env.VITE_SHEET_API_URL;
 
 // ============================================
 // CACHE SYSTEM (5 minutes cache)

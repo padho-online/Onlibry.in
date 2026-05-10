@@ -1,3 +1,6 @@
+// src/contexts/AuthContext.jsx
+// UPDATED - Removed cloudFunctions dependency, using direct Firestore
+
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { auth, db } from '../config/firebase';
 import {
@@ -13,7 +16,6 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import { logUserLogin, setCurrentUserGetter } from '../services/loggerService';
-import { checkSubscriptionStatus } from '../services/cloudFunctions';
 
 const AuthContext = createContext();
 
@@ -26,36 +28,32 @@ export function AuthProvider({ children }) {
 
   const googleProvider = new GoogleAuthProvider();
 
-  // Check subscription via Cloud Function
+  // Check subscription directly from Firestore
   const checkUserSubscription = async (userId) => {
     try {
-      const result = await checkSubscriptionStatus();
-      setIsSubscribed(result.isSubscribed);
-      setSubscriptionType(result.subscriptionType);
-      localStorage.setItem('isSubscribed', result.isSubscribed ? 'true' : 'false');
-      return result.isSubscribed;
-    } catch (error) {
-      console.error('Error checking subscription via cloud:', error);
-      
-      // Fallback to Firestore direct check
-      try {
-        const userDoc = await getDoc(doc(db, 'users', userId));
-        if (userDoc.exists()) {
-          const data = userDoc.data();
-          if (data.subscription?.isActive && data.subscription?.endDate) {
-            const endDate = data.subscription.endDate.toDate?.() || new Date(data.subscription.endDate);
-            if (endDate > new Date()) {
-              setIsSubscribed(true);
-              setSubscriptionType(data.subscription.type);
-              localStorage.setItem('isSubscribed', 'true');
-              return true;
-            }
+      const userDoc = await getDoc(doc(db, 'users', userId));
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        const subscription = userData.subscription || {};
+        
+        if (subscription.isActive && subscription.endDate) {
+          const endDate = subscription.endDate.toDate ? subscription.endDate.toDate() : new Date(subscription.endDate);
+          if (endDate > new Date()) {
+            setIsSubscribed(true);
+            setSubscriptionType(subscription.type || 'monthly');
+            localStorage.setItem('isSubscribed', 'true');
+            return true;
           }
         }
-      } catch (fallbackError) {
-        console.error('Fallback subscription check failed:', fallbackError);
       }
       
+      setIsSubscribed(false);
+      setSubscriptionType(null);
+      localStorage.setItem('isSubscribed', 'false');
+      return false;
+      
+    } catch (error) {
+      console.error('Error checking subscription:', error);
       setIsSubscribed(false);
       setSubscriptionType(null);
       localStorage.setItem('isSubscribed', 'false');
@@ -91,7 +89,7 @@ export function AuthProvider({ children }) {
         setSavedFiles(userData.savedFiles || []);
       }
 
-      // Check subscription via cloud function
+      // Check subscription
       await checkUserSubscription(firebaseUser.uid);
 
       return { success: true, user: firebaseUser };
@@ -126,7 +124,7 @@ export function AuthProvider({ children }) {
         subscription: {
           type: planType,
           startDate: serverTimestamp(),
-          endDate: endDate,
+          endDate: endDate.toISOString(),
           isActive: true,
         },
       }, { merge: true });

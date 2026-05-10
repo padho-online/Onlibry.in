@@ -6,7 +6,7 @@
     },
     {
       "source": "/(.*)",
-      "destination": "/"
+      "destination": "/index.html"
     }
   ],
   "headers": [
@@ -27,5 +27,9 @@
         }
       ]
     }
-  ]
+  ],
+  "env": {
+    "RAZORPAY_KEY_ID": "rzp_live_SiS2QOdZl6zCUx",
+    "RAZORPAY_KEY_SECRET": "3akTUrS9604ASY0afBzEhGny"
+  }
 }

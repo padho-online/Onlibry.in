@@ -1,8 +1,10 @@
-// api/create-order.js (ES Module - .js file with package.json type:module)
-import Razorpay from 'razorpay';
+// api/create-order.js
+// Vercel Serverless Function for Razorpay Order Creation
 
-export default async function handler(req, res) {
-  // Enable CORS
+const Razorpay = require('razorpay');
+
+// Allow CORS for all origins
+const allowCors = (fn) => async (req, res) => {
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
@@ -10,13 +12,16 @@ export default async function handler(req, res) {
     'Access-Control-Allow-Headers',
     'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
   );
-
-  // Handle preflight request
+  
   if (req.method === 'OPTIONS') {
     res.status(200).end();
     return;
   }
+  
+  return await fn(req, res);
+};
 
+async function handler(req, res) {
   // Only allow POST method
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -25,31 +30,26 @@ export default async function handler(req, res) {
   try {
     const { amount, currency = 'INR' } = req.body;
 
-    if (!amount || amount <= 0) {
-      return res.status(400).json({ error: 'Valid amount is required' });
+    if (!amount) {
+      return res.status(400).json({ error: 'Amount is required' });
     }
 
-    // Check if keys are present
-    if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
-      console.error('❌ Razorpay keys missing');
-      return res.status(500).json({ error: 'Payment gateway not configured' });
-    }
-
+    // Initialize Razorpay with environment variables
     const razorpay = new Razorpay({
-      key_id: process.env.RAZORPAY_KEY_ID,
+      key_id: process.env.VITE_RAZORPAY_KEY_ID || process.env.RAZORPAY_KEY_ID,
       key_secret: process.env.RAZORPAY_KEY_SECRET,
     });
 
     const options = {
-      amount: Math.round(amount * 100),
+      amount: Math.round(amount * 100), // Convert to paise
       currency: currency,
       receipt: `receipt_${Date.now()}`,
       payment_capture: 1,
     };
 
-    console.log('📡 Creating Razorpay order:', options);
+    console.log('Creating order with options:', options);
     const order = await razorpay.orders.create(options);
-    console.log('✅ Order created:', order.id);
+    console.log('Order created:', order.id);
 
     return res.status(200).json({
       success: true,
@@ -57,11 +57,15 @@ export default async function handler(req, res) {
       amount: order.amount,
       currency: order.currency,
     });
+    
   } catch (error) {
-    console.error('❌ Order creation error:', error);
-    return res.status(500).json({
-      success: false,
+    console.error('Order creation error:', error);
+    return res.status(500).json({ 
+      success: false, 
       error: error.message,
+      details: error.toString()
     });
   }
 }
+
+module.exports = allowCors(handler);

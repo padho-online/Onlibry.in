@@ -1,5 +1,9 @@
+// src/pages/admin/PaymentLogs.jsx
+// Payment Logs - Direct Firestore query
+
 import React, { useState, useEffect } from 'react';
-import { getAllPaymentLogs } from '../../services/paymentLogService';
+import { db } from '../../config/firebase';
+import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore';
 
 function PaymentLogs() {
   const [logs, setLogs] = useState([]);
@@ -13,8 +17,21 @@ function PaymentLogs() {
 
   const loadLogs = async () => {
     setLoading(true);
-    const data = await getAllPaymentLogs(500);
-    setLogs(data);
+    try {
+      const logsQuery = query(
+        collection(db, 'paymentLogs'),
+        orderBy('timestamp', 'desc'),
+        limit(500)
+      );
+      const querySnapshot = await getDocs(logsQuery);
+      const logsList = [];
+      querySnapshot.forEach(doc => {
+        logsList.push({ id: doc.id, ...doc.data() });
+      });
+      setLogs(logsList);
+    } catch (error) {
+      console.error('Error loading payment logs:', error);
+    }
     setLoading(false);
   };
 
@@ -76,20 +93,15 @@ function PaymentLogs() {
 
   // Filter logs based on status and search term
   const filteredLogs = logs.filter(log => {
-    // Status filter
     if (filter !== 'all' && log.status !== filter) return false;
-    
-    // Search filter (email, plan, paymentId)
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       return (
         (log.userEmail && log.userEmail.toLowerCase().includes(term)) ||
         (log.plan && log.plan.toLowerCase().includes(term)) ||
-        (log.paymentId && log.paymentId.toLowerCase().includes(term)) ||
-        (log.userId && log.userId.toLowerCase().includes(term))
+        (log.paymentId && log.paymentId.toLowerCase().includes(term))
       );
     }
-    
     return true;
   });
 
@@ -175,7 +187,7 @@ function PaymentLogs() {
             {status === 'all' ? '📋 All' : status === 'success' ? '✅ Success' : status === 'failed' ? '❌ Failed' : status === 'cancelled' ? '🚫 Cancelled' : '⏳ Pending'}
             {status !== 'all' && (
               <span className="ml-1 text-xs opacity-75">
-                ({status === 'all' ? stats.total : status === 'success' ? stats.success : status === 'failed' ? stats.failed : status === 'cancelled' ? stats.cancelled : stats.pending})
+                ({status === 'success' ? stats.success : status === 'failed' ? stats.failed : status === 'cancelled' ? stats.cancelled : stats.pending})
               </span>
             )}
           </button>

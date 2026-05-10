@@ -1,12 +1,12 @@
 // src/App.jsx
-// UPDATED - Added CartProvider + FileUploadManager route
+// UPDATED - Cleaned up, removed unused imports, added environment variables
 
 import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider } from './contexts/AuthContext';
-import { CartProvider } from './contexts/CartContext'; // 🔥 ADD THIS
+import { CartProvider } from './contexts/CartContext';
 
 import { initPageViewLogger } from './services/loggerService';
 
@@ -29,7 +29,6 @@ import QuizExamPage from './pages/QuizExamPage';
 import QuizResultsPage from './pages/QuizResultsPage';
 import ViewerPage from './pages/ViewerPage';
 import NotFoundPage from './pages/NotFoundPage';
-import PurchasePage from './pages/PurchasePage';
 
 // Admin Pages
 import AdminDashboard from './pages/admin/AdminDashboard';
@@ -48,7 +47,7 @@ function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <CartProvider> {/* 🔥 ADDED */}
+        <CartProvider>
           <Router>
             <MainLayout>
               <Routes>
@@ -75,9 +74,6 @@ function App() {
                     </ProtectedRoute>
                   }
                 />
-
-                {/* Purchase */}
-                <Route path="/purchase/:fileId" element={<PurchasePage />} />
 
                 {/* Viewer */}
                 <Route path="/viewer/:fileId" element={<ViewerPage />} />
