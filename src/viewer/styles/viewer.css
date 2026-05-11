@@ -158,3 +158,28 @@
     transform: none;
   }
 }
+
+.flex-1{
+  padding: 0%;
+}
+
+.bg-gray-900{
+  background: #111827;
+  color: white;
+  padding: 0.5rem;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* Mobile only */
+@media (max-width: 767px) {
+  .bg-gray-900{
+    display: none;
+  }
+}
+
+.pdf-canvas{
+    max-width: 1000px;
+    min-height: 100vh;
+}
+

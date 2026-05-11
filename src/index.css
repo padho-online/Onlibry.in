@@ -96,10 +96,19 @@ h1{
 main{
 
   min-width: 100vw !important;
+  padding: 0%;
 }
 
 
 /* Hide folder stats completely */
 .grid.grid-cols-2.gap-4.max-w-md.mx-auto.mb-8 {
   display: none;
+}
+
+.container{
+  min-width: 100vw !important;
+}
+
+.flex-1 overflow-y-auto px-6 py-6{
+  padding: 0%;
 }
