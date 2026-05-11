@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Onlibry - Pure CSS Logo (Transparent)</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        /* Transparent body - no background color */
+        body {
+            background: transparent;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Segoe UI', 'Poppins', sans-serif;
+        }
+
+        /* For demo purpose - remove this in production */
+        .demo-bg {
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
+            padding: 40px;
+            border-radius: 20px;
+            display: inline-block;
+        }
+
+        /* Main Container */
+        .logo-container {
+            position: relative;
+            width: 400px;
+            height: 400px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            transition: transform 0.3s ease;
+        }
+
+        .logo-container:hover {
+            transform: scale(1.02);
+        }
+
+        /* ============================================
+           THICK BOLD RINGS
+        ============================================ */
+        .ring {
+            position: absolute;
+            border-radius: 50%;
+            border: 22px solid #d4ff9d;
+            box-sizing: border-box;
+            transition: all 0.3s ease;
+        }
+
+        .ring-outer { 
+            width: 100%; 
+            height: 100%; 
+        }
+        
+        .ring-middle { 
+            width: 78%; 
+            height: 78%; 
+            top: 11%;
+            left: 11%;
+        }
+        
+        .ring-inner { 
+            width: 56%; 
+            height: 56%; 
+            background-color: #a0a0a0; 
+            border: 15px solid #d4ff9d;
+            top: 22%;
+            left: 22%;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.3);
+        }
+
+        /* 🔥 FIXED: Ring Cutouts - Using transparent instead of black */
+        .ring-outer::before,
+        .ring-middle::before,
+        .ring-inner::before {
+            content: "";
+            position: absolute;
+            background: transparent; /* Changed from black to transparent */
+            width: 120px;
+            height: 80px;
+            top: -15px;
+            left: 70px;
+            transform: rotate(-15deg);
+            border-radius: 20px;
+            z-index: 2;
+        }
+
+        .ring-middle::before {
+            width: 100px;
+            height: 65px;
+            top: -10px;
+            left: 55px;
+        }
+
+        .ring-inner::before {
+            width: 80px;
+            height: 50px;
+            top: -8px;
+            left: 40px;
+        }
+
+        /* 🔥 FIXED: Ring Cutouts - Right side - transparent */
+        .ring-outer::after,
+        .ring-middle::after,
+        .ring-inner::after {
+            content: "";
+            position: absolute;
+            background: transparent; /* Changed from black to transparent */
+            width: 100px;
+            height: 80px;
+            top: 30px;
+            right: 15px;
+            transform: rotate(25deg);
+            border-radius: 20px;
+            z-index: 2;
+        }
+
+        .ring-middle::after {
+            width: 85px;
+            height: 65px;
+            top: 22px;
+            right: 8px;
+        }
+
+        .ring-inner::after {
+            width: 70px;
+            height: 50px;
+            top: 15px;
+            right: 2px;
+        }
+
+        /* ============================================
+           TOP MASK - Transparent (No black mark)
+        ============================================ */
+        .top-mask {
+            position: absolute;
+            top: -12px;
+            width: 100px;
+            height: 80px;
+            background: transparent; /* Changed from black to transparent */
+            z-index: 15;
+            left: 50%;
+            transform: translateX(-50%);
+            border-radius: 0 0 20px 20px;
+        }
+
+        /* ============================================
+           PENCIL / BOOKMARK SYMBOL
+        ============================================ */
+        .pencil-container {
+            position: absolute;
+            top: 5px;
+            width: 75px;
+            height: 250px;
+            z-index: 20;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            filter: drop-shadow(0 5px 10px rgba(0,0,0,0.2));
+        }
+
+        /* Pencil Top Cap - Round top */
+        .pencil-top-cap {
+            width: 100%;
+            height: 45px;
+            background-color: #d4ff9d;
+            border-radius: 50px 50px 8px 8px;
+            margin-bottom: 2px;
+        }
+
+        /* Pencil Shaft - 3 vertical segments */
+        .pencil-shaft {
+            width: 100%;
+            height: 135px;
+            display: flex;
+            justify-content: space-between;
+            gap: 4px;
+        }
+
+        .shaft-col {
+            width: 22px;
+            background-color: #d4ff9d;
+            height: 100%;
+            border-radius: 4px;
+        }
+
+        /* Center shaft slightly longer */
+        .shaft-col:nth-child(2) {
+            height: 140px;
+            margin-top: -5px;
+        }
+
+        /* Pencil Point - Triangle tip */
+        .pencil-point {
+            width: 75px;
+            height: 65px;
+            background-color: #d4ff9d;
+            clip-path: polygon(0% 0%, 100% 0%, 50% 100%);
+            position: relative;
+            margin-top: -3px;
+        }
+
+        /* 🔥 FIXED: Pencil Lead (Dark tip) - Only part that should be dark */
+        .pencil-point::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 30px;
+            height: 25px;
+            background: linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 100%);
+            clip-path: polygon(0% 0%, 100% 0%, 50% 100%);
+            border-radius: 0 0 2px 2px;
+        }
+
+        /* ============================================
+           GLOW EFFECTS ON HOVER
+        ============================================ */
+        .logo-container:hover .ring {
+            border-color: #e8ffb0;
+            box-shadow: 0 0 15px rgba(212, 255, 157, 0.4);
+        }
+
+        .logo-container:hover .pencil-top-cap,
+        .logo-container:hover .shaft-col,
+        .logo-container:hover .pencil-point {
+            background-color: #e8ffb0;
+        }
+
+        .logo-container:hover .ring-inner {
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.3), 0 0 20px rgba(212, 255, 157, 0.3);
+        }
+
+        /* ============================================
+           RESPONSIVE DESIGN
+        ============================================ */
+        @media (max-width: 768px) {
+            .logo-container {
+                width: 280px;
+                height: 280px;
+            }
+
+            .ring {
+                border-width: 15px;
+            }
+
+            .ring-middle {
+                width: 76%;
+                height: 76%;
+                top: 12%;
+                left: 12%;
+            }
+
+            .ring-inner {
+                width: 54%;
+                height: 54%;
+                top: 23%;
+                left: 23%;
+                border-width: 10px;
+            }
+
+            .ring-outer::before,
+            .ring-middle::before,
+            .ring-inner::before {
+                width: 85px;
+                height: 55px;
+                top: -10px;
+                left: 45px;
+            }
+
+            .ring-middle::before {
+                width: 70px;
+                height: 45px;
+                top: -8px;
+                left: 35px;
+            }
+
+            .ring-inner::before {
+                width: 55px;
+                height: 35px;
+                top: -6px;
+                left: 25px;
+            }
+
+            .ring-outer::after,
+            .ring-middle::after,
+            .ring-inner::after {
+                width: 70px;
+                height: 55px;
+                top: 20px;
+                right: 10px;
+            }
+
+            .ring-middle::after {
+                width: 60px;
+                height: 45px;
+                top: 15px;
+                right: 5px;
+            }
+
+            .ring-inner::after {
+                width: 50px;
+                height: 35px;
+                top: 12px;
+                right: 0px;
+            }
+
+            .top-mask {
+                width: 70px;
+                height: 55px;
+                top: -8px;
+            }
+
+            .pencil-container {
+                width: 52px;
+                height: 175px;
+                top: 5px;
+            }
+
+            .pencil-top-cap {
+                height: 32px;
+            }
+
+            .pencil-shaft {
+                height: 95px;
+                gap: 3px;
+            }
+
+            .shaft-col {
+                width: 15px;
+            }
+
+            .shaft-col:nth-child(2) {
+                height: 98px;
+            }
+
+            .pencil-point {
+                width: 52px;
+                height: 45px;
+            }
+
+            .pencil-point::after {
+                width: 20px;
+                height: 18px;
+            }
+        }
+
+        /* Extra Small Screens */
+        @media (max-width: 480px) {
+            .logo-container {
+                width: 200px;
+                height: 200px;
+            }
+
+            .ring {
+                border-width: 10px;
+            }
+
+            .ring-outer::before,
+            .ring-middle::before,
+            .ring-inner::before {
+                width: 60px;
+                height: 40px;
+                top: -8px;
+                left: 30px;
+            }
+
+            .ring-middle::before {
+                width: 50px;
+                height: 32px;
+                top: -6px;
+                left: 22px;
+            }
+
+            .ring-inner::before {
+                width: 40px;
+                height: 25px;
+                top: -5px;
+                left: 15px;
+            }
+
+            .ring-outer::after,
+            .ring-middle::after,
+            .ring-inner::after {
+                width: 50px;
+                height: 40px;
+                top: 15px;
+                right: 8px;
+            }
+
+            .ring-middle::after {
+                width: 42px;
+                height: 32px;
+                top: 12px;
+                right: 4px;
+            }
+
+            .ring-inner::after {
+                width: 35px;
+                height: 25px;
+                top: 10px;
+                right: 0px;
+            }
+
+            .top-mask {
+                width: 50px;
+                height: 40px;
+                top: -6px;
+            }
+
+            .pencil-container {
+                width: 38px;
+                height: 125px;
+            }
+
+            .pencil-top-cap {
+                height: 23px;
+            }
+
+            .pencil-shaft {
+                height: 68px;
+                gap: 2px;
+            }
+
+            .shaft-col {
+                width: 11px;
+            }
+
+            .shaft-col:nth-child(2) {
+                height: 70px;
+            }
+
+            .pencil-point {
+                width: 38px;
+                height: 32px;
+            }
+
+            .pencil-point::after {
+                width: 15px;
+                height: 12px;
+            }
+        }
+
+        /* ============================================
+           BRAND TEXT
+        ============================================ */
+        .brand-wrapper {
+            position: absolute;
+            bottom: -80px;
+            left: 0;
+            right: 0;
+            text-align: center;
+        }
+
+        .brand-name {
+            font-size: 28px;
+            font-weight: 800;
+            background: linear-gradient(135deg, #d4ff9d 0%, #a8e063 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            letter-spacing: 3px;
+            margin-bottom: 5px;
+        }
+
+        .tagline {
+            font-size: 9px;
+            letter-spacing: 4px;
+            color: #888;
+            font-weight: 500;
+        }
+
+        @media (max-width: 768px) {
+            .brand-name {
+                font-size: 20px;
+                letter-spacing: 2px;
+            }
+            .tagline {
+                font-size: 7px;
+                letter-spacing: 3px;
+            }
+            .brand-wrapper {
+                bottom: -60px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .brand-name {
+                font-size: 16px;
+                letter-spacing: 1px;
+            }
+            .tagline {
+                font-size: 6px;
+                letter-spacing: 2px;
+            }
+            .brand-wrapper {
+                bottom: -50px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div style="position: relative; display: flex; flex-direction: column; align-items: center;">
+        <div class="logo-container">
+            <!-- Rings -->
+            <div class="ring ring-outer"></div>
+            <div class="ring ring-middle"></div>
+            <div class="ring ring-inner"></div>
+
+            <!-- Top Mask (Transparent - no black mark) -->
+            <div class="top-mask"></div>
+
+            <!-- Pencil / Bookmark -->
+            <div class="pencil-container">
+                <div class="pencil-top-cap"></div>
+                <div class="pencil-shaft">
+                    <div class="shaft-col"></div>
+                    <div class="shaft-col"></div>
+                    <div class="shaft-col"></div>
+                </div>
+                <div class="pencil-point"></div>
+            </div>
+        </div>
+
+        <!-- Brand Text -->
+        <div class="brand-wrapper">
+            <div class="brand-name">ONLIBRY</div>
+            <div class="tagline">LEARN ANYTIME, ANYWHERE</div>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,263 @@
+// Onlibry Cloudflare Worker - Single File Storage (No versions)
+// Files stored at: bucket/{fileId}.pdf
+
+// ============================================
+// CONFIGURATION
+// ============================================
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, X-Admin-Key, X-User-Id, X-Is-Subscribed',
+};
+
+const ADMIN_SECRET_KEY = "Habibul@812922112";
+
+// ============================================
+// MAIN FETCH HANDLER
+// ============================================
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
+    const method = request.method;
+    
+    // Handle CORS preflight
+    if (method === 'OPTIONS') {
+      return new Response(null, { status: 204, headers: CORS_HEADERS });
+    }
+    
+    // ============================================
+    // ROUTE 1: Upload File (Admin only)
+    // POST /upload
+    // ============================================
+    if (method === 'POST' && url.pathname === '/upload') {
+      const adminKey = request.headers.get('X-Admin-Key');
+      if (adminKey !== ADMIN_SECRET_KEY) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), { 
+          status: 401, 
+          headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+        });
+      }
+      
+      try {
+        const formData = await request.formData();
+        const file = formData.get('file');
+        const fileId = formData.get('fileId');
+        
+        if (!file) {
+          return new Response(JSON.stringify({ error: 'No file uploaded' }), { 
+            status: 400, 
+            headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+          });
+        }
+        
+        // Use provided fileId or generate new one
+        let finalFileId = fileId;
+        if (!finalFileId) {
+          const timestamp = Date.now();
+          const randomId = Math.random().toString(36).substring(2, 10);
+          const cleanFileName = file.name.replace(/\s+/g, '_').replace('.pdf', '');
+          finalFileId = `${timestamp}_${randomId}_${cleanFileName}`;
+        }
+        
+        // Store single file directly in bucket root
+        const fileBuffer = await file.arrayBuffer();
+        await env.MY_BUCKET.put(`${finalFileId}.pdf`, fileBuffer, {
+          httpMetadata: { contentType: 'application/pdf' }
+        });
+        
+        return new Response(JSON.stringify({
+          success: true,
+          fileId: finalFileId,
+          url: `https://${request.headers.get('host')}/view/${finalFileId}`,
+          fileName: file.name,
+          size: file.size,
+          mimeType: file.type
+        }), {
+          headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+        });
+      } catch (error) {
+        return new Response(JSON.stringify({ success: false, error: error.message }), {
+          status: 500,
+          headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+    
+    // ============================================
+    // ROUTE 2: View File
+    // GET /view/:fileId
+    // Always returns the PDF file (watermarked version)
+    // ============================================
+    if (method === 'GET' && url.pathname.startsWith('/view/')) {
+      const fileId = url.pathname.split('/view/')[1];
+      if (!fileId) {
+        return new Response('File ID required', { status: 400, headers: CORS_HEADERS });
+      }
+      
+      const fileKey = `${fileId}.pdf`;
+      
+      try {
+        const object = await env.MY_BUCKET.get(fileKey);
+        if (!object) {
+          return new Response('File not found', { status: 404, headers: CORS_HEADERS });
+        }
+        
+        const headers = new Headers(CORS_HEADERS);
+        object.writeHttpMetadata(headers);
+        headers.set('Content-Type', 'application/pdf');
+        headers.set('Content-Disposition', 'inline');
+        headers.set('X-Content-Type-Options', 'nosniff');
+        headers.set('X-Frame-Options', 'ALLOWALL');
+        headers.set('Content-Security-Policy', "frame-ancestors *");
+        
+        return new Response(object.body, { headers });
+      } catch (error) {
+        return new Response(error.message, { status: 500, headers: CORS_HEADERS });
+      }
+    }
+    
+    // ============================================
+    // ROUTE 3: Download File (Premium users only)
+    // GET /download/:fileId?subscribed=true
+    // ============================================
+    if (method === 'GET' && url.pathname.startsWith('/download/')) {
+      const fileId = url.pathname.split('/download/')[1];
+      if (!fileId) {
+        return new Response('File ID required', { status: 400, headers: CORS_HEADERS });
+      }
+      
+      // Check subscription from query param
+      const isSubscribed = url.searchParams.get('subscribed') === 'true';
+      
+      if (!isSubscribed) {
+        return new Response(JSON.stringify({ error: 'Subscription required' }), { 
+          status: 403,
+          headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+        });
+      }
+      
+      const fileKey = `${fileId}.pdf`;
+      
+      try {
+        const object = await env.MY_BUCKET.get(fileKey);
+        if (!object) {
+          return new Response('File not found', { status: 404, headers: CORS_HEADERS });
+        }
+        
+        const headers = new Headers(CORS_HEADERS);
+        object.writeHttpMetadata(headers);
+        headers.set('Content-Type', 'application/pdf');
+        headers.set('Content-Disposition', `attachment; filename="${fileId}.pdf"`);
+        
+        return new Response(object.body, { headers });
+      } catch (error) {
+        return new Response(error.message, { status: 500, headers: CORS_HEADERS });
+      }
+    }
+    
+    // ============================================
+    // ROUTE 4: List Files (Admin only)
+    // GET /list
+    // ============================================
+    if (method === 'GET' && url.pathname === '/list') {
+      const adminKey = request.headers.get('X-Admin-Key');
+      if (adminKey !== ADMIN_SECRET_KEY) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), { 
+          status: 401,
+          headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+        });
+      }
+      
+      try {
+        const objects = await env.MY_BUCKET.list({ prefix: '' });
+        const files = objects.objects
+          .filter(obj => obj.key.endsWith('.pdf'))
+          .map(obj => ({
+            key: obj.key.replace('.pdf', ''),
+            id: obj.key.replace('.pdf', ''),
+            size: obj.size,
+            uploaded: obj.uploaded
+          }));
+        
+        return new Response(JSON.stringify({ success: true, files }), {
+          headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+        });
+      } catch (error) {
+        return new Response(JSON.stringify({ success: false, error: error.message }), {
+          status: 500,
+          headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+    
+    // ============================================
+    // ROUTE 5: Delete File (Admin only)
+    // DELETE /delete/:fileId
+    // ============================================
+    if (method === 'DELETE' && url.pathname.startsWith('/delete/')) {
+      const adminKey = request.headers.get('X-Admin-Key');
+      if (adminKey !== ADMIN_SECRET_KEY) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), { 
+          status: 401,
+          headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+        });
+      }
+      
+      const fileId = url.pathname.split('/delete/')[1];
+      if (!fileId) {
+        return new Response('File ID required', { status: 400, headers: CORS_HEADERS });
+      }
+      
+      const fileKey = `${fileId}.pdf`;
+      
+      try {
+        await env.MY_BUCKET.delete(fileKey);
+        return new Response(JSON.stringify({ success: true, message: `Deleted: ${fileId}` }), {
+          headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+        });
+      } catch (error) {
+        return new Response(JSON.stringify({ success: false, error: error.message }), {
+          status: 500,
+          headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+    
+    // ============================================
+    // ROUTE 6: Legacy / Direct file access
+    // GET /:fileId
+    // ============================================
+    if (method === 'GET' && 
+        url.pathname !== '/upload' && 
+        url.pathname !== '/list' && 
+        !url.pathname.startsWith('/view/') && 
+        !url.pathname.startsWith('/download/') &&
+        !url.pathname.startsWith('/delete/')) {
+      
+      let fileId = decodeURIComponent(url.pathname.slice(1));
+      if (fileId.endsWith('.pdf')) {
+        fileId = fileId.slice(0, -4);
+      }
+      
+      const fileKey = `${fileId}.pdf`;
+      
+      try {
+        const object = await env.MY_BUCKET.get(fileKey);
+        if (!object) {
+          return new Response('File not found', { status: 404, headers: CORS_HEADERS });
+        }
+        
+        const headers = new Headers(CORS_HEADERS);
+        object.writeHttpMetadata(headers);
+        headers.set('Content-Type', 'application/pdf');
+        headers.set('Content-Disposition', 'inline');
+        
+        return new Response(object.body, { headers });
+      } catch (error) {
+        return new Response(error.message, { status: 500, headers: CORS_HEADERS });
+      }
+    }
+    
+    return new Response('Not found', { status: 404, headers: CORS_HEADERS });
+  }
+};

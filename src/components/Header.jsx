@@ -1,13 +1,7 @@
 // src/components/Header.jsx
 
 import React, { useState } from 'react';
-
-import {
-  Link,
-  useNavigate,
-  useLocation
-} from 'react-router-dom';
-
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
 
@@ -23,98 +17,55 @@ import {
   LogOut,
   LogIn,
   Menu,
-  X
+  X,
+  FileText,
+  FileQuestion,
+  HelpCircle
 } from 'lucide-react';
 
 import logo from '../assets/logo.png';
 
 function Header() {
-
   const { user, logout, isSubscribed } = useAuth();
   const { getCartCount } = useCart();
-
   const navigate = useNavigate();
-  const location = useLocation();
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  // LOGOUT
   const handleLogout = async () => {
     await logout();
     navigate('/');
     setMobileMenuOpen(false);
   };
 
-  // LOGIN
   const handleLogin = () => {
     navigate('/login');
     setMobileMenuOpen(false);
   };
 
-  // DESKTOP NAV LINK
-  const NavLink = ({
-    to,
-    icon: Icon,
-    label,
-    onClick
-  }) => (
-
+  const NavLink = ({ to, icon: Icon, label, onClick }) => (
     <Link
       to={to}
       onClick={onClick}
-      className={`flex items-center gap-2 transition py-2 px-3 rounded-lg
-      ${
-        location.pathname === to
-          ? 'text-green-600 bg-green-50'
-          : 'text-gray-700 hover:text-green-600 hover:bg-gray-100'
-      }`}
+      className="nav-link flex items-center gap-2 text-gray-700 hover:text-green-600 transition py-2 px-3 rounded-lg hover:bg-gray-100"
     >
-
       <Icon size={20} />
-
       <span>{label}</span>
-
-    </Link>
-  );
-
-  // MOBILE QUICK ICON
-  const MobileIconLink = ({
-    to,
-    icon: Icon
-  }) => (
-
-    <Link
-      to={to}
-      className={`p-2 rounded-lg transition
-      ${
-        location.pathname === to
-          ? 'text-green-600 bg-green-50'
-          : 'text-gray-700 hover:bg-gray-100'
-      }`}
-    >
-
-      <Icon size={20} />
-
     </Link>
   );
 
   return (
-
     <header className="bg-white shadow-md sticky top-0 z-50 border-b border-gray-200">
 
       <div className="container mx-auto px-3 py-3 max-w-7xl">
 
         <div className="flex items-center justify-between">
 
-          {/* LEFT */}
+          {/* LEFT SECTION */}
           <div className="flex items-center gap-2">
 
-            {/* LOGO */}
-            <Link
-              to="/"
-              className="flex items-center gap-2"
-            >
-
+            {/* Logo */}
+            <Link to="/" className="flex items-center gap-2">
               <img
                 src={logo}
                 alt="Onlibry"
@@ -124,12 +75,11 @@ function Header() {
               <span className="text-xl font-bold text-green-600 hidden sm:inline">
                 Onlibry
               </span>
-
             </Link>
 
           </div>
 
-          {/* DESKTOP NAV */}
+          {/* DESKTOP NAVIGATION */}
           <nav className="hidden md:flex items-center gap-1">
 
             <NavLink
@@ -184,25 +134,45 @@ function Header() {
             {/* MOBILE QUICK NAV */}
             <div className="md:hidden flex items-center gap-0.5">
 
-              <MobileIconLink
+              <Link
                 to="/files"
-                icon={SquareLibrary}
-              />
+                className="p-2 rounded-lg hover:bg-gray-100 transition"
+              >
+                <SquareLibrary
+                  size={20}
+                  className="text-gray-700"
+                />
+              </Link>
 
-              <MobileIconLink
+              <Link
                 to="/folders"
-                icon={Folder}
-              />
+                className="p-2 rounded-lg hover:bg-gray-100 transition"
+              >
+                <Folder
+                  size={20}
+                  className="text-gray-700"
+                />
+              </Link>
 
-              <MobileIconLink
+              <Link
                 to="/mock-tests"
-                icon={SquarePen}
-              />
+                className="p-2 rounded-lg hover:bg-gray-100 transition"
+              >
+                <SquarePen
+                  size={20}
+                  className="text-gray-700"
+                />
+              </Link>
 
-              <MobileIconLink
+              <Link
                 to="/quizzes"
-                icon={NotebookPen}
-              />
+                className="p-2 rounded-lg hover:bg-gray-100 transition"
+              >
+                <NotebookPen
+                  size={20}
+                  className="text-gray-700"
+                />
+              </Link>
 
             </div>
 
@@ -210,15 +180,13 @@ function Header() {
             <Link
               to="/pricing"
               state={{ activeTab: 'cart' }}
-              className={`relative p-2 rounded-lg transition
-              ${
-                location.pathname === '/pricing'
-                  ? 'text-green-600 bg-green-50'
-                  : 'text-gray-700 hover:bg-gray-100'
-              }`}
+              className="relative p-2 rounded-lg hover:bg-gray-100 transition"
             >
 
-              <ShoppingCart size={20} />
+              <ShoppingCart
+                size={20}
+                className="text-gray-700"
+              />
 
               {getCartCount() > 0 && (
                 <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
@@ -248,12 +216,10 @@ function Header() {
                     onClick={handleLogout}
                     className="p-2 rounded-lg hover:bg-gray-100 transition"
                   >
-
                     <LogOut
                       size={20}
                       className="text-red-500"
                     />
-
                   </button>
                 </>
               ) : (
@@ -261,12 +227,10 @@ function Header() {
                   onClick={handleLogin}
                   className="p-2 rounded-lg bg-green-600 hover:bg-green-700 transition"
                 >
-
                   <LogIn
                     size={20}
                     className="text-white"
                   />
-
                 </button>
               )}
 
@@ -275,12 +239,7 @@ function Header() {
             {/* MOBILE MENU BUTTON */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className={`md:hidden p-2 rounded-lg transition
-              ${
-                mobileMenuOpen
-                  ? 'text-green-600 bg-green-50'
-                  : 'hover:bg-gray-100'
-              }`}
+              className="md:hidden p-2 rounded-lg hover:bg-gray-100 transition"
             >
 
               {mobileMenuOpen ? (
@@ -325,7 +284,7 @@ function Header() {
                 onClick={() => setMobileMenuOpen(false)}
               />
 
-              {/* AUTH */}
+              {/* AUTH SECTION */}
               <div className="pt-3 mt-2 border-t border-gray-200">
 
                 {user ? (

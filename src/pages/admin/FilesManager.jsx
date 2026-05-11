@@ -1,5 +1,5 @@
 // src/pages/admin/FilesManager.jsx
-// FIXED - Bulk delete working with single file storage
+// FULLY FIXED - Bulk Update working with GET requests (No CORS issues)
 
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
@@ -35,7 +35,7 @@ function FilesManager() {
     setLoading(true);
     try {
       console.log('📡 Loading ALL files from sheet...');
-      const response = await fetch(`${SHEET_API_URL}?admin=true`);
+      const response = await fetch(`${SHEET_API_URL}?admin=true&t=${Date.now()}`);
       const data = await response.json();
       
       console.log('✅ Raw data received:', data);
@@ -97,27 +97,37 @@ function FilesManager() {
     }
   };
 
-  // Send to Sheet
-  const sendToSheet = async (data) => {
+  // Send to Sheet using GET request (No CORS issues)
+  const sendToSheetGet = async (params) => {
     try {
-      await fetch(SHEET_API_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        body: JSON.stringify(data)
-      });
-      return true;
+      const urlParams = new URLSearchParams(params);
+      const response = await fetch(`${SHEET_API_URL}?${urlParams.toString()}&t=${Date.now()}`);
+      const result = await response.json();
+      console.log(`📥 Response for ${params.action}:`, result);
+      return result;
     } catch (error) {
       console.error('Send to sheet error:', error);
-      return false;
+      return { success: false, error: error.message };
     }
   };
 
-  // 🔥 Delete from Cloudflare R2 (single file)
-  const deleteFromCloudflare = async (fileId) => {
-    if (!fileId) {
-      console.error('No fileId provided for deletion');
-      return false;
+  // Get Editor Data from Sheet
+  const getEditorData = async () => {
+    try {
+      console.log('📡 Fetching editor data from sheet...');
+      const response = await fetch(`${SHEET_API_URL}?action=getEditorData&t=${Date.now()}`);
+      const data = await response.json();
+      console.log('📊 Editor data:', data);
+      return data;
+    } catch (error) {
+      console.error('Error fetching editor data:', error);
+      return { success: false, files: [], error: error.message };
     }
+  };
+
+  // Delete from Cloudflare R2
+  const deleteFromCloudflare = async (fileId) => {
+    if (!fileId) return false;
     
     try {
       console.log(`🗑️ Deleting from Cloudflare R2: ${fileId}`);
@@ -125,130 +135,147 @@ function FilesManager() {
         method: 'DELETE',
         headers: { 'X-Admin-Key': ADMIN_SECRET_KEY }
       });
-      
       const result = await response.json();
       console.log(`Delete response:`, result);
-      
-      if (result.success) {
-        console.log(`✅ Deleted from Cloudflare: ${fileId}`);
-        return true;
-      } else {
-        console.warn(`⚠️ Cloudflare delete failed: ${result.message}`);
-        return false;
-      }
+      return result.success === true;
     } catch (error) {
-      console.error(`❌ Cloudflare delete error for ${fileId}:`, error);
+      console.error('Cloudflare delete error:', error);
       return false;
     }
   };
 
-  // 🔥 BULK UPDATE - Process Editor sheet and delete files marked as 'deleted'
+  // BULK UPDATE - Handle both UPDATE and DELETE from Editor sheet
   const handleBulkUpdateFromSheet = async () => {
     if (!window.confirm('This will update/delete ALL files from "Editor" sheet. Continue?')) return;
     
     setBulkUpdating(true);
-    setMessage({ type: 'info', text: '🔄 Processing Editor sheet...' });
+    setMessage({ type: 'info', text: '🔄 Reading Editor sheet...' });
     
     try {
       const userIp = await getClientIP();
       
-      // Fetch editor sheet data
-      const editorResponse = await fetch(`${SHEET_API_URL}?admin=true`);
-      const editorData = await editorResponse.json();
+      // Get editor data using GET
+      const editorData = await getEditorData();
       
-      console.log('📊 Editor data:', editorData);
+      console.log('📊 Full editor data:', editorData);
       
-      if (editorData.success && editorData.files && editorData.files.length > 0) {
-        console.log(`📋 Total rows in editor: ${editorData.files.length}`);
-        
-        editorData.files.forEach((f, idx) => {
-          console.log(`   Row ${idx + 1}: fileId="${f.fileId}", status="${f.status}"`);
-        });
-        
-        // 🔥 FIX: Get files marked for deletion (check both 'status' and 'Status' fields)
-        const toDelete = editorData.files.filter(f => {
-          const status = f.status || f.Status;
-          return status && status.toString().toLowerCase() === 'deleted';
-        });
-        
-        console.log(`🗑️ Files marked for deletion: ${toDelete.length}`);
-        
-        if (toDelete.length > 0) {
-          setMessage({ type: 'info', text: `🗑️ Deleting ${toDelete.length} files from Cloudflare...` });
-          
-          for (const file of toDelete) {
-            const fileId = file.fileId;
-            console.log(`   Attempting to delete: ${fileId}`);
-            
-            if (fileId) {
-              try {
-                // Delete from Cloudflare
-                const deleteRes = await fetch(`${WORKER_URL}/delete/${encodeURIComponent(fileId)}`, {
-                  method: 'DELETE',
-                  headers: { 'X-Admin-Key': ADMIN_SECRET_KEY }
-                });
-                const deleteResult = await deleteRes.json();
-                console.log(`   Delete result for ${fileId}:`, deleteResult);
-                
-                if (deleteResult.success) {
-                  console.log(`   ✅ Deleted: ${fileId}`);
-                } else {
-                  console.warn(`   ⚠️ Failed to delete ${fileId}: ${deleteResult.message}`);
-                }
-              } catch (err) {
-                console.error(`   ❌ Error deleting ${fileId}:`, err);
-              }
-            } else {
-              console.warn(`   ⚠️ No fileId found for row:`, file);
-            }
-          }
-        } else {
-          console.log('📝 No files marked with status="deleted"');
-        }
-        
-        // 🔥 Also process files marked for update
-        const toUpdate = editorData.files.filter(f => {
-          const status = f.status || f.Status;
-          return status && status.toString().toLowerCase() === 'update';
-        });
-        
-        console.log(`📝 Files marked for update: ${toUpdate.length}`);
-        
-        if (toUpdate.length > 0) {
-          setMessage({ type: 'info', text: `📝 Updating ${toUpdate.length} files metadata...` });
-          
-          for (const file of toUpdate) {
-            const fileId = file.fileId;
-            console.log(`   Updating: ${fileId}`);
-            
-            if (fileId) {
-              // Update metadata in sheet
-              const sheetData = {
-                action: 'update',
-                fileId: fileId,
-                fileName: file.fileName || file.name,
-                price: file.price || 29,
-                isPremium: file.isPremium === 'true' || file.isPremium === true,
-                showOnWebsite: file.showOnWebsite === 'true' || file.showOnWebsite === true,
-                tags: file.tags || '',
-                updatedBy: user?.email,
-                updatedByName: user?.displayName || user?.email?.split('@')[0],
-                userIp: userIp,
-                userAgent: navigator.userAgent
-              };
-              await sendToSheet(sheetData);
-            }
-          }
-        }
-        
-      } else {
-        console.log('📭 No data found in editor sheet');
+      if (!editorData.success) {
+        throw new Error(editorData.error || 'Failed to read Editor sheet');
       }
       
-      // Clear editor sheet after processing
-      await sendToSheet({ action: 'clearEditor' });
+      const rows = editorData.files || [];
+      console.log(`📋 Total rows in editor: ${rows.length}`);
       
-      setMessage({ type: 'success', text: '✅ Bulk update completed!' });
+      if (rows.length === 0) {
+        setMessage({ type: 'info', text: '📭 No data found in Editor sheet.' });
+        setBulkUpdating(false);
+        return;
+      }
+      
+      let updated = 0;
+      let deleted = 0;
+      let failed = 0;
+      
+      // Process each row
+      for (const row of rows) {
+        const fileId = row.fileId;
+        if (!fileId) continue;
+        
+        const status = (row.status || '').toLowerCase();
+        console.log(`Processing: ${fileId}, status: ${status || 'update'}`);
+        
+        // DELETE operation
+        if (status === 'deleted') {
+          console.log(`🗑️ Deleting file: ${fileId}`);
+          const cloudflareDeleted = await deleteFromCloudflare(fileId);
+          
+          if (cloudflareDeleted) {
+            const result = await sendToSheetGet({
+              action: 'delete',
+              fileId: fileId,
+              fileName: row.fileName || 'Unknown',
+              deletedBy: user?.email || 'admin',
+              deletedByName: user?.displayName || 'Admin',
+              userIp: userIp,
+              userAgent: navigator.userAgent,
+              reason: 'Bulk delete from Editor sheet'
+            });
+            
+            if (result.success) {
+              deleted++;
+              console.log(`✅ Deleted: ${fileId}`);
+            } else {
+              failed++;
+              console.log(`❌ Delete failed: ${fileId}`);
+            }
+          } else {
+            failed++;
+            console.log(`❌ Cloudflare delete failed: ${fileId}`);
+          }
+        }
+        
+        // UPDATE operation (status = 'update' or no status)
+        else {
+          // Convert boolean values
+          let isPremiumVal = false;
+          const premiumStr = String(row.isPremium || '').toLowerCase();
+          if (premiumStr === 'true' || premiumStr === 'yes' || premiumStr === '1') {
+            isPremiumVal = true;
+          }
+          
+          let showOnWebsiteVal = true;
+          const showStr = String(row.showOnWebsite || '').toLowerCase();
+          if (showStr === 'false' || showStr === 'no' || showStr === '0') {
+            showOnWebsiteVal = false;
+          }
+          
+          let priceVal = 29;
+          if (row.price && !isNaN(parseInt(row.price))) {
+            priceVal = parseInt(row.price);
+          }
+          
+          console.log(`📝 Updating file: ${fileId}, Name: ${row.fileName}, Price: ${priceVal}, Premium: ${isPremiumVal}, Visible: ${showOnWebsiteVal}`);
+          
+          const result = await sendToSheetGet({
+            action: 'update',
+            fileId: fileId,
+            fileName: row.fileName || '',
+            price: priceVal,
+            isPremium: isPremiumVal ? 'true' : 'false',
+            showOnWebsite: showOnWebsiteVal ? 'true' : 'false',
+            tags: row.tags || '',
+            updatedBy: user?.email || 'admin',
+            updatedByName: user?.displayName || 'Admin',
+            userIp: userIp,
+            userAgent: navigator.userAgent
+          });
+          
+          if (result.success) {
+            updated++;
+            console.log(`✅ Updated: ${fileId}`);
+          } else {
+            failed++;
+            console.log(`❌ Update failed: ${fileId}`, result);
+          }
+        }
+      }
+      
+      // Clear the editor sheet after processing
+      console.log('🧹 Clearing Editor sheet...');
+      await sendToSheetGet({ action: 'clearEditor' });
+      
+      let resultText = '';
+      if (updated > 0) resultText += `✅ Updated: ${updated} files. `;
+      if (deleted > 0) resultText += `🗑️ Deleted: ${deleted} files. `;
+      if (failed > 0) resultText += `❌ Failed: ${failed}. `;
+      
+      if (updated === 0 && deleted === 0 && failed === 0) {
+        resultText = '📭 No changes were made. Make sure Editor sheet has data with fileId column.';
+      } else {
+        resultText += ' Refreshing files...';
+      }
+      
+      setMessage({ type: 'success', text: resultText });
       setTimeout(() => loadFiles(), 2000);
       
     } catch (error) {
@@ -265,15 +292,19 @@ function FilesManager() {
     
     setMessage({ type: 'info', text: '🔄 Clearing Editor sheet...' });
     try {
-      await sendToSheet({ action: 'clearEditor' });
-      setMessage({ type: 'success', text: '✅ Editor sheet cleared!' });
+      const result = await sendToSheetGet({ action: 'clearEditor' });
+      if (result.success) {
+        setMessage({ type: 'success', text: '✅ Editor sheet cleared!' });
+      } else {
+        setMessage({ type: 'error', text: '❌ Failed to clear Editor sheet: ' + (result.error || 'Unknown error') });
+      }
     } catch (error) {
       console.error('Clear editor error:', error);
-      setMessage({ type: 'error', text: '❌ Failed to clear Editor sheet' });
+      setMessage({ type: 'error', text: '❌ Failed to clear Editor sheet: ' + error.message });
     }
   };
 
-  // Upload file (placeholder - you can implement upload modal)
+  // Upload file
   const handleUpload = async () => {
     if (!selectedFile) {
       setMessage({ type: 'error', text: 'Please select a file' });
@@ -300,24 +331,25 @@ function FilesManager() {
         throw new Error(uploadResult.error);
       }
 
-      const sheetData = {
+      const userIp = await getClientIP();
+      
+      await sendToSheetGet({
         action: 'add',
         fileId: uploadResult.fileId,
         fileName: editForm.name || selectedFile.name,
         fileSize: selectedFile.size,
         mimeType: selectedFile.type,
         price: editForm.price,
-        isPremium: editForm.isPremium,
-        showOnWebsite: editForm.showOnWebsite,
+        isPremium: editForm.isPremium ? 'true' : 'false',
+        showOnWebsite: editForm.showOnWebsite ? 'true' : 'false',
         tags: editForm.tags || '',
         cloudflareKey: uploadResult.fileId,
-        uploadedBy: user?.email,
-        uploadedByName: user?.displayName || user?.email?.split('@')[0],
-        userIp: await getClientIP(),
+        uploadedBy: user?.email || 'admin',
+        uploadedByName: user?.displayName || 'Admin',
+        userIp: userIp,
         userAgent: navigator.userAgent
-      };
-
-      await sendToSheet(sheetData);
+      });
+      
       setMessage({ type: 'success', text: '✅ File uploaded successfully!' });
       
       setSelectedFile(null);
@@ -338,21 +370,22 @@ function FilesManager() {
     setMessage({ type: 'info', text: 'Updating file metadata...' });
 
     try {
-      const sheetData = {
+      const userIp = await getClientIP();
+      
+      await sendToSheetGet({
         action: 'update',
         fileId: file.cloudflareKey || file.id,
         fileName: editForm.name,
         price: editForm.price,
-        isPremium: editForm.isPremium,
-        showOnWebsite: editForm.showOnWebsite,
+        isPremium: editForm.isPremium ? 'true' : 'false',
+        showOnWebsite: editForm.showOnWebsite ? 'true' : 'false',
         tags: editForm.tags,
-        updatedBy: user?.email,
-        updatedByName: user?.displayName || user?.email?.split('@')[0],
-        userIp: await getClientIP(),
+        updatedBy: user?.email || 'admin',
+        updatedByName: user?.displayName || 'Admin',
+        userIp: userIp,
         userAgent: navigator.userAgent
-      };
-
-      await sendToSheet(sheetData);
+      });
+      
       setMessage({ type: 'success', text: '✅ File updated successfully!' });
       setEditingFile(null);
       loadFiles();
@@ -375,17 +408,18 @@ function FilesManager() {
       const deleted = await deleteFromCloudflare(fileId);
       
       if (deleted) {
-        const sheetData = {
+        const userIp = await getClientIP();
+        
+        await sendToSheetGet({
           action: 'delete',
           fileId: fileId,
           fileName: file.name,
-          deletedBy: user?.email,
-          deletedByName: user?.displayName || user?.email?.split('@')[0],
-          userIp: await getClientIP(),
+          deletedBy: user?.email || 'admin',
+          deletedByName: user?.displayName || 'Admin',
+          userIp: userIp,
           userAgent: navigator.userAgent,
           reason: 'Manual delete from admin panel'
-        };
-        await sendToSheet(sheetData);
+        });
         
         setMessage({ type: 'success', text: '✅ File deleted successfully!' });
         loadFiles();
@@ -414,7 +448,7 @@ function FilesManager() {
         <h2 className="text-xl font-bold text-gray-800 dark:text-white">
           📁 Files Manager
         </h2>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <button
             onClick={() => setShowUploadModal(true)}
             className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
@@ -515,7 +549,7 @@ function FilesManager() {
                           onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
                           className="w-full px-2 py-1 border rounded"
                         />
-                       </td>
+                      </td>
                       <td className="p-2 text-gray-500 text-xs">
                         {(file.size / 1024).toFixed(2)} KB
                        </td>
@@ -640,10 +674,10 @@ function FilesManager() {
                        </td>
                     </>
                   )}
-                 </tr>
+                </tr>
               ))}
             </tbody>
-           </table>
+          </table>
           
           {filteredFiles.length === 0 && (
             <div className="text-center py-12 text-gray-500">

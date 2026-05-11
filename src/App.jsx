@@ -1,5 +1,5 @@
 // src/App.jsx
-// UPDATED - Cleaned up, removed unused imports, added environment variables
+// UPDATED - Added Blog CMS Routes
 
 import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
@@ -29,6 +29,13 @@ import QuizExamPage from './pages/QuizExamPage';
 import QuizResultsPage from './pages/QuizResultsPage';
 import ViewerPage from './pages/ViewerPage';
 import NotFoundPage from './pages/NotFoundPage';
+
+// Blog Pages
+import BlogHome from './blogger/pages/BlogHome';
+import BlogPage from './blogger/pages/BlogPage';
+import BlogDashboard from './blogger/pages/BlogDashboard';
+import CreatePost from './blogger/pages/CreatePost';
+import EditPost from './blogger/pages/EditPost';
 
 // Admin Pages
 import AdminDashboard from './pages/admin/AdminDashboard';
@@ -64,6 +71,36 @@ function App() {
                 <Route path="/quizzes" element={<QuizzesPage />} />
                 <Route path="/quiz/:quizName" element={<QuizExamPage />} />
                 <Route path="/quiz-results" element={<QuizResultsPage />} />
+
+                {/* Blog Routes */}
+                <Route path="/blog" element={<BlogHome />} />
+                <Route path="/blog/:slug" element={<BlogPage />} />
+
+                {/* Protected Blog Routes */}
+                <Route
+                  path="/blog/dashboard"
+                  element={
+                    <ProtectedRoute>
+                      <BlogDashboard />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/blog/create"
+                  element={
+                    <ProtectedRoute>
+                      <CreatePost />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/blog/edit/:id"
+                  element={
+                    <ProtectedRoute>
+                      <EditPost />
+                    </ProtectedRoute>
+                  }
+                />
 
                 {/* Protected Routes */}
                 <Route

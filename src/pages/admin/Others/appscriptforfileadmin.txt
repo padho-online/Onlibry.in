@@ -1,0 +1,612 @@
+// Onlibry - Complete Google Sheet API
+// FULLY FIXED - Bulk delete from Editor sheet working with Cloudflare
+
+const MAIN_SHEET_NAME = "Files";
+const LOGS_SHEET_NAME = "UploadLogs";
+const STATS_SHEET_NAME = "ActivityStats";
+const EDITOR_SHEET_NAME = "Editor";
+const FOLDERS_SHEET_NAME = "Folders";
+const WEBSITE_URL = "https://onlibry.in";
+const WORKER_URL = "https://onlibry.mdhabibul12212141.workers.dev";
+
+// ============================================
+// HELPER: Create JSON response with CORS headers
+// ============================================
+function createResponse(data) {
+  return ContentService
+    .createTextOutput(JSON.stringify(data))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+// ============================================
+// MAIN GET FUNCTION - Handles all GET requests
+// ============================================
+function doGet(e) {
+  const action = e?.parameter?.action;
+  
+  // 🔥 FIXED: Handle getEditorData action
+  if (action === "getEditorData") {
+    return getEditorData();
+  }
+  
+  // Handle folders request
+  if (action === "getFolders") {
+    return getFolders();
+  }
+  
+  // Default: Get files from MAIN sheet
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(MAIN_SHEET_NAME);
+  if (!sheet) {
+    return createResponse({ success: false, error: "Sheet not found" });
+  }
+  
+  const data = sheet.getDataRange().getValues();
+  const rows = data.slice(1);
+  
+  const isAdminRequest = e?.parameter?.admin === "true";
+  
+  const files = [];
+  
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const status = row[12];
+    
+    if (status === "deleted") continue;
+    
+    if (!isAdminRequest) {
+      const showOnWebsite = row[6] === true || row[6] === "TRUE";
+      if (!showOnWebsite) continue;
+    }
+    
+    let tagsObject = {};
+    let tagsString = "";
+    
+    if (row[7]) {
+      tagsString = row[7].toString();
+      const tagPairs = tagsString.split(',');
+      tagPairs.forEach(pair => {
+        const trimmedPair = pair.trim();
+        if (trimmedPair.includes(':')) {
+          const colonIndex = trimmedPair.indexOf(':');
+          const key = trimmedPair.substring(0, colonIndex).trim();
+          const value = trimmedPair.substring(colonIndex + 1).trim();
+          if (key && value) {
+            if (!tagsObject[key]) tagsObject[key] = [];
+            tagsObject[key].push(value);
+          }
+        }
+      });
+    }
+    
+    files.push({
+      id: row[0],
+      name: row[1],
+      size: row[2],
+      mimeType: row[3],
+      price: row[4],
+      isPremium: row[5] === true || row[5] === "TRUE",
+      showOnWebsite: row[6] === true || row[6] === "TRUE",
+      tags: tagsObject,
+      tagsString: tagsString,
+      createdAt: row[8],
+      cloudflareKey: row[9],
+      actualFileLink: row[10],
+      websiteViewLink: row[11]
+    });
+  }
+  
+  return createResponse({ success: true, files: files });
+}
+
+// ============================================
+// GET FOLDERS from sheet (Read-Only)
+// ============================================
+function getFolders() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(FOLDERS_SHEET_NAME);
+  
+  if (!sheet) {
+    const newSheet = SpreadsheetApp.getActiveSpreadsheet().insertSheet(FOLDERS_SHEET_NAME);
+    newSheet.appendRow(["level1", "level2", "level3", "level4", "level5", "level6", "level7", "level8", "level9", "level10", "link"]);
+    return createResponse({ success: true, folders: [] });
+  }
+  
+  const data = sheet.getDataRange().getValues();
+  const rows = data.slice(1);
+  
+  const folders = [];
+  
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row[0] && !row[1] && !row[2] && !row[3] && !row[4] && !row[5] && !row[6] && !row[7] && !row[8] && !row[9]) {
+      continue;
+    }
+    
+    folders.push({
+      level1: row[0] || "",
+      level2: row[1] || "",
+      level3: row[2] || "",
+      level4: row[3] || "",
+      level5: row[4] || "",
+      level6: row[5] || "",
+      level7: row[6] || "",
+      level8: row[7] || "",
+      level9: row[8] || "",
+      level10: row[9] || "",
+      link: row[10] || ""
+    });
+  }
+  
+  return createResponse({ success: true, folders: folders });
+}
+
+// ============================================
+// 🔥 FIXED: GET EDITOR DATA function
+// ============================================
+function getEditorData() {
+  try {
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(EDITOR_SHEET_NAME);
+    
+    // If sheet doesn't exist, create it
+    if (!sheet) {
+      const newSheet = SpreadsheetApp.getActiveSpreadsheet().insertSheet(EDITOR_SHEET_NAME);
+      newSheet.appendRow(["fileId", "fileName", "fileSize", "mimeType", "price", "isPremium", "showOnWebsite", "tags", "status"]);
+      return createResponse({ success: true, files: [] });
+    }
+    
+    const data = sheet.getDataRange().getValues();
+    
+    if (!data || data.length <= 1) {
+      return createResponse({ success: true, files: [] });
+    }
+    
+    const rows = data.slice(1);
+    const validRows = [];
+    
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const fileId = row[0];
+      // Skip empty rows
+      if (fileId && fileId.toString().trim() !== "" && fileId !== "fileId") {
+        validRows.push({
+          fileId: row[0] ? row[0].toString() : "",
+          fileName: row[1] ? row[1].toString() : "",
+          fileSize: row[2] ? row[2].toString() : "",
+          mimeType: row[3] ? row[3].toString() : "",
+          price: row[4] ? row[4].toString() : "",
+          isPremium: row[5] ? row[5].toString() : "",
+          showOnWebsite: row[6] ? row[6].toString() : "",
+          tags: row[7] ? row[7].toString() : "",
+          status: row[8] ? row[8].toString().toLowerCase() : ""
+        });
+      }
+    }
+    
+    Logger.log(`📊 Editor data: Found ${validRows.length} rows`);
+    
+    return createResponse({ success: true, files: validRows });
+    
+  } catch (error) {
+    Logger.log(`❌ Error in getEditorData: ${error.toString()}`);
+    return createResponse({ success: false, error: error.toString() });
+  }
+}
+
+// ============================================
+// POST - Handle all actions (Admin operations)
+// ============================================
+function doPost(e) {
+  try {
+    const data = JSON.parse(e.postData.contents);
+    const action = data.action;
+    
+    switch(action) {
+      case "add":
+        return addFile(data);
+      case "update":
+        return updateFile(data);
+      case "delete":
+        return deleteFile(data);
+      case "log":
+        return addLog(data);
+      case "bulkUpdate":
+        return bulkUpdateFromEditor(data);
+      case "getEditorData":
+        return getEditorData();
+      case "clearEditor":
+        return clearEditor();
+      case "incrementView":
+        return incrementViewCount(data);
+      case "incrementDownload":
+        return incrementDownloadCount(data);
+      default:
+        return createResponse({ success: false, message: "Unknown action: " + action });
+    }
+  } catch (error) {
+    return createResponse({ success: false, error: error.toString() });
+  }
+}
+
+// ============================================
+// ADD NEW FILE
+// ============================================
+function addFile(data) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(MAIN_SHEET_NAME);
+  
+  const websiteViewLink = `${WEBSITE_URL}/viewer/${data.cloudflareKey}`;
+  const actualFileLink = `${WORKER_URL}/${encodeURIComponent(data.cloudflareKey)}`;
+  
+  let isPremiumValue = data.isPremium === true || data.isPremium === "true" || data.isPremium === "TRUE";
+  let showOnWebsiteValue = data.showOnWebsite === true || data.showOnWebsite === "true" || data.showOnWebsite === "TRUE";
+  
+  let tagsValue = "";
+  if (data.tags) {
+    tagsValue = typeof data.tags === 'string' ? data.tags : JSON.stringify(data.tags);
+  }
+  
+  sheet.appendRow([
+    data.fileId,
+    data.fileName,
+    data.fileSize,
+    data.mimeType,
+    Number(data.price) || 0,
+    isPremiumValue,
+    showOnWebsiteValue,
+    tagsValue,
+    new Date().toISOString(),
+    data.cloudflareKey,
+    actualFileLink,
+    websiteViewLink,
+    "active"
+  ]);
+  
+  addLog({
+    fileId: data.fileId,
+    fileName: data.fileName,
+    action: "upload",
+    performedBy: data.uploadedBy,
+    performedByName: data.uploadedByName,
+    changes: `Initial upload. Price: ₹${data.price || 0}, Premium: ${isPremiumValue}`,
+    ipAddress: data.userIp,
+    userAgent: data.userAgent
+  });
+  
+  initStats(data.fileId, data.fileName);
+  
+  return createResponse({ success: true, message: "File added successfully", websiteViewLink: websiteViewLink });
+}
+
+// ============================================
+// UPDATE SINGLE FILE
+// ============================================
+function updateFile(data) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(MAIN_SHEET_NAME);
+  const range = sheet.getDataRange();
+  const values = range.getValues();
+  
+  let changes = [];
+  
+  for (let i = 1; i < values.length; i++) {
+    if (values[i][0] === data.fileId) {
+      const oldName = values[i][1];
+      const oldPrice = values[i][4];
+      const oldPremium = values[i][5];
+      const oldVisible = values[i][6];
+      const oldTags = values[i][7];
+      
+      if (data.fileName && data.fileName !== oldName) changes.push(`name: "${oldName}" → "${data.fileName}"`);
+      if (data.price !== undefined && Number(data.price) !== Number(oldPrice)) changes.push(`price: ₹${oldPrice} → ₹${data.price}`);
+      
+      let newPremium = oldPremium;
+      if (data.isPremium !== undefined) {
+        newPremium = data.isPremium === true || data.isPremium === "true" || data.isPremium === "TRUE";
+        if (newPremium !== oldPremium) changes.push(`premium: ${oldPremium ? "Yes" : "No"} → ${newPremium ? "Yes" : "No"}`);
+      }
+      
+      let newVisible = oldVisible;
+      if (data.showOnWebsite !== undefined) {
+        newVisible = data.showOnWebsite === true || data.showOnWebsite === "true" || data.showOnWebsite === "TRUE";
+        if (newVisible !== oldVisible) changes.push(`visibility: ${oldVisible ? "Visible" : "Hidden"} → ${newVisible ? "Visible" : "Hidden"}`);
+      }
+      
+      let newTags = oldTags;
+      if (data.tags !== undefined && data.tags !== oldTags) {
+        newTags = data.tags;
+        changes.push(`tags: "${oldTags}" → "${newTags}"`);
+      }
+      
+      if (data.fileName) sheet.getRange(i+1, 2).setValue(data.fileName);
+      if (data.price !== undefined) sheet.getRange(i+1, 5).setValue(Number(data.price));
+      if (data.isPremium !== undefined) sheet.getRange(i+1, 6).setValue(newPremium);
+      if (data.showOnWebsite !== undefined) sheet.getRange(i+1, 7).setValue(newVisible);
+      if (data.tags !== undefined) sheet.getRange(i+1, 8).setValue(newTags);
+      
+      break;
+    }
+  }
+  
+  if (changes.length > 0) {
+    addLog({
+      fileId: data.fileId,
+      fileName: data.fileName,
+      action: "edit",
+      performedBy: data.updatedBy,
+      performedByName: data.updatedByName,
+      changes: changes.join(" | "),
+      ipAddress: data.userIp,
+      userAgent: data.userAgent
+    });
+  }
+  
+  return createResponse({ success: true, message: "File updated", changes: changes });
+}
+
+// ============================================
+// DELETE FILE (Soft delete - mark as deleted)
+// ============================================
+function deleteFile(data) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(MAIN_SHEET_NAME);
+  const range = sheet.getDataRange();
+  const values = range.getValues();
+  
+  for (let i = 1; i < values.length; i++) {
+    if (values[i][0] === data.fileId) {
+      sheet.getRange(i+1, 13).setValue("deleted");
+      break;
+    }
+  }
+  
+  addLog({
+    fileId: data.fileId,
+    fileName: data.fileName,
+    action: "delete",
+    performedBy: data.deletedBy,
+    performedByName: data.deletedByName,
+    changes: `File deleted. Reason: ${data.reason || "Manual delete"}`,
+    ipAddress: data.userIp,
+    userAgent: data.userAgent
+  });
+  
+  return createResponse({ success: true, message: "File deleted" });
+}
+
+// ============================================
+// BULK UPDATE FROM EDITOR SHEET
+// ============================================
+function bulkUpdateFromEditor(data) {
+  const editorSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(EDITOR_SHEET_NAME);
+  const mainSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(MAIN_SHEET_NAME);
+  
+  if (!editorSheet) {
+    return createResponse({ success: false, error: "Editor sheet not found" });
+  }
+  
+  const editorData = editorSheet.getDataRange().getValues();
+  const rows = editorData.slice(1);
+  
+  let updatedCount = 0;
+  let deletedCount = 0;
+  let notFoundCount = 0;
+  let errors = [];
+  const updatedFiles = [];
+  const deletedFiles = [];
+  
+  const mainData = mainSheet.getDataRange().getValues();
+  
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const fileId = row[0];
+    
+    if (!fileId || fileId === "" || fileId === "fileId") continue;
+    
+    let foundRowIndex = -1;
+    for (let j = 1; j < mainData.length; j++) {
+      if (mainData[j][0] === fileId) {
+        foundRowIndex = j;
+        break;
+      }
+    }
+    
+    if (foundRowIndex === -1) {
+      notFoundCount++;
+      errors.push(`File ID ${fileId} not found`);
+      continue;
+    }
+    
+    const newStatus = row[8] !== undefined && row[8] !== "" ? row[8].toString().toLowerCase() : null;
+    
+    if (newStatus === "deleted") {
+      const fileName = mainData[foundRowIndex][1];
+      mainSheet.getRange(foundRowIndex + 1, 13).setValue("deleted");
+      deletedCount++;
+      deletedFiles.push({ fileId, fileName });
+      
+      addLog({
+        fileId: fileId,
+        fileName: fileName,
+        action: "bulk_delete",
+        performedBy: data.performedBy || "admin",
+        performedByName: data.performedByName || "Admin",
+        changes: "File deleted via Editor sheet",
+        ipAddress: data.userIp || "",
+        userAgent: data.userAgent || ""
+      });
+      continue;
+    }
+    
+    const oldName = mainData[foundRowIndex][1];
+    const oldPrice = mainData[foundRowIndex][4];
+    const oldPremium = mainData[foundRowIndex][5];
+    const oldVisible = mainData[foundRowIndex][6];
+    const oldTags = mainData[foundRowIndex][7];
+    
+    const newName = row[1] !== undefined && row[1] !== "" ? row[1] : oldName;
+    const newPrice = row[4] !== undefined && row[4] !== "" ? Number(row[4]) : oldPrice;
+    
+    let newPremium = oldPremium;
+    if (row[5] !== undefined && row[5] !== "") {
+      newPremium = row[5] === true || row[5] === "TRUE" || row[5] === "true";
+    }
+    
+    let newVisible = oldVisible;
+    if (row[6] !== undefined && row[6] !== "") {
+      newVisible = row[6] === true || row[6] === "TRUE" || row[6] === "true";
+    }
+    
+    const newTags = row[7] !== undefined && row[7] !== "" ? row[7] : oldTags;
+    
+    let changes = [];
+    if (newName !== oldName) changes.push(`name: "${oldName}" → "${newName}"`);
+    if (Number(newPrice) !== Number(oldPrice)) changes.push(`price: ₹${oldPrice} → ₹${newPrice}`);
+    if (newPremium !== oldPremium) changes.push(`premium: ${oldPremium ? "Yes" : "No"} → ${newPremium ? "Yes" : "No"}`);
+    if (newVisible !== oldVisible) changes.push(`visibility: ${oldVisible ? "Visible" : "Hidden"} → ${newVisible ? "Visible" : "Hidden"}`);
+    if (newTags !== oldTags) changes.push(`tags: "${oldTags}" → "${newTags}"`);
+    
+    if (changes.length > 0) {
+      if (newName !== oldName) mainSheet.getRange(foundRowIndex + 1, 2).setValue(newName);
+      if (Number(newPrice) !== Number(oldPrice)) mainSheet.getRange(foundRowIndex + 1, 5).setValue(newPrice);
+      if (newPremium !== oldPremium) mainSheet.getRange(foundRowIndex + 1, 6).setValue(newPremium);
+      if (newVisible !== oldVisible) mainSheet.getRange(foundRowIndex + 1, 7).setValue(newVisible);
+      if (newTags !== oldTags) mainSheet.getRange(foundRowIndex + 1, 8).setValue(newTags);
+      
+      addLog({
+        fileId: fileId,
+        fileName: newName,
+        action: "bulk_edit",
+        performedBy: data.performedBy || "admin",
+        performedByName: data.performedByName || "Admin",
+        changes: changes.join(" | "),
+        ipAddress: data.userIp || "",
+        userAgent: data.userAgent || ""
+      });
+      updatedCount++;
+      updatedFiles.push({ fileId, changes });
+    }
+  }
+  
+  if (updatedCount > 0 || deletedCount > 0 || notFoundCount > 0) {
+    clearEditorContent();
+  }
+  
+  return createResponse({ 
+    success: true, 
+    updatedCount: updatedCount,
+    deletedCount: deletedCount,
+    notFoundCount: notFoundCount,
+    errors: errors,
+    updatedFiles: updatedFiles,
+    deletedFiles: deletedFiles,
+    message: `Updated ${updatedCount} files. Deleted ${deletedCount} files. ${notFoundCount} files not found.`
+  });
+}
+
+// ============================================
+// CLEAR EDITOR SHEET (POST request)
+// ============================================
+function clearEditor() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(EDITOR_SHEET_NAME);
+  if (!sheet) {
+    return createResponse({ success: false, error: "Editor sheet not found" });
+  }
+  
+  const lastRow = sheet.getLastRow();
+  if (lastRow > 1) {
+    sheet.deleteRows(2, lastRow - 1);
+  }
+  
+  return createResponse({ success: true, message: "Editor sheet cleared" });
+}
+
+// ============================================
+// Helper: Clear editor content (no response)
+// ============================================
+function clearEditorContent() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(EDITOR_SHEET_NAME);
+  if (!sheet) return;
+  const lastRow = sheet.getLastRow();
+  if (lastRow > 1) {
+    sheet.deleteRows(2, lastRow - 1);
+  }
+}
+
+// ============================================
+// ADD LOG TO UploadLogs SHEET
+// ============================================
+function addLog(data) {
+  let sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(LOGS_SHEET_NAME);
+  
+  if (!sheet) {
+    sheet = SpreadsheetApp.getActiveSpreadsheet().insertSheet(LOGS_SHEET_NAME);
+    sheet.appendRow(["logId", "fileId", "fileName", "action", "performedBy", "performedByName", "performedAt", "changes", "ipAddress", "userAgent"]);
+  }
+  
+  const logId = `log_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+  
+  sheet.appendRow([
+    logId,
+    data.fileId || "",
+    data.fileName || "",
+    data.action || "unknown",
+    data.performedBy || "unknown",
+    data.performedByName || "unknown",
+    new Date().toISOString(),
+    data.changes || "",
+    data.ipAddress || "",
+    data.userAgent || ""
+  ]);
+  
+  return createResponse({ success: true, logId: logId });
+}
+
+// ============================================
+// INITIALIZE STATS
+// ============================================
+function initStats(fileId, fileName) {
+  let sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(STATS_SHEET_NAME);
+  
+  if (!sheet) {
+    sheet = SpreadsheetApp.getActiveSpreadsheet().insertSheet(STATS_SHEET_NAME);
+    sheet.appendRow(["fileId", "fileName", "viewCount", "downloadCount", "editCount", "lastViewedAt", "lastDownloadedAt"]);
+  }
+  
+  sheet.appendRow([fileId, fileName, 0, 0, 0, "", ""]);
+}
+
+// ============================================
+// INCREMENT VIEW COUNT
+// ============================================
+function incrementViewCount(data) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(STATS_SHEET_NAME);
+  if (!sheet) return;
+  
+  const range = sheet.getDataRange();
+  const values = range.getValues();
+  
+  for (let i = 1; i < values.length; i++) {
+    if (values[i][0] === data.fileId) {
+      const currentCount = Number(values[i][2]) || 0;
+      sheet.getRange(i+1, 3).setValue(currentCount + 1);
+      sheet.getRange(i+1, 6).setValue(new Date().toISOString());
+      break;
+    }
+  }
+}
+
+// ============================================
+// INCREMENT DOWNLOAD COUNT
+// ============================================
+function incrementDownloadCount(data) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(STATS_SHEET_NAME);
+  if (!sheet) return;
+  
+  const range = sheet.getDataRange();
+  const values = range.getValues();
+  
+  for (let i = 1; i < values.length; i++) {
+    if (values[i][0] === data.fileId) {
+      const currentCount = Number(values[i][3]) || 0;
+      sheet.getRange(i+1, 4).setValue(currentCount + 1);
+      sheet.getRange(i+1, 7).setValue(new Date().toISOString());
+      break;
+    }
+  }
+}

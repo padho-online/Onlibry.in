@@ -5,6 +5,7 @@ import { PDFDocument, rgb, StandardFonts, degrees } from 'pdf-lib';
 
 const WORKER_URL = import.meta.env.VITE_CLOUDFLARE_WORKER_URL;
 const ADMIN_KEY = import.meta.env.VITE_CLOUDFLARE_ADMIN_KEY || 'Habibul@812922112';
+const WEBSITE_URL = 'https://Onlibry.in';
 
 // ============================================
 // Add Complete Watermark to PDF (Single Version)
@@ -23,37 +24,45 @@ async function addWatermarkToPDF(fileBuffer, fileName) {
     const pageNumber = i + 1;
     
     // ============================================
-    // 1. TOP-RIGHT STRIP - Light Orange
+    // 1. TOP-LEFT STRIP - Full width white header background
     // ============================================
-    const stripText = "File from Onlibry.in";
-    const stripFontSize = 9;
-    const textWidth = boldFont.widthOfTextAtSize(stripText, stripFontSize);
-    const stripPadding = 12;
-    const stripWidth = textWidth + stripPadding * 2;
-    const stripHeight = 22;
-    const stripX = width - stripWidth - 8;
-    const stripY = height - stripHeight - 8;
+    const headerHeight = 35;
+    const headerY = height - headerHeight;
     
+    // Draw white background strip that covers the entire header area
     page.drawRectangle({
-      x: stripX,
-      y: stripY,
-      width: stripWidth,
-      height: stripHeight,
-      color: rgb(1, 0.85, 0.7),
+      x: 0,
+      y: headerY,
+      width: width,
+      height: headerHeight,
+      color: rgb(1, 1, 1),
       opacity: 1
     });
     
-    page.drawText(stripText, {
-      x: stripX + stripPadding,
-      y: stripY + 6,
-      size: stripFontSize,
+    // Draw bottom border line for header
+    page.drawLine({
+      start: { x: 0, y: headerY },
+      end: { x: width, y: headerY },
+      thickness: 0.8,
+      color: rgb(0.8, 0.8, 0.8)
+    });
+    
+    // Header text on left side - NON-CLICKABLE (plain text)
+    const headerText = "File from Onlibry .in";
+    const headerFontSize = 10;
+    const headerPadding = 12;
+    
+    page.drawText(headerText, {
+      x: headerPadding,
+      y: headerY + 12,
+      size: headerFontSize,
       font: boldFont,
       color: rgb(0, 0, 0),
       opacity: 1
     });
     
     // ============================================
-    // 2. CENTRE WATERMARK
+    // 2. CENTRE WATERMARK - NON-CLICKABLE
     // ============================================
     const watermarkText = 'ONLIBRY';
     const watermarkFontSize = 48;
@@ -68,7 +77,9 @@ async function addWatermarkToPDF(fileBuffer, fileName) {
       opacity: 0.12
     });
     
-    const urlText = 'onlibry.in';
+    // Centre URL text - NON-CLICKABLE (plain text only, no link annotation)
+    // Removed https:// to make it non-clickable in most PDF viewers
+    const urlText = 'Onlibry .in';
     const urlFontSize = 14;
     const urlWidth = font.widthOfTextAtSize(urlText, urlFontSize);
     
@@ -82,7 +93,7 @@ async function addWatermarkToPDF(fileBuffer, fileName) {
     });
     
     // ============================================
-    // 3. BOTTOM FOOTER - Full width, Light Green
+    // 3. BOTTOM FOOTER - Full width, Light Green - NON-CLICKABLE
     // ============================================
     const footerHeight = 35;
     const footerY = 0;
@@ -103,7 +114,8 @@ async function addWatermarkToPDF(fileBuffer, fileName) {
       color: rgb(0.6, 0.8, 0.6)
     });
     
-    const footerText = "Visit Onlibry.in for more educational resources, Books, Materials, Mock Tests & more!";
+    // Footer text - NON-CLICKABLE plain text
+    const footerText = "Visit Onlibry .in for more educational resources, Books, Materials, Mock Tests & more!";
     const footerFontSize = 10;
     const footerTextWidth = boldFont.widthOfTextAtSize(footerText, footerFontSize);
     

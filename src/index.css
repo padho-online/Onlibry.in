@@ -130,3 +130,23 @@ border-b{
   background-color: whitesmoke;
 }
 
+/* Clip-path for pencil point */
+.clip-path-polygon {
+  clip-path: polygon(0% 0%, 100% 0%, 50% 100%);
+}
+
+.clip-path-polygon-sm {
+  clip-path: polygon(0% 0%, 100% 0%, 50% 100%);
+}
+
+/* Fallback for browsers without clip-path */
+@supports not (clip-path: polygon(0% 0%, 100% 0%, 50% 100%)) {
+  .clip-path-polygon {
+    clip-path: none;
+    border-radius: 0 0 4px 4px;
+  }
+  .clip-path-polygon-sm {
+    clip-path: none;
+    border-radius: 0 0 2px 2px;
+  }
+}

@@ -1,0 +1,20 @@
+/* src/components/OnlibryLogo.css */
+.clip-path-polygon {
+  clip-path: polygon(0% 0%, 100% 0%, 50% 100%);
+}
+
+.clip-path-polygon-sm {
+  clip-path: polygon(0% 0%, 100% 0%, 50% 100%);
+}
+
+/* For browsers that don't support clip-path */
+@supports not (clip-path: polygon(0% 0%, 100% 0%, 50% 100%)) {
+  .clip-path-polygon {
+    clip-path: none;
+    border-radius: 0 0 8px 8px;
+  }
+  .clip-path-polygon-sm {
+    clip-path: none;
+    border-radius: 0 0 4px 4px;
+  }
+}
