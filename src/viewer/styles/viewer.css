@@ -178,8 +178,10 @@
   }
 }
 
-.pdf-canvas{
+@media (min-width: 768px) {
+  .pdf-canvas {
     max-width: 1000px;
     min-height: 100vh;
+  }
 }
 
