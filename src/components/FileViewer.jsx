@@ -1,11 +1,11 @@
 // src/components/FileViewer.jsx
-// FINAL - Download with query param (secure, no URL exposure)
+// UPDATED - Handles preview mode from URL params
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { getFileById } from '../services/fileService';
-import SecurePDFViewer from './SecurePDFViewer';
+import PdfViewer from '../viewer/PdfViewer';
 import { db } from '../config/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 
@@ -24,6 +24,11 @@ function FileViewer() {
   const [canView, setCanView] = useState(false);
   const [isPurchased, setIsPurchased] = useState(false);
   const [checkingAccess, setCheckingAccess] = useState(true);
+  
+  // 🔥 Get preview mode from URL param
+  const isPreviewMode = searchParams.get('preview') === 'true';
+  const previewFileName = searchParams.get('fileName') || '';
+  const previewPrice = searchParams.get('price') || 29;
 
   const actualFileId = fileId || searchParams.get('fileId');
 
@@ -67,12 +72,29 @@ function FileViewer() {
       
       let hasAccess = false;
       
+      // 🔥 PREVIEW MODE: Always accessible (but limited pages)
+      if (isPreviewMode) {
+        hasAccess = true;
+        setCanView(true);
+        setCheckingAccess(false);
+        
+        const workerFileId = fileData.cloudflareKey || fileData.id;
+        const viewUrl = `${WORKER_URL}/view/${workerFileId}`;
+        setPdfUrl(viewUrl);
+        setLoading(false);
+        return;
+      }
+      
+      // 🔥 FULL ACCESS MODE: Check permissions
+      // Case 1: Free file
       if (!fileData.isPremium) {
         hasAccess = true;
       }
+      // Case 2: Premium user
       else if (isSubscribed) {
         hasAccess = true;
       }
+      // Case 3: Check if user purchased this file
       else if (user) {
         const purchased = await checkPurchasedFile(user.uid, actualFileId);
         setIsPurchased(purchased);
@@ -84,8 +106,7 @@ function FileViewer() {
       
       if (hasAccess) {
         const workerFileId = fileData.cloudflareKey || fileData.id;
-        const isPremiumParam = fileData.isPremium ? 'true' : 'false';
-        const viewUrl = `${WORKER_URL}/view/${workerFileId}?isPremium=${isPremiumParam}`;
+        const viewUrl = `${WORKER_URL}/view/${workerFileId}`;
         setPdfUrl(viewUrl);
       }
       
@@ -98,7 +119,7 @@ function FileViewer() {
     }
   };
 
-  // 🔥 FINAL: Download with query param (secure, no fetch)
+  // 🔥 Handle download (only for premium users, not for preview mode)
   const handleDownload = () => {
     if (!isSubscribed) {
       alert('📥 Download only for premium subscribers');
@@ -111,7 +132,6 @@ function FileViewer() {
     const fileKey = file.cloudflareKey || file.id;
     const downloadUrl = `${WORKER_URL}/download/${encodeURIComponent(fileKey)}?subscribed=true`;
     
-    // Create hidden anchor and trigger download
     const link = document.createElement('a');
     link.href = downloadUrl;
     link.download = `Onlibry.in_${file.name || 'document'}.pdf`;
@@ -121,16 +141,25 @@ function FileViewer() {
     document.body.removeChild(link);
   };
 
-  const handlePurchase = () => {
+  // 🔥 Handle subscribe from masked page (add to cart and open cart)
+  const handleSubscribeFromMasked = () => {
+    if (!user) {
+      navigate('/login', { state: { from: `/viewer/${actualFileId}` } });
+      return;
+    }
+    
+    // Add to cart
     const { addToCart } = require('../contexts/CartContext').useCart();
     addToCart({
       id: actualFileId,
-      name: file?.name,
-      price: file?.price || 29,
+      name: file?.name || previewFileName,
+      price: file?.price || parseInt(previewPrice) || 29,
       type: 'file',
-      originalName: file?.name,
-      cloudflareKey: file?.cloudflareKey
+      originalName: file?.name || previewFileName,
+      cloudflareKey: file?.cloudflareKey || actualFileId
     });
+    
+    // Redirect to cart tab
     navigate('/pricing', { state: { activeTab: 'cart' } });
   };
 
@@ -167,7 +196,32 @@ function FileViewer() {
     );
   }
 
-  if (!canView && file?.isPremium && !isSubscribed && !isPurchased) {
+  // 🔥 Preview Mode Access Denied (user not logged in)
+  if (isPreviewMode && !user) {
+    return (
+      <div className="text-center py-20 max-w-md mx-auto">
+        <div className="text-yellow-500 text-6xl mb-4">🔒</div>
+        <h2 className="text-xl font-semibold text-gray-800 dark:text-white mb-2">Login Required</h2>
+        <p className="text-gray-600 dark:text-gray-400 mb-4">
+          Please login to view sample preview.
+        </p>
+        <div className="flex gap-3 justify-center">
+          <button
+            onClick={() => navigate('/login', { state: { from: `/viewer/${actualFileId}?preview=true` } })}
+            className="px-6 py-3 bg-green-600 text-white rounded-lg font-semibold"
+          >
+            Login Now
+          </button>
+          <button onClick={handleGoBack} className="px-6 py-3 bg-gray-500 text-white rounded-lg">
+            Go Back
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // 🔥 Full Access Denied (not subscribed, not purchased)
+  if (!canView && !isPreviewMode && file?.isPremium && !isSubscribed && !isPurchased) {
     if (!user) {
       return (
         <div className="text-center py-20 max-w-md mx-auto">
@@ -201,7 +255,18 @@ function FileViewer() {
         {file && file.price && <p className="text-sm text-green-600 mb-4">₹{file.price}</p>}
         <div className="flex gap-3 justify-center flex-wrap">
           <button
-            onClick={handlePurchase}
+            onClick={() => {
+              const { addToCart } = require('../contexts/CartContext').useCart();
+              addToCart({
+                id: actualFileId,
+                name: file?.name,
+                price: file?.price || 29,
+                type: 'file',
+                originalName: file?.name,
+                cloudflareKey: file?.cloudflareKey
+              });
+              navigate('/pricing', { state: { activeTab: 'cart' } });
+            }}
             className="px-6 py-3 bg-gradient-to-r from-yellow-500 to-yellow-600 text-white rounded-lg font-semibold"
           >
             Buy Now (₹{file?.price || 29})
@@ -221,19 +286,36 @@ function FileViewer() {
   }
 
   if (pdfUrl) {
-    const showDownloadButton = isSubscribed === true;
+    // 🔥 Determine if download button should be shown (only for premium subscribers, NOT in preview mode)
+    const showDownloadButton = isSubscribed === true && !isPreviewMode;
     
     return (
-      <div className="fixed inset-0 bg-black z-50">
-        <SecurePDFViewer
-          key={pdfUrl}
-          fileUrl={pdfUrl}
-          fileName={file?.name}
-          showDownloadButton={showDownloadButton}
-          onDownload={handleDownload}
-          isPremium={file?.isPremium}
-          onClose={() => navigate(-1)}
-        />
+      <div className="fixed inset-0 bg-black z-50 flex flex-col">
+        {/* Close button */}
+        <div className="bg-gray-900 text-white p-2 flex justify-end">
+          <button
+            onClick={handleGoBack}
+            className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition text-sm"
+          >
+            ✕ Close
+          </button>
+        </div>
+        
+        {/* PDF Viewer */}
+        <div className="flex-1">
+          <PdfViewer
+            key={pdfUrl}
+            pdfUrl={pdfUrl}
+            fileName={file?.name || previewFileName}
+            isSubscribed={isSubscribed}
+            isPreviewMode={isPreviewMode}
+            previewLimit={3}
+            userEmail={user?.email}
+            onDownload={handleDownload}
+            onPageChange={(page) => console.log('Page changed:', page)}
+            onSubscribe={handleSubscribeFromMasked}
+          />
+        </div>
       </div>
     );
   }

@@ -1,5 +1,5 @@
 // src/services/fileService.js
-// FINAL - With cache support
+// UPDATED for single file storage
 
 import { db, auth } from '../config/firebase';
 import {
@@ -155,7 +155,9 @@ export async function canAccessFile(fileId) {
     const userDoc = await getDoc(doc(db, 'users', user.uid));
     const userData = userDoc.data() || {};
     
+    // Premium user has access to all files
     if (userData.subscription?.isActive === true) return true;
+    // User purchased this specific file
     if ((userData.purchasedFiles || []).includes(fileId)) return true;
     
     const file = await getFileByIdFromSheet(fileId);

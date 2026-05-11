@@ -1,0 +1,160 @@
+/* src/viewer/styles/viewer.css */
+
+.pdf-viewer {
+  --toolbar-height: 64px;
+  --sidebar-width: 280px;
+}
+
+/* Custom scrollbar */
+.pdf-viewer ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.pdf-viewer ::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.pdf-viewer ::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
+
+.pdf-viewer ::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* Dark mode scrollbar */
+.dark .pdf-viewer ::-webkit-scrollbar-track {
+  background: #2d2d2d;
+}
+
+.dark .pdf-viewer ::-webkit-scrollbar-thumb {
+  background: #555;
+}
+
+.dark .pdf-viewer ::-webkit-scrollbar-thumb:hover {
+  background: #777;
+}
+
+/* Page animations */
+.pdf-page {
+  transition: transform 0.2s ease;
+}
+
+.pdf-page:hover {
+  transform: scale(1.01);
+}
+
+/* Canvas rendering optimization */
+.pdf-canvas {
+  display: block;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
+}
+
+/* Skeleton loading animation */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    #f0f0f0 25%,
+    #e0e0e0 50%,
+    #f0f0f0 75%
+  );
+  background-size: 200% 100%;
+  animation: loading 1.5s infinite;
+}
+
+.dark .skeleton {
+  background: linear-gradient(
+    90deg,
+    #2a2a2a 25%,
+    #3a3a3a 50%,
+    #2a2a2a 75%
+  );
+  background-size: 200% 100%;
+}
+
+@keyframes loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* Mobile optimizations */
+@media (max-width: 768px) {
+  .pdf-viewer .toolbar {
+    padding: 8px;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  
+  .pdf-viewer .toolbar button {
+    padding: 8px;
+  }
+  
+  .pdf-viewer .toolbar input {
+    width: 60px;
+  }
+  
+  .pdf-page {
+    margin: 16px 0;
+  }
+  
+  .fixed.left-4.bottom-20 {
+    left: 8px;
+    bottom: 80px;
+  }
+  
+  .fixed.left-4.bottom-20 button {
+    width: 40px;
+    height: 40px;
+  }
+}
+
+/* Print styles */
+@media print {
+  .toolbar,
+  .fixed.left-4.bottom-20,
+  .watermark-layer {
+    display: none !important;
+  }
+  
+  .pdf-page {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    margin: 0;
+    padding: 0;
+  }
+  
+  .pdf-canvas {
+    box-shadow: none;
+  }
+}
+
+/* Fullscreen adjustments */
+.pdf-viewer:fullscreen {
+  background: #1a1a1a;
+}
+
+.pdf-viewer:fullscreen .toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+}
+
+/* Touch device optimizations */
+@media (hover: none) and (pointer: coarse) {
+  .pdf-viewer .toolbar button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  
+  .pdf-page:hover {
+    transform: none;
+  }
+}

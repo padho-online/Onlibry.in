@@ -1,19 +1,16 @@
 // src/pages/admin/FileUploadManager.jsx
-// UPDATED - With automatic 3 PDF versions generation (clean, preview, download)
+// UPDATED - Single file upload WITH watermark (using pdfUploadService)
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { uploadPDFWithVersions } from '../../services/pdfUploadService';
+import { uploadPDFWithWatermark } from '../../services/pdfUploadService';
 
-// Cloudflare Worker Config
-const WORKER_URL = 'https://onlibry.mdhabibul12212141.workers.dev';
-const ADMIN_SECRET_KEY = 'Habibul@812922112';
-const SHEET_API_URL = 'https://script.google.com/macros/s/AKfycbz9O81mdzlpxPgcuMrZHnNgPLEE7Th-04Cfe5GKe0UA1ZoVqgdGXRYhn4lFn9hKPfCm/exec';
+// Google Sheet API URL
+const SHEET_API_URL = import.meta.env.VITE_SHEET_API_URL;
 
 function FileUploadManager() {
   const { user } = useAuth();
   const [filesList, setFilesList] = useState([]);
-  const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({});
   const [message, setMessage] = useState({ type: '', text: '' });
@@ -25,14 +22,6 @@ function FileUploadManager() {
     showOnWebsite: true,
     tags: ''
   });
-
-  useEffect(() => {
-    checkAdminAccess();
-  }, []);
-
-  const checkAdminAccess = async () => {
-    console.log('Admin access verified');
-  };
 
   // Add files to upload queue
   const handleFileSelect = (e) => {
@@ -99,7 +88,28 @@ function FileUploadManager() {
     }
   };
 
-  // Upload file with 3 versions and add to sheet
+  // Send to Google Sheet
+  const sendToSheet = async (data) => {
+    try {
+      await fetch(SHEET_API_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        body: JSON.stringify(data)
+      });
+      return true;
+    } catch (error) {
+      console.error('Send to sheet error:', error);
+      return false;
+    }
+  };
+
+  // 🔥 Upload single file with watermark
+  const uploadSingleFile = async (fileItem) => {
+    const result = await uploadPDFWithWatermark(fileItem.file, fileItem.metadata);
+    return result;
+  };
+
+  // Upload all files
   const handleUploadAll = async () => {
     if (filesList.length === 0) {
       setMessage({ type: 'error', text: 'No files to upload' });
@@ -117,13 +127,11 @@ function FileUploadManager() {
       setFilesList(prev => prev.map(f => 
         f.id === fileItem.id ? { ...f, status: 'uploading' } : f
       ));
-      setUploadProgress(prev => ({ ...prev, [fileItem.id]: { status: 'uploading', progress: 0 } }));
+      setUploadProgress(prev => ({ ...prev, [fileItem.id]: { status: 'uploading', progress: 30 } }));
       
       try {
-        setUploadProgress(prev => ({ ...prev, [fileItem.id]: { status: 'uploading', progress: 20 } }));
-        
-        // 🔥 NEW: Upload with 3 PDF version generation
-        const uploadResult = await uploadPDFWithVersions(fileItem.file, fileItem.metadata);
+        // 🔥 Upload to Cloudflare with watermark
+        const uploadResult = await uploadSingleFile(fileItem);
         
         if (!uploadResult.success) {
           throw new Error(uploadResult.error || 'Upload failed');
@@ -132,8 +140,8 @@ function FileUploadManager() {
         setUploadProgress(prev => ({ ...prev, [fileItem.id]: { status: 'uploading', progress: 70 } }));
         
         // Add to Google Sheet
-        const isPremiumValue = fileItem.metadata.isPremium === true || fileItem.metadata.isPremium === 'true' || fileItem.metadata.isPremium === 1;
-        const showOnWebsiteValue = fileItem.metadata.showOnWebsite === true || fileItem.metadata.showOnWebsite === 'true' || fileItem.metadata.showOnWebsite === 1;
+        const isPremiumValue = fileItem.metadata.isPremium === true;
+        const showOnWebsiteValue = fileItem.metadata.showOnWebsite === true;
         
         const sheetData = {
           action: 'add',
@@ -152,11 +160,7 @@ function FileUploadManager() {
           userAgent: navigator.userAgent
         };
         
-        await fetch(SHEET_API_URL, {
-          method: 'POST',
-          mode: 'no-cors',
-          body: JSON.stringify(sheetData)
-        });
+        await sendToSheet(sheetData);
         
         setUploadProgress(prev => ({ ...prev, [fileItem.id]: { status: 'success', progress: 100 } }));
         setFilesList(prev => prev.map(f => 
@@ -178,6 +182,7 @@ function FileUploadManager() {
     setUploading(false);
     setMessage({ type: 'success', text: `Upload complete! ${successCount} succeeded, ${failCount} failed.` });
     
+    // Remove successful files after 3 seconds
     setTimeout(() => {
       setFilesList(prev => prev.filter(f => f.status !== 'success'));
       setUploadProgress(prev => {
@@ -305,6 +310,7 @@ function FileUploadManager() {
               <input
                 type="file"
                 multiple
+                accept=".pdf"
                 onChange={handleFileSelect}
                 className="hidden"
                 disabled={uploading}
@@ -389,7 +395,7 @@ function FileUploadManager() {
                         ></div>
                       </div>
                     )}
-                  </td>
+                   </td>
                   <td className="p-2">
                     {!uploading && fileItem.status !== 'success' && (
                       <button
@@ -402,11 +408,11 @@ function FileUploadManager() {
                     {fileItem.status === 'success' && (
                       <span className="text-green-500">✓</span>
                     )}
-                  </td>
-                </tr>
+                   </td>
+                 </tr>
               ))}
             </tbody>
-          </table>
+           </table>
         </div>
       )}
 
@@ -420,6 +426,7 @@ function FileUploadManager() {
             <input
               type="file"
               multiple
+              accept=".pdf"
               onChange={handleFileSelect}
               className="hidden"
             />

@@ -1,15 +1,15 @@
 // src/pages/admin/FilesManager.jsx
-// FINAL FIXED - Cloudflare R2 Delete Working
+// FIXED - Bulk delete working with single file storage
 
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 
 // Cloudflare Worker Config
-const WORKER_URL = 'https://onlibry.mdhabibul12212141.workers.dev';
-const ADMIN_SECRET_KEY = 'Habibul@812922112';
+const WORKER_URL = import.meta.env.VITE_CLOUDFLARE_WORKER_URL;
+const ADMIN_SECRET_KEY = import.meta.env.VITE_CLOUDFLARE_ADMIN_KEY || 'Habibul@812922112';
 
 // Google Sheet API URL
-const SHEET_API_URL = 'https://script.google.com/macros/s/AKfycbz9O81mdzlpxPgcuMrZHnNgPLEE7Th-04Cfe5GKe0UA1ZoVqgdGXRYhn4lFn9hKPfCm/exec';
+const SHEET_API_URL = import.meta.env.VITE_SHEET_API_URL;
 
 function FilesManager() {
   const { user } = useAuth();
@@ -30,7 +30,7 @@ function FilesManager() {
   });
   const [message, setMessage] = useState({ type: '', text: '' });
 
-  // Load ALL files from Google Sheet (including hidden ones)
+  // Load ALL files from Google Sheet
   const loadFiles = async () => {
     setLoading(true);
     try {
@@ -45,7 +45,7 @@ function FilesManager() {
           ...file,
           id: file.cloudflareKey || file.id,
           downloadUrl: `${WORKER_URL}/${encodeURIComponent(file.cloudflareKey || file.id)}`,
-          viewerUrl: `${WORKER_URL}/${encodeURIComponent(file.cloudflareKey || file.id)}`
+          viewerUrl: `${WORKER_URL}/view/${encodeURIComponent(file.cloudflareKey || file.id)}`
         }));
         console.log(`📊 Loaded ${allFiles.length} files`);
         setFiles(allFiles);
@@ -64,9 +64,7 @@ function FilesManager() {
     loadFiles();
   }, []);
 
-  // ============================================
-  // CONVERT TAGS TO STRING
-  // ============================================
+  // Convert tags to string
   const tagsToString = (tags, tagsString) => {
     if (tagsString && typeof tagsString === 'string' && tagsString !== '') {
       return tagsString;
@@ -99,9 +97,7 @@ function FilesManager() {
     }
   };
 
-  // ============================================
-  // SEND TO SHEET (Helper)
-  // ============================================
+  // Send to Sheet
   const sendToSheet = async (data) => {
     try {
       await fetch(SHEET_API_URL, {
@@ -116,9 +112,7 @@ function FilesManager() {
     }
   };
 
-  // ============================================
-  // DELETE FROM CLOUDFLARE R2
-  // ============================================
+  // 🔥 Delete from Cloudflare R2 (single file)
   const deleteFromCloudflare = async (fileId) => {
     if (!fileId) {
       console.error('No fileId provided for deletion');
@@ -148,9 +142,7 @@ function FilesManager() {
     }
   };
 
-  // ============================================
-  // BULK UPDATE FROM EDITOR SHEET (With Cloudflare Delete - FINAL FIX)
-  // ============================================
+  // 🔥 BULK UPDATE - Process Editor sheet and delete files marked as 'deleted'
   const handleBulkUpdateFromSheet = async () => {
     if (!window.confirm('This will update/delete ALL files from "Editor" sheet. Continue?')) return;
     
@@ -160,8 +152,7 @@ function FilesManager() {
     try {
       const userIp = await getClientIP();
       
-      // Get editor sheet data
-      console.log('📡 Fetching editor sheet data...');
+      // Fetch editor sheet data
       const editorResponse = await fetch(`${SHEET_API_URL}?admin=true`);
       const editorData = await editorResponse.json();
       
@@ -170,15 +161,14 @@ function FilesManager() {
       if (editorData.success && editorData.files && editorData.files.length > 0) {
         console.log(`📋 Total rows in editor: ${editorData.files.length}`);
         
-        // Log each file's structure
         editorData.files.forEach((f, idx) => {
           console.log(`   Row ${idx + 1}: fileId="${f.fileId}", status="${f.status}"`);
         });
         
-        // 🔥 KEY FIX - Using 'fileId' field from Apps Script
+        // 🔥 FIX: Get files marked for deletion (check both 'status' and 'Status' fields)
         const toDelete = editorData.files.filter(f => {
           const status = f.status || f.Status;
-          return status === 'deleted';
+          return status && status.toString().toLowerCase() === 'deleted';
         });
         
         console.log(`🗑️ Files marked for deletion: ${toDelete.length}`);
@@ -187,21 +177,21 @@ function FilesManager() {
           setMessage({ type: 'info', text: `🗑️ Deleting ${toDelete.length} files from Cloudflare...` });
           
           for (const file of toDelete) {
-            // 🔥 KEY FIX - Use 'fileId' field (NOT file.id)
             const fileId = file.fileId;
             console.log(`   Attempting to delete: ${fileId}`);
             
             if (fileId) {
               try {
+                // Delete from Cloudflare
                 const deleteRes = await fetch(`${WORKER_URL}/delete/${encodeURIComponent(fileId)}`, {
                   method: 'DELETE',
                   headers: { 'X-Admin-Key': ADMIN_SECRET_KEY }
                 });
                 const deleteResult = await deleteRes.json();
-                console.log(`   Delete result:`, deleteResult);
+                console.log(`   Delete result for ${fileId}:`, deleteResult);
                 
                 if (deleteResult.success) {
-                  console.log(`   ✅ Deleted from Cloudflare: ${fileId}`);
+                  console.log(`   ✅ Deleted: ${fileId}`);
                 } else {
                   console.warn(`   ⚠️ Failed to delete ${fileId}: ${deleteResult.message}`);
                 }
@@ -215,23 +205,51 @@ function FilesManager() {
         } else {
           console.log('📝 No files marked with status="deleted"');
         }
+        
+        // 🔥 Also process files marked for update
+        const toUpdate = editorData.files.filter(f => {
+          const status = f.status || f.Status;
+          return status && status.toString().toLowerCase() === 'update';
+        });
+        
+        console.log(`📝 Files marked for update: ${toUpdate.length}`);
+        
+        if (toUpdate.length > 0) {
+          setMessage({ type: 'info', text: `📝 Updating ${toUpdate.length} files metadata...` });
+          
+          for (const file of toUpdate) {
+            const fileId = file.fileId;
+            console.log(`   Updating: ${fileId}`);
+            
+            if (fileId) {
+              // Update metadata in sheet
+              const sheetData = {
+                action: 'update',
+                fileId: fileId,
+                fileName: file.fileName || file.name,
+                price: file.price || 29,
+                isPremium: file.isPremium === 'true' || file.isPremium === true,
+                showOnWebsite: file.showOnWebsite === 'true' || file.showOnWebsite === true,
+                tags: file.tags || '',
+                updatedBy: user?.email,
+                updatedByName: user?.displayName || user?.email?.split('@')[0],
+                userIp: userIp,
+                userAgent: navigator.userAgent
+              };
+              await sendToSheet(sheetData);
+            }
+          }
+        }
+        
       } else {
         console.log('📭 No data found in editor sheet');
       }
       
-      // Send bulk update to sheet
-      const sheetData = {
-        action: 'bulkUpdate',
-        performedBy: user?.email,
-        performedByName: user?.displayName || user?.email?.split('@')[0],
-        userIp: await getClientIP(),
-        userAgent: navigator.userAgent
-      };
-      await sendToSheet(sheetData);
+      // Clear editor sheet after processing
+      await sendToSheet({ action: 'clearEditor' });
       
       setMessage({ type: 'success', text: '✅ Bulk update completed!' });
       setTimeout(() => loadFiles(), 2000);
-      setTimeout(() => clearEditorSheetNoResponse(), 3000);
       
     } catch (error) {
       console.error('Bulk update error:', error);
@@ -241,33 +259,13 @@ function FilesManager() {
     }
   };
 
-  // ============================================
-  // CLEAR EDITOR SHEET (Silent)
-  // ============================================
-  const clearEditorSheetNoResponse = async () => {
-    try {
-      const sheetData = { action: 'clearEditor' };
-      await fetch(SHEET_API_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        body: JSON.stringify(sheetData)
-      });
-      console.log('✅ Editor sheet cleared');
-    } catch (error) {
-      console.error('Clear editor error:', error);
-    }
-  };
-
-  // ============================================
-  // CLEAR EDITOR SHEET (Manual)
-  // ============================================
+  // Clear Editor sheet
   const handleClearEditorSheet = async () => {
     if (!window.confirm('Clear all rows from "Editor" sheet? (Headers will remain)')) return;
     
     setMessage({ type: 'info', text: '🔄 Clearing Editor sheet...' });
     try {
-      const sheetData = { action: 'clearEditor' };
-      await sendToSheet(sheetData);
+      await sendToSheet({ action: 'clearEditor' });
       setMessage({ type: 'success', text: '✅ Editor sheet cleared!' });
     } catch (error) {
       console.error('Clear editor error:', error);
@@ -275,7 +273,7 @@ function FilesManager() {
     }
   };
 
-  // Upload file to Cloudflare + Google Sheet
+  // Upload file (placeholder - you can implement upload modal)
   const handleUpload = async () => {
     if (!selectedFile) {
       setMessage({ type: 'error', text: 'Please select a file' });
@@ -288,7 +286,7 @@ function FilesManager() {
     try {
       const formData = new FormData();
       formData.append('file', selectedFile);
-      formData.append('fileName', selectedFile.name);
+      formData.append('fileName', editForm.name || selectedFile.name);
 
       const uploadRes = await fetch(`${WORKER_URL}/upload`, {
         method: 'POST',
@@ -302,19 +300,17 @@ function FilesManager() {
         throw new Error(uploadResult.error);
       }
 
-      setMessage({ type: 'info', text: 'File uploaded to Cloudflare. Adding to Google Sheet...' });
-
       const sheetData = {
         action: 'add',
-        fileId: uploadResult.key,
+        fileId: uploadResult.fileId,
         fileName: editForm.name || selectedFile.name,
-        fileSize: uploadResult.size,
-        mimeType: uploadResult.mimeType,
+        fileSize: selectedFile.size,
+        mimeType: selectedFile.type,
         price: editForm.price,
         isPremium: editForm.isPremium,
         showOnWebsite: editForm.showOnWebsite,
         tags: editForm.tags || '',
-        cloudflareKey: uploadResult.key,
+        cloudflareKey: uploadResult.fileId,
         uploadedBy: user?.email,
         uploadedByName: user?.displayName || user?.email?.split('@')[0],
         userIp: await getClientIP(),
@@ -367,9 +363,7 @@ function FilesManager() {
     }
   };
 
-  // ============================================
-  // DELETE FILE (Manual via button)
-  // ============================================
+  // Delete file manually
   const handleDeleteFile = async (file) => {
     if (!window.confirm(`Delete "${file.name}" permanently from Cloudflare and Sheet?`)) return;
 
@@ -378,11 +372,9 @@ function FilesManager() {
     try {
       const fileId = file.cloudflareKey || file.id;
       
-      // Delete from Cloudflare R2
       const deleted = await deleteFromCloudflare(fileId);
       
       if (deleted) {
-        // Soft delete in Google Sheet
         const sheetData = {
           action: 'delete',
           fileId: fileId,
@@ -395,10 +387,10 @@ function FilesManager() {
         };
         await sendToSheet(sheetData);
         
-        setMessage({ type: 'success', text: '✅ File deleted successfully from Cloudflare and Sheet!' });
+        setMessage({ type: 'success', text: '✅ File deleted successfully!' });
         loadFiles();
       } else {
-        setMessage({ type: 'error', text: '❌ Failed to delete from Cloudflare. Check console for details.' });
+        setMessage({ type: 'error', text: '❌ Failed to delete from Cloudflare.' });
       }
       
     } catch (error) {
@@ -407,7 +399,6 @@ function FilesManager() {
     }
   };
 
-  // Get file URL
   const getFileUrl = (file) => {
     const key = file.cloudflareKey || file.id;
     return `${WORKER_URL}/${encodeURIComponent(key)}`;
@@ -419,10 +410,9 @@ function FilesManager() {
 
   return (
     <div className="p-4">
-      {/* Header */}
       <div className="flex justify-between items-center mb-6 flex-wrap gap-4">
         <h2 className="text-xl font-bold text-gray-800 dark:text-white">
-          📁 Cloudflare Files Manager
+          📁 Files Manager
         </h2>
         <div className="flex gap-2">
           <button
@@ -453,7 +443,6 @@ function FilesManager() {
         </div>
       </div>
 
-      {/* Message */}
       {message.text && (
         <div className={`mb-4 p-3 rounded-lg ${
           message.type === 'success' ? 'bg-green-100 text-green-700' :
@@ -472,7 +461,7 @@ function FilesManager() {
         </div>
         <div className="bg-green-100 dark:bg-green-900/30 rounded-lg p-3 text-center">
           <div className="text-xl font-bold text-green-600">{files.filter(f => f.showOnWebsite).length}</div>
-          <div className="text-xs text-gray-500">Visible on Website</div>
+          <div className="text-xs text-gray-500">Visible</div>
         </div>
         <div className="bg-yellow-100 dark:bg-yellow-900/30 rounded-lg p-3 text-center">
           <div className="text-xl font-bold text-yellow-600">{files.filter(f => f.isPremium).length}</div>
@@ -516,7 +505,7 @@ function FilesManager() {
             </thead>
             <tbody>
               {filteredFiles.map((file) => (
-                <tr key={file.id} className={`border-b hover:bg-gray-50 dark:hover:bg-gray-800 ${!file.showOnWebsite ? 'opacity-60 bg-gray-50 dark:bg-gray-900/30' : ''}`}>
+                <tr key={file.id} className="border-b hover:bg-gray-50 dark:hover:bg-gray-800">
                   {editingFile === file.id ? (
                     <>
                       <td className="p-2">
@@ -526,10 +515,10 @@ function FilesManager() {
                           onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
                           className="w-full px-2 py-1 border rounded"
                         />
-                      </td>
+                       </td>
                       <td className="p-2 text-gray-500 text-xs">
                         {(file.size / 1024).toFixed(2)} KB
-                      </td>
+                       </td>
                       <td className="p-2">
                         <input
                           type="number"
@@ -537,7 +526,7 @@ function FilesManager() {
                           onChange={(e) => setEditForm({ ...editForm, price: parseInt(e.target.value) || 0 })}
                           className="w-20 px-2 py-1 border rounded"
                         />
-                      </td>
+                       </td>
                       <td className="p-2">
                         <input
                           type="checkbox"
@@ -545,7 +534,7 @@ function FilesManager() {
                           onChange={(e) => setEditForm({ ...editForm, isPremium: e.target.checked })}
                           className="w-4 h-4"
                         />
-                      </td>
+                       </td>
                       <td className="p-2">
                         <input
                           type="checkbox"
@@ -553,16 +542,16 @@ function FilesManager() {
                           onChange={(e) => setEditForm({ ...editForm, showOnWebsite: e.target.checked })}
                           className="w-4 h-4"
                         />
-                      </td>
+                       </td>
                       <td className="p-2">
                         <input
                           type="text"
                           value={editForm.tags}
                           onChange={(e) => setEditForm({ ...editForm, tags: e.target.value })}
-                          placeholder="subject:Maths, course:BCA"
+                          placeholder="subject:Maths"
                           className="w-full px-2 py-1 text-xs border rounded"
                         />
-                      </td>
+                       </td>
                       <td className="p-2">
                         <button
                           onClick={() => handleUpdateFile(file)}
@@ -576,7 +565,7 @@ function FilesManager() {
                         >
                           Cancel
                         </button>
-                      </td>
+                       </td>
                     </>
                   ) : (
                     <>
@@ -595,7 +584,7 @@ function FilesManager() {
                         {!file.showOnWebsite && (
                           <span className="inline-block mt-1 px-1.5 py-0.5 bg-red-100 text-red-600 text-xs rounded">Hidden</span>
                         )}
-                      </td>
+                       </td>
                       <td className="p-2 text-gray-500 text-xs">
                         {(file.size / 1024).toFixed(2)} KB
                        </td>
@@ -651,11 +640,11 @@ function FilesManager() {
                        </td>
                     </>
                   )}
-                </tr>
+                 </tr>
               ))}
             </tbody>
-          </table>
-
+           </table>
+          
           {filteredFiles.length === 0 && (
             <div className="text-center py-12 text-gray-500">
               No files found. Click "Upload New File" to add files.
@@ -678,6 +667,7 @@ function FilesManager() {
                 <label className="block text-sm font-medium mb-1">Select File:</label>
                 <input
                   type="file"
+                  accept=".pdf"
                   onChange={(e) => setSelectedFile(e.target.files[0])}
                   className="w-full p-2 border rounded"
                 />
@@ -710,7 +700,7 @@ function FilesManager() {
                   type="text"
                   value={editForm.tags}
                   onChange={(e) => setEditForm({ ...editForm, tags: e.target.value })}
-                  placeholder="subject:Maths, course:BCA, semester:3"
+                  placeholder="subject:Maths, course:BCA"
                   className="w-full p-2 border rounded text-sm"
                 />
               </div>

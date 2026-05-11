@@ -1,5 +1,5 @@
 // src/services/cloudflareFileService.js
-// FINAL - Using environment variables
+// UPDATED for single file storage (no /books/ folder)
 
 const SHEET_API_URL = import.meta.env.VITE_SHEET_API_URL;
 const WORKER_URL = import.meta.env.VITE_CLOUDFLARE_WORKER_URL;
@@ -8,7 +8,7 @@ const WORKER_URL = import.meta.env.VITE_CLOUDFLARE_WORKER_URL;
 let cachedFiles = null;
 let lastFetchTime = null;
 let pendingRequest = null;
-const CACHE_DURATION = 5 * 60 * 1000;
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
 function isCacheValid() {
   if (!cachedFiles || !lastFetchTime) return false;
@@ -59,15 +59,19 @@ export async function getAllFilesFromSheet(forceRefresh = false) {
             finalTags = file.tags;
           }
           
+          // 🔥 SINGLE FILE STORAGE: Direct file URL
+          const fileId = file.cloudflareKey || file.id;
+          
           return {
             ...file,
-            id: file.cloudflareKey || file.id,
+            id: fileId,
             originalId: file.id,
             tags: finalTags,
             tagsList: tagsArray,
             tagsString: file.tagsString || '',
-            downloadUrl: `${WORKER_URL}/${encodeURIComponent(file.cloudflareKey || file.id)}`,
-            viewerUrl: `${WORKER_URL}/${encodeURIComponent(file.cloudflareKey || file.id)}`
+            downloadUrl: `${WORKER_URL}/download/${encodeURIComponent(fileId)}`,
+            viewerUrl: `${WORKER_URL}/view/${encodeURIComponent(fileId)}`,
+            fileUrl: `${WORKER_URL}/${encodeURIComponent(fileId)}`
           };
         });
         
@@ -120,12 +124,12 @@ export async function searchFilesInSheet(searchQuery) {
 
 export function getDownloadUrl(file) {
   const key = file.cloudflareKey || file.id;
-  return `${WORKER_URL}/${encodeURIComponent(key)}`;
+  return `${WORKER_URL}/download/${encodeURIComponent(key)}`;
 }
 
 export function getViewerUrl(file) {
   const key = file.cloudflareKey || file.id;
-  return `${WORKER_URL}/${encodeURIComponent(key)}`;
+  return `${WORKER_URL}/view/${encodeURIComponent(key)}`;
 }
 
 async function getClientIP() {
@@ -145,7 +149,7 @@ export async function addFileToSheet(fileData, user) {
       mode: 'no-cors',
       body: JSON.stringify({
         action: 'add',
-        fileId: fileData.key,
+        fileId: fileData.fileId,
         fileName: fileData.fileName,
         fileSize: fileData.size,
         mimeType: fileData.mimeType,
@@ -153,7 +157,7 @@ export async function addFileToSheet(fileData, user) {
         isPremium: fileData.isPremium !== false,
         showOnWebsite: fileData.showOnWebsite !== false,
         tags: fileData.tags || '',
-        cloudflareKey: fileData.key,
+        cloudflareKey: fileData.fileId,
         uploadedBy: user?.email || 'unknown',
         uploadedByUid: user?.uid || 'unknown',
         uploadedAt: new Date().toISOString(),

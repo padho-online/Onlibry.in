@@ -1,97 +1,16 @@
 // src/services/pdfUploadService.js
-// COMPLETE - PDF upload with 3 versions
-// - Preview PDF: diagonal watermark, footer
-// - Download PDF: top-right strip, bottom footer, page numbers, centre watermark
+// SINGLE VERSION - PDF with watermark, header, footer (same for view & download)
 
 import { PDFDocument, rgb, StandardFonts, degrees } from 'pdf-lib';
 
-const WORKER_URL = 'https://onlibry.mdhabibul12212141.workers.dev';
-const ADMIN_KEY = 'Habibul@812922112';
+const WORKER_URL = import.meta.env.VITE_CLOUDFLARE_WORKER_URL;
+const ADMIN_KEY = import.meta.env.VITE_CLOUDFLARE_ADMIN_KEY || 'Habibul@812922112';
 
 // ============================================
-// Generate Preview PDF (First 3 pages only)
-// ============================================
-async function generatePreviewPDF(fileBuffer) {
-  console.log('📝 Generating preview PDF (first 3 pages)...');
-  
-  const pdfDoc = await PDFDocument.load(fileBuffer);
-  const totalPages = pdfDoc.getPageCount();
-  const pagesToKeep = Math.min(totalPages, 3);
-  
-  const newPdfDoc = await PDFDocument.create();
-  const pages = await newPdfDoc.copyPages(pdfDoc, [...Array(pagesToKeep).keys()]);
-  pages.forEach(page => newPdfDoc.addPage(page));
-  
-  const font = await newPdfDoc.embedFont(StandardFonts.Helvetica);
-  const boldFont = await newPdfDoc.embedFont(StandardFonts.HelveticaBold);
-  
-  for (let i = 0; i < pagesToKeep; i++) {
-    const page = newPdfDoc.getPages()[i];
-    const { width, height } = page.getSize();
-    const footerHeight = 40;
-    const footerY = 0;
-    
-    // =========================
-    // WATERMARK
-    // =========================
-    page.drawText('PREVIEW ONLY', {
-      x: width / 2 - 130,
-      y: height / 2,
-      size: 32,
-      font: boldFont,
-      color: rgb(0.9, 0.3, 0.2),
-      opacity: 0.22,
-      rotate: degrees(-25)
-    });
-    
-    // =========================
-    // FOOTER BACKGROUND
-    // =========================
-    page.drawRectangle({
-      x: 0,
-      y: footerY,
-      width: width,
-      height: footerHeight,
-      color: rgb(0.85, 0.98, 0.85),
-      opacity: 1
-    });
-    
-    // =========================
-    // TOP BORDER LINE
-    // =========================
-    page.drawLine({
-      start: { x: 0, y: footerHeight },
-      end: { x: width, y: footerHeight },
-      thickness: 1,
-      color: rgb(0.6, 0.8, 0.6)
-    });
-    
-    // =========================
-    // FOOTER TEXT
-    // =========================
-    const footerText = 'This is a preview. Full version available on Onlibry.in';
-    const footerFontSize = 14;
-    const textWidth = boldFont.widthOfTextAtSize(footerText, footerFontSize);
-    
-    page.drawText(footerText, {
-      x: (width - textWidth) / 2,
-      y: 13,
-      size: footerFontSize,
-      font: boldFont,
-      color: rgb(0, 0, 0),
-      opacity: 1
-    });
-  }
-  
-  console.log(`✅ Preview PDF generated (${pagesToKeep} pages)`);
-  return await newPdfDoc.save();
-}
-
-// ============================================
-// Add Complete Watermark to Download PDF
+// Add Complete Watermark to PDF (Single Version)
 // ============================================
 async function addWatermarkToPDF(fileBuffer, fileName) {
-  console.log('📝 Adding watermark to PDF (download version)...');
+  console.log('📝 Adding watermark to PDF...');
   
   const pdfDoc = await PDFDocument.load(fileBuffer);
   const totalPages = pdfDoc.getPageCount();
@@ -106,7 +25,7 @@ async function addWatermarkToPDF(fileBuffer, fileName) {
     // ============================================
     // 1. TOP-RIGHT STRIP - Light Orange
     // ============================================
-    const stripText = "File downloaded from Onlibry.in";
+    const stripText = "File from Onlibry.in";
     const stripFontSize = 9;
     const textWidth = boldFont.widthOfTextAtSize(stripText, stripFontSize);
     const stripPadding = 12;
@@ -115,7 +34,6 @@ async function addWatermarkToPDF(fileBuffer, fileName) {
     const stripX = width - stripWidth - 8;
     const stripY = height - stripHeight - 8;
     
-    // Draw light orange background
     page.drawRectangle({
       x: stripX,
       y: stripY,
@@ -125,7 +43,6 @@ async function addWatermarkToPDF(fileBuffer, fileName) {
       opacity: 1
     });
     
-    // Draw text on strip (centered)
     page.drawText(stripText, {
       x: stripX + stripPadding,
       y: stripY + 6,
@@ -170,7 +87,6 @@ async function addWatermarkToPDF(fileBuffer, fileName) {
     const footerHeight = 35;
     const footerY = 0;
     
-    // Draw light green background
     page.drawRectangle({
       x: 0,
       y: footerY,
@@ -180,7 +96,6 @@ async function addWatermarkToPDF(fileBuffer, fileName) {
       opacity: 1
     });
     
-    // Draw top border line
     page.drawLine({
       start: { x: 0, y: footerHeight },
       end: { x: width, y: footerHeight },
@@ -188,7 +103,6 @@ async function addWatermarkToPDF(fileBuffer, fileName) {
       color: rgb(0.6, 0.8, 0.6)
     });
     
-    // Draw footer text
     const footerText = "Visit Onlibry.in for more educational resources, Books, Materials, Mock Tests & more!";
     const footerFontSize = 10;
     const footerTextWidth = boldFont.widthOfTextAtSize(footerText, footerFontSize);
@@ -224,18 +138,16 @@ async function addWatermarkToPDF(fileBuffer, fileName) {
 }
 
 // ============================================
-// Upload to R2
+// Upload to R2 (Single File)
 // ============================================
-async function uploadToR2(fileId, cleanPdf, previewPdf, downloadPdf) {
+async function uploadToR2(fileId, pdfBuffer) {
   console.log('📤 Uploading to R2...');
   
   const formData = new FormData();
-  formData.append('clean', new Blob([cleanPdf], { type: 'application/pdf' }), 'clean.pdf');
-  formData.append('preview', new Blob([previewPdf], { type: 'application/pdf' }), 'preview.pdf');
-  formData.append('download', new Blob([downloadPdf], { type: 'application/pdf' }), 'download.pdf');
+  formData.append('file', new Blob([pdfBuffer], { type: 'application/pdf' }), `${fileId}.pdf`);
   formData.append('fileId', fileId);
   
-  const response = await fetch(`${WORKER_URL}/upload-multi`, {
+  const response = await fetch(`${WORKER_URL}/upload`, {
     method: 'POST',
     headers: { 'X-Admin-Key': ADMIN_KEY },
     body: formData
@@ -247,11 +159,11 @@ async function uploadToR2(fileId, cleanPdf, previewPdf, downloadPdf) {
 }
 
 // ============================================
-// Main Export Function
+// Main Export Function - Single Version
 // ============================================
-export async function uploadPDFWithVersions(file, metadata) {
+export async function uploadPDFWithWatermark(file, metadata) {
   try {
-    console.log('🚀 Starting upload...');
+    console.log('🚀 Starting upload with watermark...');
     
     const fileBuffer = await file.arrayBuffer();
     const timestamp = Date.now();
@@ -261,11 +173,11 @@ export async function uploadPDFWithVersions(file, metadata) {
     
     console.log('🆔 File ID:', fileId);
     
-    const previewPdf = await generatePreviewPDF(fileBuffer);
-    const downloadPdf = await addWatermarkToPDF(fileBuffer, file.name);
-    const cleanPdf = fileBuffer;
+    // Add watermark to PDF
+    const watermarkedPdf = await addWatermarkToPDF(fileBuffer, file.name);
     
-    const uploadResult = await uploadToR2(fileId, cleanPdf, previewPdf, downloadPdf);
+    // Upload single file to Cloudflare
+    const uploadResult = await uploadToR2(fileId, watermarkedPdf);
     
     if (!uploadResult.success) {
       throw new Error(uploadResult.error || 'Upload failed');

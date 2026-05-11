@@ -1,14 +1,15 @@
 // src/components/FileCard.jsx
-// UPDATED - Check purchased status before showing Subscribe button
+// UPDATED - Removed SampleViewer popup, opens viewer directly in preview mode
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
 import { saveFile, unsaveFile, isFileSaved, canAccessFile } from '../services/fileService';
-import SampleViewer from './SampleViewer';
 import { db } from '../config/firebase';
 import { doc, getDoc } from 'firebase/firestore';
+
+const WORKER_URL = import.meta.env.VITE_CLOUDFLARE_WORKER_URL;
 
 function FileCard({ file }) {
   const { user, isSubscribed } = useAuth();
@@ -18,12 +19,11 @@ function FileCard({ file }) {
   const [isSaved, setIsSaved] = useState(false);
   const [canAccess, setCanAccess] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [showSample, setShowSample] = useState(false);
   const [inCart, setInCart] = useState(false);
   const [isPurchased, setIsPurchased] = useState(false);
   const [checkingPurchase, setCheckingPurchase] = useState(true);
 
-  // 🔥 Check if user has purchased this specific file
+  // Check if user has purchased this specific file
   const checkPurchasedFile = async (userId, fileId) => {
     if (!userId) return false;
     try {
@@ -45,7 +45,6 @@ function FileCard({ file }) {
           const access = await canAccessFile(file.id);
           setCanAccess(access);
           
-          // 🔥 Check if purchased
           const purchased = await checkPurchasedFile(user.uid, file.id);
           setIsPurchased(purchased);
           setCheckingPurchase(false);
@@ -62,20 +61,24 @@ function FileCard({ file }) {
     checkStatus();
   }, [file.id, user, file.isPremium]);
 
+  // 🔥 View Full File - Opens viewer directly
   const handleViewFullFile = () => {
     if (!user) {
       navigate('/login', { state: { from: { pathname: '/files', fileId: file.id } } });
       return;
     }
-    navigate(`/viewer/${file.id}`);
+    // Pass isPreviewMode=false for full access
+    navigate(`/viewer/${file.id}?preview=false`);
   };
 
+  // 🔥 View Sample - Opens viewer in preview mode (without popup)
   const handleViewSample = () => {
     if (!user) {
       navigate('/login', { state: { from: { pathname: '/files', fileId: file.id } } });
       return;
     }
-    setShowSample(true);
+    // Pass isPreviewMode=true for preview mode
+    navigate(`/viewer/${file.id}?preview=true&fileName=${encodeURIComponent(file.name)}&price=${file.price || 29}`);
   };
 
   const handleSubscribe = () => {
@@ -156,16 +159,17 @@ function FileCard({ file }) {
       return { 
         showView: true, 
         showSubscribe: false, 
-        showSample: false, 
+        showSample: true, 
         showAddToCart: false, 
         showSave: false, 
         viewText: 'View', 
         viewAction: handleViewFullFile, 
+        sampleAction: handleViewSample,
         viewColor: 'bg-green-600' 
       };
     }
     
-    // 🔥 CASE 1: User is premium subscriber
+    // User is premium subscriber
     if (isSubscribed) {
       return { 
         showView: true, 
@@ -179,7 +183,7 @@ function FileCard({ file }) {
       };
     }
     
-    // 🔥 CASE 2: User purchased this specific file
+    // User purchased this specific file
     if (isPurchased) {
       return { 
         showView: true, 
@@ -193,7 +197,7 @@ function FileCard({ file }) {
       };
     }
     
-    // 🔥 CASE 3: Free file (not premium)
+    // Free file (not premium)
     if (!file.isPremium) {
       return { 
         showView: true, 
@@ -207,7 +211,7 @@ function FileCard({ file }) {
       };
     }
     
-    // 🔥 CASE 4: Premium file, not subscribed, not purchased
+    // 🔥 Premium file, not subscribed, not purchased - Show Sample button (opens viewer in preview mode)
     return { 
       showView: false, 
       showSubscribe: true, 
@@ -217,7 +221,7 @@ function FileCard({ file }) {
       showSave: false, 
       subscribeText: `🔒 Subscribe ₹${file.price || 29}`, 
       subscribeAction: handleSubscribe, 
-      sampleAction: handleViewSample, 
+      sampleAction: handleViewSample,
       addToCartAction: handleAddToCart, 
       removeFromCartAction: handleRemoveFromCart 
     };
@@ -302,8 +306,8 @@ function FileCard({ file }) {
               </button>
             )}
             {buttonConfig.showSample && (
-              <button onClick={buttonConfig.sampleAction} className="px-2 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition" title="View Sample">
-                🔍
+              <button onClick={buttonConfig.sampleAction} className="px-2 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition" title="View Sample (Preview Mode)">
+                🔍 Sample
               </button>
             )}
             {buttonConfig.showAddToCart && (
@@ -333,16 +337,6 @@ function FileCard({ file }) {
           </div>
         </div>
       </div>
-
-      {showSample && (
-        <SampleViewer
-          fileUrl={`${WORKER_URL}/${encodeURIComponent(file.cloudflareKey || file.id)}`}
-          fileName={file.name}
-          fileId={file.id}
-          filePrice={file.price}
-          onClose={() => setShowSample(false)}
-        />
-      )}
     </>
   );
 }
