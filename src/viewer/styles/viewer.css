@@ -172,11 +172,11 @@
 }
 
 /* Mobile only */
-@media (max-width: 767px) {
+
   .bg-gray-900{
     display: none;
   }
-}
+
 
 @media (min-width: 768px) {
   .pdf-canvas {

@@ -464,7 +464,7 @@ const PdfViewer = ({
         
         {/* Zoom Hint */}
         <div className="text-xs text-slate-400 hidden sm:block">
-          💡 Ctrl + Scroll or Ctrl + +/- to zoom
+          
         </div>
         
         {/* Download Button - Only for premium subscribers */}
@@ -473,14 +473,14 @@ const PdfViewer = ({
             onClick={handleDownloadClick}
             className="px-4 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg transition text-sm font-medium"
           >
-            ⬇️ Download PDF
+            ⬇️ Download
           </button>
         )}
         
         {/* Preview Mode Indicator */}
         {isPreviewMode && !isSubscribed && (
           <div className="text-xs bg-yellow-600/20 text-yellow-400 px-3 py-1 rounded-full">
-            🔍 Preview Mode - First 3 pages
+            🔍 Preview Mode
           </div>
         )}
       </div>
