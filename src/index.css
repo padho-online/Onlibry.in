@@ -112,3 +112,7 @@ main{
 .flex-1 overflow-y-auto px-6 py-6{
   padding: 0%;
 }
+
+*{
+  padding: 2px !important;
+}

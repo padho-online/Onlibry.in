@@ -1,6 +1,7 @@
 // src/pages/MockTestsPage.jsx
 // COMPLETE FIXED - Subscribe button adds to cart and redirects to pricing cart tab
 // UPDATED - Check purchased status before showing Subscribe button
+// FIXED - Added null checks for event.stopPropagation()
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -160,14 +161,15 @@ function MockTestsPage() {
     } else if (!user) {
       navigate('/login', { state: { from: '/mock-tests' } });
     } else {
-      // Not subscribed and not purchased - show pricing
       navigate('/pricing', { state: { from: `/mock-test/${encodeURIComponent(paper.originalName)}` } });
     }
   };
 
-  // Handle add to cart
+  // 🔥 FIXED: Add null check for event parameter
   const handleAddToCart = (paper, e) => {
-    e.stopPropagation();
+    if (e && e.stopPropagation) {
+      e.stopPropagation();
+    }
     if (!user) {
       navigate('/login', { state: { from: '/mock-tests' } });
       return;
@@ -187,17 +189,21 @@ function MockTestsPage() {
     alert(`✅ "${paper.displayName}" added to cart!`);
   };
 
-  // Handle remove from cart
+  // 🔥 FIXED: Add null check for event parameter
   const handleRemoveFromCart = (paperId, e) => {
-    e.stopPropagation();
+    if (e && e.stopPropagation) {
+      e.stopPropagation();
+    }
     removeFromCart(paperId);
     setCartStatus(prev => ({ ...prev, [paperId]: false }));
     alert(`🗑️ Removed from cart`);
   };
 
-  // Handle subscribe - Add to cart AND redirect to pricing cart tab
+  // 🔥 FIXED: Add null check for event parameter
   const handleSubscribe = (paper, e) => {
-    e.stopPropagation();
+    if (e && e.stopPropagation) {
+      e.stopPropagation();
+    }
     if (!user) {
       navigate('/login', { state: { from: '/mock-tests' } });
       return;
@@ -245,7 +251,7 @@ function MockTestsPage() {
     // Not subscribed, not purchased - show subscribe and cart options
     return {
       type: 'premium',
-      subscribeText: `🔒 Subscribe ₹{paper.price || 49}`,
+      subscribeText: `🔒 Subscribe ₹${paper.price || 49}`,
       cartText: inCartFlag ? 'Remove' : '🛒',
       cartAction: inCartFlag ? () => handleRemoveFromCart(paper.id) : () => handleAddToCart(paper),
       subscribeAction: () => handleSubscribe(paper)
@@ -398,7 +404,8 @@ function MockTestsPage() {
                     <span className="flex items-center gap-1 text-red-600 dark:text-red-400">❌ -{paper.negativeMark}</span>
                   </div>
                   
-                  <div className="flex gap-2 mt-2" onClick={(e) => e.stopPropagation()}>
+                  {/* 🔥 FIXED: onClick handler with null check */}
+                  <div className="flex gap-2 mt-2" onClick={(e) => e && e.stopPropagation && e.stopPropagation()}>
                     {config.type === 'start' && (
                       <button
                         onClick={config.action}
@@ -420,13 +427,19 @@ function MockTestsPage() {
                     {config.type === 'premium' && (
                       <>
                         <button
-                          onClick={config.subscribeAction}
+                          onClick={(e) => {
+                            if (e && e.stopPropagation) e.stopPropagation();
+                            config.subscribeAction();
+                          }}
                           className="flex-1 px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white font-medium rounded-lg transition"
                         >
                           {config.subscribeText}
                         </button>
                         <button
-                          onClick={config.cartAction}
+                          onClick={(e) => {
+                            if (e && e.stopPropagation) e.stopPropagation();
+                            config.cartAction();
+                          }}
                           className="px-3 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg transition"
                         >
                           {config.cartText}
