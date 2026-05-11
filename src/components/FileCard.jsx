@@ -6,7 +6,7 @@ import { useCart } from '../contexts/CartContext';
 import { saveFile, unsaveFile, isFileSaved, canAccessFile } from '../services/fileService';
 import { db } from '../config/firebase';
 import { doc, getDoc } from 'firebase/firestore';
-import { Eye, ShoppingCart, Trash2, Star, Bookmark, Lock, Unlock } from 'lucide-react';
+import { BookOpenText, ShoppingCart, Trash2, Star, Bookmark, Lock, Unlock } from 'lucide-react';
 
 const WORKER_URL = import.meta.env.VITE_CLOUDFLARE_WORKER_URL;
 
@@ -131,15 +131,15 @@ function FileCard({ file }) {
 
   const getButtons = () => {
     if (!user) {
-      return { type: 'view', actions: [{ icon: Eye, onClick: handleView, label: 'View' }] };
+      return { type: 'view', actions: [{ icon: BookOpenText, onClick: handleView, label: 'View' }] };
     }
     if (isSubscribed || isPurchased || !file.isPremium) {
-      return { type: 'view', actions: [{ icon: Eye, onClick: handleView, label: 'View' }] };
+      return { type: 'view', actions: [{ icon: BookOpenText, onClick: handleView, label: 'View' }] };
     }
     return {
       type: 'premium',
       actions: [
-        { icon: Eye, onClick: handleSample, label: 'Sample' },
+        { icon: BookOpenText, onClick: handleSample, label: 'Sample' },
         { icon: ShoppingCart, onClick: inCart ? handleRemoveFromCart : handleAddToCart, label: inCart ? 'Remove' : 'Cart' },
         { icon: Lock, onClick: handleSubscribe, label: 'Subscribe' }
       ]

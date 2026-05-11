@@ -5,8 +5,8 @@ import {
   Home, 
   FileText, 
   Folder, 
-  FileQuestion, 
-  HelpCircle, 
+  SquarePen, 
+   NotebookPen, 
   CreditCard, 
   Mail, 
   Shield, 
@@ -34,8 +34,8 @@ function Footer() {
               <li><Link to="/" className="text-[11px] text-gray-500 hover:text-green-600 flex items-center gap-1"><Home size={11} /> Home</Link></li>
               <li><Link to="/files" className="text-[11px] text-gray-500 hover:text-green-600 flex items-center gap-1"><FileText size={11} /> Files</Link></li>
               <li><Link to="/folders" className="text-[11px] text-gray-500 hover:text-green-600 flex items-center gap-1"><Folder size={11} /> Folders</Link></li>
-              <li><Link to="/mock-tests" className="text-[11px] text-gray-500 hover:text-green-600 flex items-center gap-1"><FileQuestion size={11} /> Mock Tests</Link></li>
-              <li><Link to="/quizzes" className="text-[11px] text-gray-500 hover:text-green-600 flex items-center gap-1"><HelpCircle size={11} /> Quiz</Link></li>
+              <li><Link to="/mock-tests" className="text-[11px] text-gray-500 hover:text-green-600 flex items-center gap-1"><SquarePen size={11} /> Mock Tests</Link></li>
+              <li><Link to="/quizzes" className="text-[11px] text-gray-500 hover:text-green-600 flex items-center gap-1"><NotebookPen size={11} /> Quiz</Link></li>
             </ul>
           </div>
 

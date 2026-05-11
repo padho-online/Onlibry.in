@@ -2,7 +2,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { FileText, CreditCard, BookOpen, FileQuestion, HelpCircle, TrendingUp, Shield, Zap } from 'lucide-react';
+import { FileText, CreditCard, BookOpen,SquarePen, HelpCircle, TrendingUp, Shield, Zap } from 'lucide-react';
 
 function HomePage() {
   const { user } = useAuth();
@@ -67,7 +67,7 @@ function HomePage() {
           </div>
           <div className="text-center p-3 bg-gray-50 rounded-xl">
             <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-2">
-              <FileQuestion size={20} className="text-green-600" />
+              <SquarePen size={20} className="text-green-600" />
             </div>
             <h3 className="font-semibold text-sm text-gray-800">Mock Tests</h3>
             <p className="text-[10px] text-gray-500">Real exam patterns</p>
