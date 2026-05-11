@@ -1,412 +1,108 @@
-// src/pages/FilesPage.jsx
-// UPDATED - Free files first sorting + debug logs + pagination
-
+// src/pages/FilesPage.jsx - Complete with responsive grid
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-
 import FileCard from '../components/FileCard';
-
 import { getAllFiles, searchFiles } from '../services/fileService';
-import { logSearch } from '../services/loggerService';
-
-import { useAuth } from '../contexts/AuthContext';
+import { Search, X } from 'lucide-react';
 
 function FilesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const { user } = useAuth();
-
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-
-  const [searchQuery, setSearchQuery] = useState(
-    searchParams.get('search') || ''
-  );
-
-  const [lastVisible, setLastVisible] = useState(null);
-  const [hasMore, setHasMore] = useState(true);
-
+  const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
   const [totalCount, setTotalCount] = useState(0);
   const [error, setError] = useState(null);
 
-  // Load files with pagination
-  const loadFiles = useCallback(async (isSearch = false, loadMore = false) => {
-
-    if (loadMore) {
-      setLoadingMore(true);
-    } else {
-      setLoading(true);
-      setError(null);
-    }
-
+  const loadFiles = useCallback(async (isSearch = false) => {
+    setLoading(true);
+    setError(null);
     try {
-      console.log(
-        '📂 Loading files - Search:',
-        isSearch,
-        'Query:',
-        searchQuery,
-        'LoadMore:',
-        loadMore
-      );
-
-      // SEARCH MODE
       if (isSearch && searchQuery) {
-
-        console.log('🔍 Searching for:', searchQuery);
-
         const results = await searchFiles(searchQuery);
-
-        // 🔥 Sort free files first
-        results.sort((a, b) => {
-          if (a.isPremium === b.isPremium) return 0;
-          return a.isPremium ? 1 : -1;
-        });
-
-        console.log('✅ Search results:', results.length);
-
+        results.sort((a, b) => a.isPremium === b.isPremium ? 0 : a.isPremium ? 1 : -1);
         setFiles(results);
-        setHasMore(false);
         setTotalCount(results.length);
-
       } else {
-
-        // NORMAL FILE LOAD
-        console.log(
-          '📄 Fetching all files, page:',
-          loadMore ? 'next' : 'first'
-        );
-
-        const result = await getAllFiles(
-          loadMore ? lastVisible : null,
-          20
-        );
-
-        console.log('✅ API Response:', {
-          filesCount: result.files?.length || 0,
-          hasMore: result.hasMore,
-          lastVisible: result.lastVisible
-        });
-
+        const result = await getAllFiles(null, 100);
         const newFiles = result.files || [];
-
-        // 🔥 Sort free files first
-        newFiles.sort((a, b) => {
-          if (a.isPremium === b.isPremium) return 0;
-          return a.isPremium ? 1 : -1;
-        });
-
-        if (loadMore) {
-
-          setFiles(prev => {
-
-            const existingIds = new Set(prev.map(f => f.id));
-
-            const uniqueNewFiles = newFiles.filter(
-              f => !existingIds.has(f.id)
-            );
-
-            console.log(
-              `📊 Adding ${uniqueNewFiles.length} new files`
-            );
-
-            // Merge + sort again
-            const merged = [...prev, ...uniqueNewFiles];
-
-            merged.sort((a, b) => {
-              if (a.isPremium === b.isPremium) return 0;
-              return a.isPremium ? 1 : -1;
-            });
-
-            return merged;
-          });
-
-          setTotalCount(prev => prev + newFiles.length);
-
-        } else {
-
-          setFiles(newFiles);
-          setTotalCount(newFiles.length);
-        }
-
-        setLastVisible(result.lastVisible);
-        setHasMore(result.hasMore === true);
+        newFiles.sort((a, b) => a.isPremium === b.isPremium ? 0 : a.isPremium ? 1 : -1);
+        setFiles(newFiles);
+        setTotalCount(newFiles.length);
       }
-
     } catch (error) {
-
-      console.error('❌ Error loading files:', error);
-
-      setError(
-        error.message || 'Failed to load files. Please refresh the page.'
-      );
-
+      console.error('Error loading files:', error);
+      setError('Failed to load files');
     } finally {
-
       setLoading(false);
-      setLoadingMore(false);
     }
+  }, [searchQuery]);
 
-  }, [searchQuery, lastVisible]);
-
-  // Load More
-  const handleLoadMore = () => {
-
-    if (!loadingMore && hasMore && !searchQuery) {
-
-      console.log('📥 Loading more files...');
-
-      loadFiles(false, true);
-    }
-  };
-
-  // Search
   const handleSearch = async (e) => {
-
     e.preventDefault();
-
     if (searchQuery.trim()) {
-
-      console.log('🔍 Search submitted:', searchQuery);
-
       setSearchParams({ search: searchQuery });
-
-      setLoading(true);
-      setError(null);
-
-      try {
-
-        const results = await searchFiles(searchQuery);
-
-        // 🔥 Sort free files first
-        results.sort((a, b) => {
-          if (a.isPremium === b.isPremium) return 0;
-          return a.isPremium ? 1 : -1;
-        });
-
-        console.log('✅ Search results count:', results.length);
-
-        setFiles(results);
-        setHasMore(false);
-        setTotalCount(results.length);
-
-        logSearch(
-          searchQuery,
-          results.length,
-          searchQuery.toLowerCase().startsWith('exact:')
-        );
-
-      } catch (error) {
-
-        console.error('❌ Search error:', error);
-
-        setError('Search failed. Please try again.');
-
-      } finally {
-
-        setLoading(false);
-      }
-
+      await loadFiles(true);
     } else {
-
-      console.log('🔄 Clearing search, loading all files');
-
       setSearchParams({});
-      setSearchQuery('');
-
-      loadFiles(false, false);
+      await loadFiles(false);
     }
   };
 
-  // Clear Search
   const handleClearSearch = () => {
-
-    console.log('🧹 Clearing search');
-
     setSearchQuery('');
     setSearchParams({});
-
-    loadFiles(false, false);
+    loadFiles(false);
   };
 
-  // Initial Load
   useEffect(() => {
-
-    const hasSearchParam = !!searchParams.get('search');
-
-    console.log(
-      '🚀 Initial load - Has search param:',
-      hasSearchParam
-    );
-
-    loadFiles(hasSearchParam, false);
-
+    loadFiles(!!searchParams.get('search'));
   }, []);
 
   return (
-    <div className="py-6">
+    <div className="py-3 md:py-6">
+      <h1 className="text-xl md:text-3xl font-bold text-gray-800 mb-1 md:mb-2">Resources</h1>
+      <p className="text-xs md:text-sm text-gray-500 mb-4 md:mb-6">Books, PYQs, notes & more</p>
 
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-800 dark:text-white mb-2">
-          Educational Resources
-        </h1>
-
-        <p className="text-gray-600 dark:text-gray-400">
-          Browse our collection of books, PYQs, notes, and more
-        </p>
-      </div>
-
-      {/* Search */}
-      <div className="mb-8">
-
-        <form
-          onSubmit={handleSearch}
-          className="flex gap-2 max-w-2xl"
-        >
-
+      <form onSubmit={handleSearch} className="flex gap-2 mb-4 md:mb-6">
+        <div className="flex-1 relative">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search for files, subjects, courses..."
-            className="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500"
+            placeholder="Search files..."
+            className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
           />
-
-          <button
-            type="submit"
-            className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition"
-          >
-            Search
-          </button>
-
-          {searchQuery && (
-            <button
-              type="button"
-              onClick={handleClearSearch}
-              className="px-4 py-3 bg-gray-500 hover:bg-gray-600 text-white rounded-lg transition"
-            >
-              Clear
-            </button>
-          )}
-
-        </form>
-      </div>
-
-      {/* Error */}
-      {error && (
-        <div className="mb-4 p-4 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-lg">
-
-          <strong>Error:</strong> {error}
-
-          <button
-            onClick={() => loadFiles(false, false)}
-            className="ml-4 px-3 py-1 bg-red-600 text-white rounded text-sm hover:bg-red-700"
-          >
-            Retry
-          </button>
-
         </div>
-      )}
+        <button type="submit" className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium">Search</button>
+        {searchQuery && (
+          <button type="button" onClick={handleClearSearch} className="px-3 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm">
+            <X size={16} />
+          </button>
+        )}
+      </form>
 
-      {/* Results Count */}
+      {error && <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg text-sm">{error}</div>}
+
       {!loading && !error && (
-        <div className="flex justify-between items-center mb-4">
+        <p className="text-xs text-gray-500 mb-3">{totalCount} file{totalCount !== 1 ? 's' : ''}</p>
+      )}
 
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            Found {totalCount} file{totalCount !== 1 ? 's' : ''}
-          </p>
-
-          {searchQuery && (
-            <p className="text-xs text-gray-400">
-              Search results for "{searchQuery}"
-            </p>
-          )}
-
+      {loading ? (
+        <div className="flex justify-center py-12">
+          <div className="w-8 h-8 border-3 border-green-500 border-t-transparent rounded-full animate-spin"></div>
+        </div>
+      ) : files.length > 0 ? (
+        // 🔥 RESPONSIVE GRID: 2 cols mobile, 3 cols tablet, 4 cols laptop, 5 cols desktop
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-3 md:gap-4">
+          {files.map(file => <FileCard key={file.id} file={file} />)}
+        </div>
+      ) : (
+        <div className="text-center py-12">
+          <p className="text-gray-500">No files found.</p>
+          {searchQuery && <button onClick={handleClearSearch} className="mt-3 text-green-600 text-sm">Clear search</button>}
         </div>
       )}
-
-      {/* Loading */}
-      {loading && (
-        <div className="flex justify-center items-center py-20">
-          <div className="w-12 h-12 border-4 border-green-500 border-t-transparent rounded-full animate-spin"></div>
-        </div>
-      )}
-
-      {/* Files Grid */}
-      {!loading && !error && files.length > 0 && (
-        <>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-
-            {files.map((file) => (
-              <FileCard
-                key={file.id}
-                file={file}
-              />
-            ))}
-
-          </div>
-
-          {/* Load More */}
-          {hasMore && !searchQuery && (
-            <div className="text-center mt-8">
-
-              <button
-                onClick={handleLoadMore}
-                disabled={loadingMore}
-                className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition disabled:opacity-50"
-              >
-
-                {loadingMore ? (
-                  <span className="flex items-center gap-2">
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    Loading...
-                  </span>
-                ) : (
-                  'Load More Files'
-                )}
-
-              </button>
-
-            </div>
-          )}
-
-          {/* End */}
-          {!hasMore && files.length > 0 && !searchQuery && (
-            <p className="text-center text-gray-400 text-sm mt-6">
-              You've reached the end — {files.length} files loaded
-            </p>
-          )}
-
-        </>
-      )}
-
-      {/* Empty */}
-      {!loading && !error && files.length === 0 && (
-        <div className="text-center py-20">
-
-          <div className="text-6xl mb-4">
-            📚
-          </div>
-
-          <p className="text-gray-500 dark:text-gray-400 text-lg">
-            {searchQuery
-              ? 'No files found matching your search.'
-              : 'No files available at the moment.'}
-          </p>
-
-          {searchQuery && (
-            <button
-              onClick={handleClearSearch}
-              className="mt-4 px-4 py-2 text-green-600 dark:text-green-400 hover:underline"
-            >
-              Clear search
-            </button>
-          )}
-
-        </div>
-      )}
-
     </div>
   );
 }

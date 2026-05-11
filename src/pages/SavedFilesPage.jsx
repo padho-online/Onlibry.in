@@ -1,361 +1,160 @@
-// src/pages/SavedFilesPage.jsx
-// UPDATED - Added Purchased Items Section (Files, Mock Tests, Quizzes)
-// FIXED - Handle 'all' flag for subscription users
-// FIXED - Purchased files show "View" instead of "Unlock"
-
+// src/pages/SavedFilesPage.jsx - Complete with responsive grid
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../config/firebase';
 import { doc, getDoc } from 'firebase/firestore';
-import { unsaveFile, canAccessFile } from '../services/fileService';
+import { unsaveFile } from '../services/fileService';
 import { getAllFilesFromSheet } from '../services/cloudflareFileService';
 import { getAllPapers as getAllMockTests } from '../services/mockTestService';
 import { getAllPapers as getAllQuizzes } from '../services/quizService';
-import { checkViewLimit } from '../utils/helpers';
+import { Bookmark, FileText, FileQuestion, HelpCircle, Trash2, Eye, ShoppingBag } from 'lucide-react';
 
 function SavedFilesPage() {
   const { user, isSubscribed } = useAuth();
   const navigate = useNavigate();
-  
-  // Tab state
   const [activeTab, setActiveTab] = useState('saved');
-  
-  // Saved files state
   const [savedFiles, setSavedFiles] = useState([]);
   const [loadingSaved, setLoadingSaved] = useState(true);
-  const [accessStatus, setAccessStatus] = useState({});
-  
-  // Purchased items state
   const [purchasedFiles, setPurchasedFiles] = useState([]);
   const [purchasedMockTests, setPurchasedMockTests] = useState([]);
   const [purchasedQuizzes, setPurchasedQuizzes] = useState([]);
   const [loadingPurchased, setLoadingPurchased] = useState(true);
-  
-  // 🔥 NEW: Track purchased items access status
   const [purchasedAccessStatus, setPurchasedAccessStatus] = useState({});
 
   useEffect(() => {
-    if (!user) {
-      navigate('/login', { state: { from: { pathname: '/saved-files' } } });
-      return;
+    if (!user) { 
+      navigate('/login'); 
+      return; 
     }
     loadSavedFiles();
     loadPurchasedItems();
   }, [user]);
 
-  // ============================================
-  // LOAD SAVED FILES
-  // ============================================
   const loadSavedFiles = async () => {
     setLoadingSaved(true);
     try {
-      const userRef = doc(db, 'users', user.uid);
-      const userDoc = await getDoc(userRef);
+      const userDoc = await getDoc(doc(db, 'users', user.uid));
       const savedFileIds = userDoc.data()?.savedFiles || [];
-      
-      if (savedFileIds.length === 0) {
-        setSavedFiles([]);
-        setLoadingSaved(false);
-        return;
+      if (savedFileIds.length === 0) { 
+        setSavedFiles([]); 
+        return; 
       }
       
       const allFiles = await getAllFilesFromSheet();
-      const files = [];
-      
-      for (const fileId of savedFileIds) {
-        const fileData = allFiles.find(f => 
-          f.id === fileId || f.cloudflareKey === fileId || f.originalId === fileId
-        );
-        
-        if (fileData && fileData.showOnWebsite !== false) {
-          files.push({
-            id: fileData.cloudflareKey || fileData.id,
-            ...fileData
-          });
-          
-          const hasAccess = await canAccessFile(fileId);
-          setAccessStatus(prev => ({ ...prev, [fileId]: hasAccess }));
-        }
-      }
-      
+      const files = savedFileIds.map(id => allFiles.find(f => f.id === id || f.cloudflareKey === id)).filter(Boolean);
       setSavedFiles(files);
-    } catch (error) {
-      console.error('Error loading saved files:', error);
-    } finally {
-      setLoadingSaved(false);
+    } catch (error) { 
+      console.error(error); 
+    } finally { 
+      setLoadingSaved(false); 
     }
   };
 
-  // ============================================
-  // LOAD PURCHASED ITEMS - FIXED VERSION
-  // ============================================
   const loadPurchasedItems = async () => {
     setLoadingPurchased(true);
     try {
-      const userRef = doc(db, 'users', user.uid);
-      const userDoc = await getDoc(userRef);
+      const userDoc = await getDoc(doc(db, 'users', user.uid));
       const purchasedFileIds = userDoc.data()?.purchasedFiles || [];
-      let purchasedMockTestData = userDoc.data()?.purchasedMockTests || [];
-      let purchasedQuizData = userDoc.data()?.purchasedQuizzes || [];
-      
-      // 🔥 Get ALL files from sheet first
-      const allFiles = await getAllFilesFromSheet();
-      
-      // Create a map for quick lookup
-      const fileMap = new Map();
-      allFiles.forEach(file => {
-        fileMap.set(file.cloudflareKey || file.id, file);
-        fileMap.set(file.originalId, file);
-        fileMap.set(file.id, file);
-      });
-      
-      // Load purchased files with CORRECT access status
-      if (purchasedFileIds.length > 0) {
-        const files = [];
-        for (const fileId of purchasedFileIds) {
-          let fileData = fileMap.get(fileId);
-          if (!fileData) {
-            fileData = allFiles.find(f => 
-              f.id === fileId || f.cloudflareKey === fileId || f.originalId === fileId
-            );
-          }
-          
-          if (fileData) {
-            const finalId = fileData.cloudflareKey || fileData.id;
-            files.push({
-              id: finalId,
-              ...fileData,
-              type: 'file'
-            });
-            // 🔥 CRITICAL: Mark as purchased - ALWAYS accessible
-            setPurchasedAccessStatus(prev => ({ ...prev, [finalId]: true }));
-            console.log('✅ Marked as purchased:', fileData.name, 'ID:', finalId);
-          } else {
-            console.warn('⚠️ File not found in sheet:', fileId);
-          }
-        }
+      const mockData = userDoc.data()?.purchasedMockTests || [];
+      const quizData = userDoc.data()?.purchasedQuizzes || [];
+      const hasSubscription = isSubscribed;
+
+      if (purchasedFileIds.length) {
+        const allFiles = await getAllFilesFromSheet();
+        const files = purchasedFileIds.map(id => allFiles.find(f => f.id === id || f.cloudflareKey === id)).filter(Boolean);
         setPurchasedFiles(files);
+        files.forEach(f => setPurchasedAccessStatus(prev => ({ ...prev, [f.id]: true })));
       }
       
-      // Check if user has subscription ('all' flag)
-      const hasSubscriptionAccess = isSubscribed === true;
-      
-      // Load purchased mock tests - Handle 'all' flag
-      if (purchasedMockTestData === 'all' || hasSubscriptionAccess) {
-        console.log('📝 User has subscription - showing all mock tests');
-        const allMockTests = await getAllMockTests();
-        const mockTests = allMockTests.map(mt => ({
-          ...mt,
-          type: 'mocktest',
-          name: mt.displayName,
-          id: mt.id
-        }));
-        setPurchasedMockTests(mockTests);
-      } else if (purchasedMockTestData.length > 0) {
-        const allMockTests = await getAllMockTests();
-        const mockTests = allMockTests.filter(mt => 
-          purchasedMockTestData.includes(mt.id) || purchasedMockTestData.includes(mt.originalName)
-        ).map(mt => ({
-          ...mt,
-          type: 'mocktest',
-          name: mt.displayName,
-          id: mt.id
-        }));
-        setPurchasedMockTests(mockTests);
+      if (mockData === 'all' || hasSubscription) {
+        const allTests = await getAllMockTests();
+        setPurchasedMockTests(allTests);
+      } else if (mockData.length) {
+        const allTests = await getAllMockTests();
+        setPurchasedMockTests(allTests.filter(t => mockData.includes(t.id)));
       }
       
-      // Load purchased quizzes - Handle 'all' flag
-      if (purchasedQuizData === 'all' || hasSubscriptionAccess) {
-        console.log('❓ User has subscription - showing all quizzes');
+      if (quizData === 'all' || hasSubscription) {
         const allQuizzes = await getAllQuizzes();
-        const quizzes = allQuizzes.map(q => ({
-          ...q,
-          type: 'quiz',
-          name: q.displayName,
-          id: q.id
-        }));
-        setPurchasedQuizzes(quizzes);
-      } else if (purchasedQuizData.length > 0) {
+        setPurchasedQuizzes(allQuizzes);
+      } else if (quizData.length) {
         const allQuizzes = await getAllQuizzes();
-        const quizzes = allQuizzes.filter(q => 
-          purchasedQuizData.includes(q.id) || purchasedQuizData.includes(q.originalName)
-        ).map(q => ({
-          ...q,
-          type: 'quiz',
-          name: q.displayName,
-          id: q.id
-        }));
-        setPurchasedQuizzes(quizzes);
+        setPurchasedQuizzes(allQuizzes.filter(q => quizData.includes(q.id)));
       }
-      
-    } catch (error) {
-      console.error('Error loading purchased items:', error);
-    } finally {
-      setLoadingPurchased(false);
+    } catch (error) { 
+      console.error(error); 
+    } finally { 
+      setLoadingPurchased(false); 
     }
   };
 
-  // ============================================
-  // HANDLE UNSAVE
-  // ============================================
-  const handleUnsave = async (fileId) => {
-    const result = await unsaveFile(fileId);
-    if (result.success) {
-      setSavedFiles(prev => prev.filter(f => f.id !== fileId));
-    } else {
-      alert('Failed to unsave file. Please try again.');
-    }
-  };
-
-  // ============================================
-  // HANDLE VIEW FILE
-  // ============================================
-  const handleViewFile = (item) => {
-    if (!user) {
-      if (!checkViewLimit()) {
-        navigate('/login', { state: { from: { pathname: '/saved-files' } } });
-        return;
-      }
-    }
-    
+  const handleView = (item) => {
     if (item.type === 'mocktest') {
       navigate(`/mock-test/${encodeURIComponent(item.originalName)}`);
     } else if (item.type === 'quiz') {
       navigate(`/quiz/${encodeURIComponent(item.originalName)}`);
     } else {
-      // 🔥 Check if file is purchased OR subscribed
-      const isPurchased = purchasedAccessStatus[item.id] === true;
-      const hasAccess = isPurchased || isSubscribed;
-      
-      if (!hasAccess && item.isPremium) {
-        navigate('/pricing', { state: { from: '/saved-files', fileId: item.id } });
-        return;
-      }
       navigate(`/viewer/${item.id}`);
     }
   };
 
-  // ============================================
-  // CHECK IF ITEM IS ACCESSIBLE
-  // ============================================
-  const isItemAccessible = (item, isPurchasedItem = false) => {
-    if (isPurchasedItem) return true;
-    if (item.type === 'mocktest' || item.type === 'quiz') {
-      return isSubscribed === true;
-    }
-    return purchasedAccessStatus[item.id] === true || isSubscribed === true;
+  const handleUnsave = async (fileId) => {
+    await unsaveFile(fileId);
+    setSavedFiles(prev => prev.filter(f => f.id !== fileId));
   };
 
-  // ============================================
-  // RENDER TAGS
-  // ============================================
-  const renderTags = (item) => {
-    let tags = item.tagsList || [];
-    if (tags.length === 0 && item.tags && typeof item.tags === 'object') {
-      Object.values(item.tags).forEach(values => {
-        if (Array.isArray(values)) tags.push(...values);
-        else if (typeof values === 'string') tags.push(values);
-      });
-    }
-    
-    return tags.slice(0, 3).map((tag, idx) => (
-      <span key={idx} className="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded-full">
-        {tag.length > 25 ? tag.substring(0, 22) + '...' : tag}
-      </span>
-    ));
-  };
-
-  // ============================================
-  // RENDER ITEM CARD - FIXED VERSION
-  // ============================================
-  const renderItemCard = (item, showUnsave = false, onUnsave = null, isPurchasedItem = false) => {
-    // 🔥 For purchased items, ALWAYS show View button
-    const showViewOnly = isPurchasedItem === true;
-    
-    // For saved files tab, check access status
-    const hasAccess = showViewOnly ? true : (accessStatus[item.id] || isSubscribed);
+  const renderCard = (item, showUnsave = false, isPurch = false) => {
+    const isPurchased = isPurch || purchasedAccessStatus[item.id];
+    const icon = item.type === 'mocktest' ? <FileQuestion size={16} /> : item.type === 'quiz' ? <HelpCircle size={16} /> : <FileText size={16} />;
     
     return (
-      <div
-        key={item.id}
-        className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden hover:shadow-lg transition border border-gray-200 dark:border-gray-700 cursor-pointer"
-        onClick={() => handleViewFile(item)}
+      <div 
+        key={item.id} 
+        onClick={() => handleView(item)} 
+        className="bg-white rounded-xl shadow-md hover:shadow-lg transition border border-gray-200 cursor-pointer overflow-hidden"
       >
-        <div className="p-4">
-          {/* Header with type badge */}
-          <div className="flex justify-between items-start mb-2">
-            <div className="flex items-center gap-2">
-              <span className="text-xl">
-                {item.type === 'mocktest' ? '📝' : item.type === 'quiz' ? '❓' : '📄'}
-              </span>
-              <h3 className="text-lg font-semibold text-gray-800 dark:text-white line-clamp-1">
-                {item.name}
+        <div className="p-3">
+          <div className="flex items-start justify-between mb-2">
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <div className="shrink-0">
+                {icon}
+              </div>
+              <h3 className="text-sm font-semibold text-gray-800 line-clamp-2 flex-1">
+                {item.name || item.displayName}
               </h3>
             </div>
-            <div className="flex gap-1">
-              {item.type === 'mocktest' && (
-                <span className="px-2 py-1 text-xs font-semibold text-blue-700 bg-blue-100 dark:bg-blue-900/50 rounded-full">
-                  Mock Test
-                </span>
-              )}
-              {item.type === 'quiz' && (
-                <span className="px-2 py-1 text-xs font-semibold text-purple-700 bg-purple-100 dark:bg-purple-900/50 rounded-full">
-                  Quiz
-                </span>
-              )}
-            </div>
+            {item.type === 'mocktest' && (
+              <span className="text-[9px] bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded-full shrink-0 ml-1">Test</span>
+            )}
+            {item.type === 'quiz' && (
+              <span className="text-[9px] bg-purple-100 text-purple-600 px-1.5 py-0.5 rounded-full shrink-0 ml-1">Quiz</span>
+            )}
           </div>
           
-          {/* Tags */}
-          <div className="flex flex-wrap gap-2 mb-3">
-            {renderTags(item)}
-          </div>
-          
-          {/* Description */}
-          {item.description && (
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-3 line-clamp-2">
-              {item.description}
-            </p>
-          )}
-          
-          {/* Mock Test Details */}
           {item.type === 'mocktest' && item.duration && (
-            <div className="flex gap-3 mb-3 text-xs text-gray-500">
+            <div className="flex gap-2 mb-2 text-[9px] text-gray-400">
               <span>⏱️ {item.duration} min</span>
-              <span className="text-green-600">✅ +{item.positiveMark}</span>
-              <span className="text-red-600">❌ -{item.negativeMark}</span>
+              <span className="text-green-600">+{item.positiveMark}</span>
+              <span className="text-red-600">-{item.negativeMark}</span>
             </div>
           )}
           
-          {/* Quiz Details */}
-          {item.type === 'quiz' && item.duration && (
-            <div className="flex gap-3 mb-3 text-xs text-gray-500">
-              <span>⏱️ {item.duration} min</span>
-              <span className="text-green-600">✅ +{item.positiveMark}</span>
-              <span className="text-red-600">❌ -{item.negativeMark}</span>
-            </div>
-          )}
-          
-          {/* Action Buttons */}
           <div className="flex gap-2 mt-2">
-            <button
-              onClick={(e) => { e.stopPropagation(); handleViewFile(item); }}
-              className={`flex-1 px-3 py-2 rounded-lg text-white text-sm font-medium transition ${
-                showViewOnly ? 'bg-green-600 hover:bg-green-700' :
-                (hasAccess || !item.isPremium) ? 'bg-green-600 hover:bg-green-700' : 'bg-yellow-500 hover:bg-yellow-600'
-              }`}
+            <button 
+              onClick={(e) => { e.stopPropagation(); handleView(item); }} 
+              className="flex-1 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-medium flex items-center justify-center gap-1 transition"
             >
-              {showViewOnly ? '📖 View' : (hasAccess || !item.isPremium) ? '📖 View' : '🔒 Unlock'}
+              <Eye size={12} />
+              <span className="hidden sm:inline">View</span>
             </button>
-            
-            {showUnsave && onUnsave && (
-              <button
-                onClick={(e) => { e.stopPropagation(); onUnsave(item.id); }}
-                className="px-3 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition"
+            {showUnsave && (
+              <button 
+                onClick={(e) => { e.stopPropagation(); handleUnsave(item.id); }} 
+                className="px-3 py-1.5 bg-red-50 hover:bg-red-100 rounded-lg transition"
                 title="Remove from saved"
               >
-                ❌
+                <Trash2 size={14} className="text-red-500" />
               </button>
             )}
           </div>
@@ -364,155 +163,124 @@ function SavedFilesPage() {
     );
   };
 
-  // ============================================
-  // RENDER
-  // ============================================
   const totalPurchased = purchasedFiles.length + purchasedMockTests.length + purchasedQuizzes.length;
 
   return (
-    <div className="py-6">
+    <div className="py-3 md:py-6">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-800 dark:text-white mb-2">
-          My Library
-        </h1>
-        <p className="text-gray-600 dark:text-gray-400">
-          Your saved files and purchased items
-        </p>
-      </div>
-
+      <h1 className="text-xl md:text-3xl font-bold text-gray-800 mb-4 md:mb-6">My Library</h1>
+      
       {/* Tab Switcher */}
-      <div className="flex gap-2 mb-6 border-b border-gray-200 dark:border-gray-700">
-        <button
-          onClick={() => setActiveTab('saved')}
-          className={`px-6 py-3 font-medium transition ${
-            activeTab === 'saved'
-              ? 'text-green-600 border-b-2 border-green-600'
+      <div className="flex gap-4 md:gap-6 mb-4 md:mb-6 border-b border-gray-200">
+        <button 
+          onClick={() => setActiveTab('saved')} 
+          className={`pb-2 text-sm md:text-base font-medium flex items-center gap-1 md:gap-2 transition ${
+            activeTab === 'saved' 
+              ? 'text-green-600 border-b-2 border-green-600' 
               : 'text-gray-500 hover:text-gray-700'
           }`}
         >
-          📌 Saved Files ({savedFiles.length})
+          <Bookmark size={16} />
+          <span>Saved ({savedFiles.length})</span>
         </button>
-        <button
-          onClick={() => setActiveTab('purchased')}
-          className={`px-6 py-3 font-medium transition ${
-            activeTab === 'purchased'
-              ? 'text-green-600 border-b-2 border-green-600'
+        <button 
+          onClick={() => setActiveTab('purchased')} 
+          className={`pb-2 text-sm md:text-base font-medium flex items-center gap-1 md:gap-2 transition ${
+            activeTab === 'purchased' 
+              ? 'text-green-600 border-b-2 border-green-600' 
               : 'text-gray-500 hover:text-gray-700'
           }`}
         >
-          🛒 Purchased ({totalPurchased})
+          <ShoppingBag size={16} />
+          <span>Purchased ({totalPurchased})</span>
         </button>
       </div>
 
-      {/* ============================================ */}
-      {/* SAVED FILES TAB */}
-      {/* ============================================ */}
+      {/* Saved Files Tab */}
       {activeTab === 'saved' && (
         <>
           {loadingSaved ? (
             <div className="flex justify-center py-12">
-              <div className="w-10 h-10 border-4 border-green-500 border-t-transparent rounded-full animate-spin"></div>
+              <div className="w-8 h-8 border-3 border-green-500 border-t-transparent rounded-full animate-spin"></div>
             </div>
           ) : savedFiles.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {savedFiles.map((file) => renderItemCard(file, true, handleUnsave, false))}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 md:gap-4">
+              {savedFiles.map(f => renderCard({ ...f, type: 'file' }, true, false))}
             </div>
           ) : (
-            <div className="text-center py-20">
-              <div className="text-6xl mb-4">📚</div>
-              <h2 className="text-xl font-semibold text-gray-800 dark:text-white mb-2">
-                No Saved Files Yet
-              </h2>
-              <p className="text-gray-600 dark:text-gray-400 mb-6">
-                Click the 📌 button on any file to save it for later
-              </p>
-              <button
-                onClick={() => navigate('/files')}
-                className="px-6 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition"
-              >
-                Browse Files
+            <div className="text-center py-12 md:py-16 bg-gray-50 rounded-xl">
+              <Bookmark size={48} className="mx-auto text-gray-300 mb-3" />
+              <p className="text-gray-500 text-sm mb-3">No saved files yet</p>
+              <button onClick={() => navigate('/files')} className="text-green-600 text-sm font-medium hover:underline">
+                Browse Files →
               </button>
             </div>
           )}
         </>
       )}
 
-      {/* ============================================ */}
-      {/* PURCHASED ITEMS TAB */}
-      {/* ============================================ */}
+      {/* Purchased Items Tab */}
       {activeTab === 'purchased' && (
         <>
           {loadingPurchased ? (
             <div className="flex justify-center py-12">
-              <div className="w-10 h-10 border-4 border-green-500 border-t-transparent rounded-full animate-spin"></div>
+              <div className="w-8 h-8 border-3 border-green-500 border-t-transparent rounded-full animate-spin"></div>
             </div>
           ) : totalPurchased > 0 ? (
-            <div className="space-y-8">
+            <div className="space-y-6 md:space-y-8">
               
-              {/* Purchased Files Section */}
+              {/* Purchased Files */}
               {purchasedFiles.length > 0 && (
                 <div>
-                  <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
-                    <span>📄</span> Purchased Files ({purchasedFiles.length})
+                  <h2 className="text-sm md:text-base font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                    <FileText size={16} className="text-green-600" />
+                    Files ({purchasedFiles.length})
                   </h2>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {purchasedFiles.map((file) => renderItemCard(file, false, null, true))}
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 md:gap-4">
+                    {purchasedFiles.map(f => renderCard({ ...f, type: 'file' }, false, true))}
                   </div>
                 </div>
               )}
 
-              {/* Purchased Mock Tests Section */}
+              {/* Purchased Mock Tests */}
               {purchasedMockTests.length > 0 && (
                 <div>
-                  <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
-                    <span>📝</span> Purchased Mock Tests ({purchasedMockTests.length})
+                  <h2 className="text-sm md:text-base font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                    <FileQuestion size={16} className="text-blue-600" />
+                    Mock Tests ({purchasedMockTests.length})
                   </h2>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {purchasedMockTests.map((test) => renderItemCard(test, false, null, true))}
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 md:gap-4">
+                    {purchasedMockTests.map(t => renderCard({ ...t, type: 'mocktest' }, false, true))}
                   </div>
                 </div>
               )}
 
-              {/* Purchased Quizzes Section */}
+              {/* Purchased Quizzes */}
               {purchasedQuizzes.length > 0 && (
                 <div>
-                  <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
-                    <span>❓</span> Purchased Quizzes ({purchasedQuizzes.length})
+                  <h2 className="text-sm md:text-base font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                    <HelpCircle size={16} className="text-purple-600" />
+                    Quizzes ({purchasedQuizzes.length})
                   </h2>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {purchasedQuizzes.map((quiz) => renderItemCard(quiz, false, null, true))}
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 md:gap-4">
+                    {purchasedQuizzes.map(q => renderCard({ ...q, type: 'quiz' }, false, true))}
                   </div>
                 </div>
               )}
             </div>
           ) : (
-            <div className="text-center py-20">
-              <div className="text-6xl mb-4">🛒</div>
-              <h2 className="text-xl font-semibold text-gray-800 dark:text-white mb-2">
-                No Purchased Items Yet
-              </h2>
-              <p className="text-gray-600 dark:text-gray-400 mb-6">
-                Buy mock tests, quizzes, or files to see them here
-              </p>
+            <div className="text-center py-12 md:py-16 bg-gray-50 rounded-xl">
+              <ShoppingBag size={48} className="mx-auto text-gray-300 mb-3" />
+              <p className="text-gray-500 text-sm mb-3">No purchases yet</p>
               <div className="flex gap-3 justify-center">
-                <button
-                  onClick={() => navigate('/files')}
-                  className="px-6 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition"
-                >
-                  Browse Files
+                <button onClick={() => navigate('/files')} className="text-green-600 text-sm font-medium hover:underline">
+                  Browse Files →
                 </button>
-                <button
-                  onClick={() => navigate('/mock-tests')}
-                  className="px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition"
-                >
-                  Mock Tests
+                <button onClick={() => navigate('/mock-tests')} className="text-blue-600 text-sm font-medium hover:underline">
+                  Mock Tests →
                 </button>
-                <button
-                  onClick={() => navigate('/quizzes')}
-                  className="px-6 py-3 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 transition"
-                >
-                  Quizzes
+                <button onClick={() => navigate('/quizzes')} className="text-purple-600 text-sm font-medium hover:underline">
+                  Quizzes →
                 </button>
               </div>
             </div>

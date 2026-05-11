@@ -1,6 +1,4 @@
-// src/components/FileCard.jsx
-// UPDATED - Removed SampleViewer popup, opens viewer directly in preview mode
-
+// src/components/FileCard.jsx - Mobile optimized
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -8,6 +6,7 @@ import { useCart } from '../contexts/CartContext';
 import { saveFile, unsaveFile, isFileSaved, canAccessFile } from '../services/fileService';
 import { db } from '../config/firebase';
 import { doc, getDoc } from 'firebase/firestore';
+import { Eye, ShoppingCart, Trash2, Star, Bookmark, Lock, Unlock } from 'lucide-react';
 
 const WORKER_URL = import.meta.env.VITE_CLOUDFLARE_WORKER_URL;
 
@@ -17,13 +16,11 @@ function FileCard({ file }) {
   const navigate = useNavigate();
   
   const [isSaved, setIsSaved] = useState(false);
-  const [canAccess, setCanAccess] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [inCart, setInCart] = useState(false);
   const [isPurchased, setIsPurchased] = useState(false);
   const [checkingPurchase, setCheckingPurchase] = useState(true);
 
-  // Check if user has purchased this specific file
   const checkPurchasedFile = async (userId, fileId) => {
     if (!userId) return false;
     try {
@@ -31,7 +28,6 @@ function FileCard({ file }) {
       const purchasedFiles = userDoc.data()?.purchasedFiles || [];
       return purchasedFiles.includes(fileId);
     } catch (error) {
-      console.error('Error checking purchased file:', error);
       return false;
     }
   };
@@ -42,43 +38,35 @@ function FileCard({ file }) {
         try {
           const saved = await isFileSaved(file.id);
           setIsSaved(saved);
-          const access = await canAccessFile(file.id);
-          setCanAccess(access);
-          
           const purchased = await checkPurchasedFile(user.uid, file.id);
           setIsPurchased(purchased);
-          setCheckingPurchase(false);
         } catch (error) {
           console.error('Error checking status:', error);
+        } finally {
           setCheckingPurchase(false);
         }
       } else {
-        setCanAccess(false);
         setCheckingPurchase(false);
       }
       setInCart(isInCart(file.id));
     };
     checkStatus();
-  }, [file.id, user, file.isPremium]);
+  }, [file.id, user]);
 
-  // 🔥 View Full File - Opens viewer directly
-  const handleViewFullFile = () => {
+  const handleView = () => {
     if (!user) {
       navigate('/login', { state: { from: { pathname: '/files', fileId: file.id } } });
       return;
     }
-    // Pass isPreviewMode=false for full access
-    navigate(`/viewer/${file.id}?preview=false`);
+    navigate(`/viewer/${file.id}`);
   };
 
-  // 🔥 View Sample - Opens viewer in preview mode (without popup)
-  const handleViewSample = () => {
+  const handleSample = () => {
     if (!user) {
       navigate('/login', { state: { from: { pathname: '/files', fileId: file.id } } });
       return;
     }
-    // Pass isPreviewMode=true for preview mode
-    navigate(`/viewer/${file.id}?preview=true&fileName=${encodeURIComponent(file.name)}&price=${file.price || 29}`);
+    navigate(`/viewer/${file.id}?preview=true`);
   };
 
   const handleSubscribe = () => {
@@ -120,224 +108,105 @@ function FileCard({ file }) {
 
   const handleSaveToggle = async (e) => {
     e.stopPropagation();
-    e.preventDefault();
-    
     if (!user) {
       navigate('/login', { state: { from: { pathname: '/files' } } });
       return;
     }
-    
     if (isSaving) return;
-    
     setIsSaving(true);
-    
     try {
       if (isSaved) {
-        const result = await unsaveFile(file.id);
-        if (result.success) {
-          setIsSaved(false);
-        }
+        await unsaveFile(file.id);
+        setIsSaved(false);
       } else {
-        const result = await saveFile(file.id);
-        if (result.success) {
-          setIsSaved(true);
-        }
+        await saveFile(file.id);
+        setIsSaved(true);
       }
     } catch (error) {
-      console.error('Save toggle error:', error);
+      console.error('Save error:', error);
     } finally {
       setIsSaving(false);
     }
   };
 
-  // ============================================
-  // BUTTON CONFIGURATION
-  // ============================================
-  const getButtonConfig = () => {
-    // Not logged in
+  const getButtons = () => {
     if (!user) {
-      return { 
-        showView: true, 
-        showSubscribe: false, 
-        showSample: true, 
-        showAddToCart: false, 
-        showSave: false, 
-        viewText: 'View', 
-        viewAction: handleViewFullFile, 
-        sampleAction: handleViewSample,
-        viewColor: 'bg-green-600' 
-      };
+      return { type: 'view', actions: [{ icon: Eye, onClick: handleView, label: 'View' }] };
     }
-    
-    // User is premium subscriber
-    if (isSubscribed) {
-      return { 
-        showView: true, 
-        showSubscribe: false, 
-        showSample: false, 
-        showAddToCart: false, 
-        showSave: true, 
-        viewText: '📖 View Full', 
-        viewAction: handleViewFullFile, 
-        viewColor: 'bg-green-600' 
-      };
+    if (isSubscribed || isPurchased || !file.isPremium) {
+      return { type: 'view', actions: [{ icon: Eye, onClick: handleView, label: 'View' }] };
     }
-    
-    // User purchased this specific file
-    if (isPurchased) {
-      return { 
-        showView: true, 
-        showSubscribe: false, 
-        showSample: false, 
-        showAddToCart: false, 
-        showSave: true, 
-        viewText: '📖 View', 
-        viewAction: handleViewFullFile, 
-        viewColor: 'bg-green-600' 
-      };
-    }
-    
-    // Free file (not premium)
-    if (!file.isPremium) {
-      return { 
-        showView: true, 
-        showSubscribe: false, 
-        showSample: false, 
-        showAddToCart: false, 
-        showSave: true, 
-        viewText: '📖 View', 
-        viewAction: handleViewFullFile, 
-        viewColor: 'bg-green-600' 
-      };
-    }
-    
-    // 🔥 Premium file, not subscribed, not purchased - Show Sample button (opens viewer in preview mode)
-    return { 
-      showView: false, 
-      showSubscribe: true, 
-      showSample: true, 
-      showAddToCart: !inCart, 
-      showRemoveFromCart: inCart, 
-      showSave: false, 
-      subscribeText: `🔒 Subscribe ₹${file.price || 29}`, 
-      subscribeAction: handleSubscribe, 
-      sampleAction: handleViewSample,
-      addToCartAction: handleAddToCart, 
-      removeFromCartAction: handleRemoveFromCart 
+    return {
+      type: 'premium',
+      actions: [
+        { icon: Eye, onClick: handleSample, label: 'Sample' },
+        { icon: ShoppingCart, onClick: inCart ? handleRemoveFromCart : handleAddToCart, label: inCart ? 'Remove' : 'Cart' },
+        { icon: Lock, onClick: handleSubscribe, label: 'Subscribe' }
+      ]
     };
   };
 
-  const buttonConfig = getButtonConfig();
+  const buttons = getButtons();
 
-  // ============================================
-  // RENDER TAGS
-  // ============================================
   const renderTags = () => {
-    let tagsArray = file.tagsList || [];
-    
-    if (tagsArray.length === 0 && file.tagsString) {
-      tagsArray = file.tagsString.split(',').map(t => t.trim()).filter(t => t);
+    let tags = file.tagsList || [];
+    if (tags.length === 0 && file.tagsString) {
+      tags = file.tagsString.split(',').slice(0, 2);
     }
-    
-    if (tagsArray.length === 0 && file.tags && typeof file.tags === 'object') {
-      Object.values(file.tags).forEach(values => {
-        if (Array.isArray(values)) tagsArray.push(...values);
-        else if (typeof values === 'string') tagsArray.push(values);
-      });
-    }
-    
-    if (tagsArray.length === 0) return null;
-    
-    const uniqueTags = [...new Set(tagsArray)];
-    
+    if (tags.length === 0) return null;
     return (
-      <div className="flex flex-wrap gap-1.5 mb-2">
-        {uniqueTags.slice(0, 4).map((tag, idx) => (
-          <span key={idx} className="px-1.5 py-0.5 text-[10px] bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded-full">
-            {tag.length > 20 ? tag.substring(0, 17) + '...' : tag}
+      <div className="flex flex-wrap gap-1 mb-2">
+        {tags.slice(0, 2).map((tag, idx) => (
+          <span key={idx} className="px-1.5 py-0.5 text-[9px] bg-gray-100 text-gray-500 rounded-full truncate max-w-[80px]">
+            {tag}
           </span>
         ))}
       </div>
     );
   };
 
-  // Loading state while checking purchase status
   if (checkingPurchase && user && file.isPremium && !isSubscribed) {
     return (
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden h-full flex flex-col items-center justify-center p-4">
-        <div className="w-6 h-6 border-2 border-green-500 border-t-transparent rounded-full animate-spin"></div>
+      <div className="bg-white rounded-xl shadow-md p-4 flex items-center justify-center h-32">
+        <div className="w-5 h-5 border-2 border-green-500 border-t-transparent rounded-full animate-spin"></div>
       </div>
     );
   }
 
   return (
-    <>
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-shadow border border-gray-200 dark:border-gray-700 h-full flex flex-col">
-        <div className="p-3 flex-1 flex flex-col">
-          <div className="flex justify-end mb-1">
-            <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full ${file.isPremium ? 'text-yellow-700 bg-yellow-100 dark:bg-yellow-900/50' : 'text-green-700 bg-green-100 dark:bg-green-900/50'}`}>
-              {file.isPremium ? `₹${file.price || 29}` : 'Free'}
-            </span>
-          </div>
+    <div className="bg-white rounded-xl shadow-md hover:shadow-lg transition border border-gray-200">
+      <div className="p-3">
+        <div className="flex justify-between items-start mb-1">
+          <h3 className="text-sm font-semibold text-gray-800 line-clamp-2 flex-1">{file.name}</h3>
+          <span className={`ml-1 px-1.5 py-0.5 text-[9px] font-semibold rounded-full whitespace-nowrap ${file.isPremium ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700'}`}>
+            {file.isPremium ? `₹${file.price || 29}` : 'Free'}
+          </span>
+        </div>
 
-          <h3 className="text-sm font-semibold text-gray-800 dark:text-white line-clamp-2 mb-1">
-            {file.name}
-          </h3>
+        {renderTags()}
 
-          {renderTags()}
-
-          {file.description && (
-            <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2 mb-2">
-              {file.description}
-            </p>
-          )}
-
-          <div className="flex-1"></div>
-
-          <div className="flex flex-wrap gap-1.5 mt-2">
-            {buttonConfig.showView && (
-              <button onClick={buttonConfig.viewAction} className={`flex-1 px-2 py-1.5 ${buttonConfig.viewColor} hover:opacity-90 text-white text-xs font-medium rounded-lg transition`}>
-                {buttonConfig.viewText}
-              </button>
-            )}
-            {buttonConfig.showSubscribe && (
-              <button onClick={buttonConfig.subscribeAction} className="flex-1 px-2 py-1.5 bg-yellow-600 hover:bg-yellow-700 text-white text-xs font-medium rounded-lg transition">
-                {buttonConfig.subscribeText}
-              </button>
-            )}
-            {buttonConfig.showSample && (
-              <button onClick={buttonConfig.sampleAction} className="px-2 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition" title="View Sample (Preview Mode)">
-                🔍 Sample
-              </button>
-            )}
-            {buttonConfig.showAddToCart && (
-              <button onClick={buttonConfig.addToCartAction} className="px-2 py-1.5 bg-yellow-600 hover:bg-yellow-700 text-white text-xs font-medium rounded-lg transition" title="Add to Cart">
-                🛒
-              </button>
-            )}
-            {buttonConfig.showRemoveFromCart && (
-              <button onClick={buttonConfig.removeFromCartAction} className="px-2 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-medium rounded-lg transition" title="Remove from Cart">
-                🗑️
-              </button>
-            )}
-            {buttonConfig.showSave && (
-              <button
-                onClick={handleSaveToggle}
-                disabled={isSaving}
-                className={`px-2 py-1.5 rounded-lg transition text-xs flex items-center justify-center min-w-[32px] ${
-                  isSaved 
-                    ? 'bg-yellow-500 hover:bg-yellow-600 text-white' 
-                    : 'bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300'
-                } ${isSaving ? 'opacity-50 cursor-wait' : ''}`}
-                title={isSaved ? 'Saved' : 'Save for later'}
-              >
-                {isSaving ? '⏳' : (isSaved ? '⭐' : '📌')}
-              </button>
-            )}
-          </div>
+        <div className="flex gap-1.5 mt-2">
+          {buttons.actions.map((btn, idx) => (
+            <button
+              key={idx}
+              onClick={(e) => { e.stopPropagation(); btn.onClick(); }}
+              className="flex-1 py-1.5 rounded-lg text-white text-xs font-medium transition flex items-center justify-center gap-1"
+              style={{ backgroundColor: btn.label === 'Subscribe' ? '#f59e0b' : '#22c55e' }}
+            >
+              <btn.icon size={14} />
+              <span className="hidden sm:inline">{btn.label}</span>
+            </button>
+          ))}
+          <button
+            onClick={handleSaveToggle}
+            disabled={isSaving}
+            className={`px-2 py-1.5 rounded-lg transition flex items-center justify-center ${isSaved ? 'bg-yellow-500 text-white' : 'bg-gray-100 text-gray-600'}`}
+          >
+            {isSaving ? <div className="w-3 h-3 border-2 border-gray-500 border-t-transparent rounded-full animate-spin"></div> : (isSaved ? <Star size={14} fill="currentColor" /> : <Bookmark size={14} />)}
+          </button>
         </div>
       </div>
-    </>
+    </div>
   );
 }
 

@@ -97,6 +97,7 @@ main{
 
   min-width: 100vw !important;
   padding: 0%;
+  background-color: rgba(245, 245, 245, 0.748);
 }
 
 
@@ -109,10 +110,23 @@ main{
   min-width: 100vw !important;
 }
 
-.flex-1 overflow-y-auto px-6 py-6{
-  padding: 0%;
-}
+
 
 *{
-  padding: 2px !important;
+  color: black;
 }
+
+input{
+  color: black;
+  background-color: white;
+  border: 2px rgb(152, 152, 201) dotted;
+}
+
+.bg-gray-100, .text-center{
+  background-color: white;
+}
+
+border-b{
+  background-color: whitesmoke;
+}
+

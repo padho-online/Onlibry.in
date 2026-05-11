@@ -1,6 +1,8 @@
+// src/pages/ExamResultsPage.jsx - Mobile optimized
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { getExamData } from '../services/mockTestService';
+import { CheckCircle, XCircle, AlertCircle, Clock, Printer, RotateCcw } from 'lucide-react';
 
 function ExamResultsPage() {
   const [searchParams] = useSearchParams();
@@ -10,24 +12,15 @@ function ExamResultsPage() {
   const [config, setConfig] = useState({});
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadResults();
-  }, [examName]);
+  useEffect(() => { loadResults(); }, [examName]);
 
   const loadResults = async () => {
     if (!examName) return;
-    
     const decodedName = decodeURIComponent(examName);
     const savedResult = localStorage.getItem(`exam_result_${decodedName}`);
-    
-    if (!savedResult) {
-      setLoading(false);
-      return;
-    }
+    if (!savedResult) { setLoading(false); return; }
     
     const resultData = JSON.parse(savedResult);
-    
-    // Load questions for reference
     const examData = await getExamData(decodedName);
     setQuestions(examData.questions);
     setConfig(examData.config);
@@ -37,14 +30,11 @@ function ExamResultsPage() {
 
   const formatText = (text) => {
     if (!text) return '';
-    return String(text)
-      .replace(/\^\^([^\^]+)\^\^/g, '<sub>$1</sub>')
-      .replace(/\^([^\^]+)\^?/g, '<sup>$1</sup>')
-      .replace(/\r?\n/g, '<br>');
+    return String(text).replace(/\^\^([^\^]+)\^\^/g, '<sub>$1</sub>').replace(/\^([^\^]+)\^?/g, '<sup>$1</sup>').replace(/\r?\n/g, '<br>');
   };
 
   const calculateTotalScore = () => {
-    if (!results) return 0;
+    if (!results) return { score: 0, maxTotal: 0 };
     const pos = config.PositiveMark || 1;
     const neg = config.NegativeMark || 0;
     const total = (results.score * pos) - ((results.answeredCount - results.score) * neg);
@@ -53,20 +43,14 @@ function ExamResultsPage() {
   };
 
   if (loading) {
-    return (
-      <div className="flex justify-center items-center min-h-[60vh]">
-        <div className="w-12 h-12 border-4 border-green-500 border-t-transparent rounded-full animate-spin"></div>
-      </div>
-    );
+    return <div className="flex justify-center py-12"><div className="w-8 h-8 border-3 border-green-500 border-t-transparent rounded-full animate-spin"></div></div>;
   }
 
   if (!results) {
     return (
-      <div className="text-center py-20">
-        <p className="text-gray-500 dark:text-gray-400">No results found. Please take a test first.</p>
-        <Link to="/mock-tests" className="mt-4 inline-block px-4 py-2 bg-green-600 text-white rounded-lg">
-          Browse Tests
-        </Link>
+      <div className="text-center py-12">
+        <p className="text-gray-500 text-sm">No results found. Take a test first.</p>
+        <Link to="/mock-tests" className="inline-block mt-4 px-5 py-2 bg-green-600 text-white rounded-lg text-sm">Browse Tests</Link>
       </div>
     );
   }
@@ -74,90 +58,54 @@ function ExamResultsPage() {
   const totalScore = calculateTotalScore();
 
   return (
-    <div className="py-6">
+    <div className="py-4 md:py-6 max-w-4xl mx-auto px-3">
       {/* Header */}
-      <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-800 dark:text-white mb-2">
-          {examName}
-        </h1>
-        <p className="text-gray-600 dark:text-gray-400">Your Test Results</p>
+      <div className="text-center mb-5">
+        <h1 className="text-lg md:text-2xl font-bold text-gray-800 mb-1 break-words">{examName}</h1>
+        <p className="text-xs text-gray-500">Your Test Results</p>
       </div>
 
       {/* Score Card */}
-      <div className="bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-900/20 dark:to-blue-900/20 rounded-xl p-6 mb-8">
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
-          <div>
-            <div className="text-2xl font-bold text-gray-800 dark:text-white">{totalScore.score}</div>
-            <div className="text-sm text-gray-500">Score / {totalScore.maxTotal}</div>
-          </div>
-          <div>
-            <div className="text-2xl font-bold text-green-600">{results.score}</div>
-            <div className="text-sm text-gray-500">Correct</div>
-          </div>
-          <div>
-            <div className="text-2xl font-bold text-red-600">{results.answeredCount - results.score}</div>
-            <div className="text-sm text-gray-500">Incorrect</div>
-          </div>
-          <div>
-            <div className="text-2xl font-bold text-yellow-600">{results.unansweredCount}</div>
-            <div className="text-sm text-gray-500">Unanswered</div>
-          </div>
-          <div>
-            <div className="text-2xl font-bold text-blue-600">{results.timeTaken} min</div>
-            <div className="text-sm text-gray-500">Time Taken</div>
-          </div>
+      <div className="bg-gradient-to-r from-green-50 to-blue-50 rounded-xl p-4 mb-5">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-center">
+          <div><div className="text-xl font-bold text-gray-800">{totalScore.score}</div><div className="text-[10px] text-gray-500">Score / {totalScore.maxTotal}</div></div>
+          <div><div className="text-xl font-bold text-green-600">{results.score}</div><div className="text-[10px] text-gray-500">Correct</div></div>
+          <div><div className="text-xl font-bold text-red-600">{results.answeredCount - results.score}</div><div className="text-[10px] text-gray-500">Incorrect</div></div>
+          <div><div className="text-xl font-bold text-yellow-600">{results.unansweredCount}</div><div className="text-[10px] text-gray-500">Unanswered</div></div>
+          <div className="col-span-2 md:col-span-1"><div className="text-xl font-bold text-blue-600">{results.timeTaken} min</div><div className="text-[10px] text-gray-500">Time Taken</div></div>
         </div>
       </div>
 
-      {/* Detailed Results */}
-      <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-4">
-        Detailed Analysis
-      </h2>
+      {/* Detailed Analysis */}
+      <h2 className="text-base font-bold text-gray-800 mb-3">Detailed Analysis</h2>
       
-      <div className="space-y-6">
+      <div className="space-y-3">
         {questions.map((question, idx) => {
           const userAnswer = results.answers[idx];
           const isCorrect = userAnswer === question.correct;
           const isAnswered = userAnswer !== undefined;
           
-          let statusClass = '';
-          let statusText = '';
-          if (!isAnswered) {
-            statusClass = 'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/10';
-            statusText = 'Not Answered';
-          } else if (isCorrect) {
-            statusClass = 'border-green-500 bg-green-50 dark:bg-green-900/10';
-            statusText = 'Correct ✓';
-          } else {
-            statusClass = 'border-red-500 bg-red-50 dark:bg-red-900/10';
-            statusText = 'Incorrect ✗';
-          }
+          let statusClass = '', statusIcon = null, statusText = '';
+          if (!isAnswered) { statusClass = 'border-yellow-500 bg-yellow-50'; statusIcon = <AlertCircle size={14} className="text-yellow-500" />; statusText = 'Not Answered'; }
+          else if (isCorrect) { statusClass = 'border-green-500 bg-green-50'; statusIcon = <CheckCircle size={14} className="text-green-500" />; statusText = 'Correct'; }
+          else { statusClass = 'border-red-500 bg-red-50'; statusIcon = <XCircle size={14} className="text-red-500" />; statusText = 'Incorrect'; }
           
           return (
-            <div key={idx} className={`border-l-4 rounded-lg p-4 ${statusClass}`}>
+            <div key={idx} className={`border-l-4 rounded-lg p-3 ${statusClass}`}>
               <div className="flex justify-between items-start mb-2">
-                <h3 className="font-semibold text-gray-800 dark:text-white">
-                  Question {idx + 1}
-                </h3>
-                <span className={`text-sm font-medium ${
-                  !isAnswered ? 'text-yellow-600' : isCorrect ? 'text-green-600' : 'text-red-600'
-                }`}>
-                  {statusText}
+                <h3 className="font-semibold text-sm">Question {idx + 1}</h3>
+                <span className={`flex items-center gap-1 text-xs ${!isAnswered ? 'text-yellow-600' : isCorrect ? 'text-green-600' : 'text-red-600'}`}>
+                  {statusIcon} {statusText}
                 </span>
               </div>
-              
-              <p className="text-gray-700 dark:text-gray-300 mb-3" 
-                 dangerouslySetInnerHTML={{ __html: formatText(question.text) }} />
-              
-              <div className="space-y-1 text-sm">
+              <p className="text-gray-700 text-xs mb-2" dangerouslySetInnerHTML={{ __html: formatText(question.text) }} />
+              <div className="space-y-1 text-xs">
                 {['A', 'B', 'C', 'D'].map(opt => {
                   let optClass = '';
-                  if (opt === question.correct) optClass = 'bg-green-100 dark:bg-green-900/30 text-green-800';
-                  if (isAnswered && opt === userAnswer && opt !== question.correct) 
-                    optClass = 'bg-red-100 dark:bg-red-900/30 text-red-800';
-                  
+                  if (opt === question.correct) optClass = 'bg-green-100 text-green-800';
+                  if (isAnswered && opt === userAnswer && opt !== question.correct) optClass = 'bg-red-100 text-red-800';
                   return (
-                    <div key={opt} className={`p-2 rounded ${optClass}`}>
+                    <div key={opt} className={`p-1.5 rounded ${optClass}`}>
                       <strong>{opt})</strong> {question.options[opt]}
                       {opt === question.correct && ' ✓'}
                       {isAnswered && opt === userAnswer && opt !== question.correct && ' (Your answer)'}
@@ -165,9 +113,8 @@ function ExamResultsPage() {
                   );
                 })}
               </div>
-              
               {question.notes && (
-                <div className="mt-3 p-3 bg-gray-100 dark:bg-gray-800 rounded-lg text-sm text-gray-600 dark:text-gray-400">
+                <div className="mt-2 p-2 bg-gray-100 rounded-lg text-xs text-gray-600">
                   <strong>Explanation:</strong> {question.notes}
                 </div>
               )}
@@ -177,19 +124,9 @@ function ExamResultsPage() {
       </div>
 
       {/* Action Buttons */}
-      <div className="flex gap-4 justify-center mt-8">
-        <Link
-          to="/mock-tests"
-          className="px-6 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700"
-        >
-          Take Another Test
-        </Link>
-        <button
-          onClick={() => window.print()}
-          className="px-6 py-3 bg-gray-600 text-white rounded-lg font-semibold hover:bg-gray-700"
-        >
-          Print Results
-        </button>
+      <div className="flex gap-3 justify-center mt-6">
+        <Link to="/mock-tests" className="px-5 py-2 bg-green-600 text-white rounded-lg text-sm font-medium">Take Another Test</Link>
+        <button onClick={() => window.print()} className="px-5 py-2 bg-gray-600 text-white rounded-lg text-sm font-medium flex items-center gap-1"><Printer size={14} /> Print</button>
       </div>
     </div>
   );
