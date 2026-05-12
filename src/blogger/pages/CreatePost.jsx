@@ -1,22 +1,18 @@
-// src/blogger/pages/CreatePost.jsx - Fix publish function
+// src/blogger/pages/CreatePost.jsx
 
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import Editor from '../components/Editor';
+import HtmlEditor from '../components/HtmlEditor';
 import SeoPanel from '../components/SeoPanel';
 import PublishPanel from '../components/PublishPanel';
-import ImageUploader from '../components/ImageUploader';
-import { generateSlug, generateReadingTime } from '../utils/generateSlug';
-import { createBlogPost } from '../services/blogService';
+import { generateSlug, calculateReadingTime, createBlogPost } from '../services/blogService';
 
 function CreatePost() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
-  const [showPreview, setShowPreview] = useState(false);
-  const [showImageUploader, setShowImageUploader] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [meta, setMeta] = useState({
     title: '',
@@ -46,15 +42,15 @@ function CreatePost() {
     setIsSaving(true);
     try {
       const finalSlug = meta.slug || generateSlug(title);
-      const readingTime = generateReadingTime(content);
-      
+      const readingTime = calculateReadingTime(content);
+
       const newPost = {
         title: title.trim(),
         content: content,
         slug: finalSlug,
         meta: {
           title: meta.title || title,
-          description: meta.description || content.substring(0, 160).replace(/<[^>]*>/g, ''),
+          description: meta.description || content.replace(/<[^>]*>/g, '').substring(0, 160),
           ogImage: meta.ogImage || '',
           tags: meta.tags || '',
         },
@@ -67,10 +63,8 @@ function CreatePost() {
         scheduledFor: postData.scheduledFor || null,
       };
 
-      console.log('📝 Publishing post:', newPost);
-      
       const result = await createBlogPost(newPost);
-      
+
       if (result.success) {
         alert('✅ Post published successfully!');
         navigate('/blog/dashboard');
@@ -94,15 +88,15 @@ function CreatePost() {
     setIsSaving(true);
     try {
       const finalSlug = meta.slug || generateSlug(title);
-      const readingTime = generateReadingTime(content);
-      
+      const readingTime = calculateReadingTime(content);
+
       const draftPost = {
         title: title.trim(),
         content: content,
         slug: finalSlug,
         meta: {
           title: meta.title || title,
-          description: meta.description || content.substring(0, 160).replace(/<[^>]*>/g, ''),
+          description: meta.description || content.replace(/<[^>]*>/g, '').substring(0, 160),
           ogImage: meta.ogImage || '',
           tags: meta.tags || '',
         },
@@ -115,7 +109,7 @@ function CreatePost() {
       };
 
       const result = await createBlogPost(draftPost);
-      
+
       if (result.success) {
         alert('✅ Draft saved successfully!');
         navigate('/blog/dashboard');
@@ -157,7 +151,7 @@ function CreatePost() {
       <div className="max-w-7xl mx-auto px-4">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2">
-            <Editor content={content} onChange={setContent} placeholder="Write your blog post here..." />
+            <HtmlEditor content={content} onChange={setContent} placeholder="Write your blog post here..." />
           </div>
           <div className="space-y-6">
             <SeoPanel meta={meta} onUpdate={setMeta} previewUrl="https://onlibry.in/blog/" />
@@ -170,11 +164,6 @@ function CreatePost() {
           </div>
         </div>
       </div>
-
-      {/* Image Uploader */}
-      {showImageUploader && (
-        <ImageUploader onClose={() => setShowImageUploader(false)} />
-      )}
     </div>
   );
 }

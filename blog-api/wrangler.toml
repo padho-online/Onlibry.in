@@ -1,0 +1,13 @@
+name = "onlibry-blog-api"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "onlibry-blog-db"
+database_id = "78d44019-0c84-4a3b-ab94-f5ba355f1c95"
+
+[vars]
+CLOUDINARY_CLOUD_NAME = "djnwoi3hk"
+CLOUDINARY_API_KEY = "436374333439124"
+CLOUDINARY_API_SECRET = "1XJ2cPrvRAra62BVbcDe2n0YJTs"

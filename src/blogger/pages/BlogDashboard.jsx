@@ -1,10 +1,11 @@
-// src/blogger/pages/BlogDashboard.jsx - Fixed version
+// src/blogger/pages/BlogDashboard.jsx
+// Fixed - Working edit navigation with debug
 
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { getUserPosts, deleteBlogPost } from '../services/blogService';
-import { Plus, Edit, Trash2, Eye, Globe, Clock } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, Globe } from 'lucide-react';
 
 function BlogDashboard() {
   const { user } = useAuth();
@@ -46,11 +47,14 @@ function BlogDashboard() {
   };
 
   const handleEdit = (postId) => {
+    console.log('📝 Edit button clicked. Post ID:', postId);
+    console.log('📝 Post ID type:', typeof postId);
+    console.log('📝 Post ID length:', postId?.length);
     navigate(`/blog/edit/${postId}`);
   };
 
-  const publishedPosts = posts.filter(p => p.status === 'published');
-  const draftPosts = posts.filter(p => p.status === 'draft');
+  const publishedPosts = posts.filter((p) => p.status === 'published');
+  const draftPosts = posts.filter((p) => p.status === 'draft');
 
   const stats = {
     total: posts.length,
@@ -60,7 +64,11 @@ function BlogDashboard() {
   };
 
   if (loading) {
-    return <div className="flex justify-center py-20"><div className="w-8 h-8 border-3 border-green-500 border-t-transparent rounded-full animate-spin"></div></div>;
+    return (
+      <div className="flex justify-center py-20">
+        <div className="w-8 h-8 border-3 border-green-500 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
   }
 
   return (
@@ -102,8 +110,11 @@ function BlogDashboard() {
           <div className="mb-6">
             <h2 className="text-lg font-semibold mb-3">Published</h2>
             <div className="space-y-3">
-              {publishedPosts.map(post => (
-                <div key={post.id} className="bg-white rounded-lg border border-gray-200 p-4 flex flex-wrap items-center justify-between gap-3">
+              {publishedPosts.map((post) => (
+                <div
+                  key={post.id}
+                  className="bg-white rounded-lg border border-gray-200 p-4 flex flex-wrap items-center justify-between gap-3"
+                >
                   <div className="flex-1 min-w-0">
                     <h3 className="font-semibold text-gray-800">{post.title}</h3>
                     <p className="text-xs text-gray-400 mt-1">Slug: {post.slug}</p>
@@ -131,8 +142,11 @@ function BlogDashboard() {
           <div>
             <h2 className="text-lg font-semibold mb-3">Drafts</h2>
             <div className="space-y-3">
-              {draftPosts.map(post => (
-                <div key={post.id} className="bg-white rounded-lg border border-gray-200 p-4 flex flex-wrap items-center justify-between gap-3">
+              {draftPosts.map((post) => (
+                <div
+                  key={post.id}
+                  className="bg-white rounded-lg border border-gray-200 p-4 flex flex-wrap items-center justify-between gap-3"
+                >
                   <div className="flex-1 min-w-0">
                     <h3 className="font-semibold text-gray-800">{post.title}</h3>
                     <p className="text-xs text-gray-400 mt-1">Last updated: {new Date(post.updatedAt).toLocaleDateString()}</p>
