@@ -150,3 +150,132 @@ border-b{
     border-radius: 0 0 2px 2px;
   }
 }
+
+
+@import "tailwindcss";
+
+/* =========================
+   THEME VARIABLES - WHITE THEME
+========================= */
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+  --primary: #22c55e;
+  --primary-dark: #16a34a;
+  --gray-bg: #f8f9fa;
+  --card-bg: #ffffff;
+  --border: #000000;
+}
+
+/* Dark mode - Keep white theme only, no dark mode */
+.dark {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+/* =========================
+   BASE LAYER
+========================= */
+@layer base {
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+  }
+
+  * {
+    color: inherit;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+}
+
+/* =========================
+   SCROLLBAR
+========================= */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a1a1a1;
+}
+
+/* =========================
+   SELECTION
+========================= */
+::selection {
+  background: #22c55e;
+  color: white;
+}
+
+/* =========================
+   UTILITY CLASSES
+========================= */
+.bg-primary {
+  background-color: var(--primary);
+}
+
+.text-primary {
+  color: var(--primary);
+}
+
+.border-primary {
+  border-color: var(--primary);
+}
+
+/* =========================
+   CLIP PATH FOR LOGO
+========================= */
+.clip-path-polygon {
+  clip-path: polygon(0% 0%, 100% 0%, 50% 100%);
+}
+
+.clip-path-polygon-sm {
+  clip-path: polygon(0% 0%, 100% 0%, 50% 100%);
+}
+
+/* Fallback for browsers without clip-path */
+@supports not (clip-path: polygon(0% 0%, 100% 0%, 50% 100%)) {
+  .clip-path-polygon {
+    clip-path: none;
+    border-radius: 0 0 4px 4px;
+  }
+  .clip-path-polygon-sm {
+    clip-path: none;
+    border-radius: 0 0 2px 2px;
+  }
+}
+
+/* =========================
+   MAIN LAYOUT
+========================= */
+main {
+  min-width: 100vw !important;
+  padding: 0%;
+  background-color: #ffffff;
+}
+
+.container {
+  min-width: 100vw !important;
+  padding: 0 1rem;
+}
+
+/* =========================
+   HIDE FOLDER STATS
+========================= */
+.grid.grid-cols-2.gap-4.max-w-md.mx-auto.mb-8 {
+  display: none;
+}
+

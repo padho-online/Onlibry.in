@@ -21,14 +21,14 @@ function NotificationSection() {
 
   if (loading) {
     return (
-      <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4 mb-8">
+      <div className="bg-white rounded-xl p-4 mb-8 border border-gray-200">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg font-bold text-gray-800 dark:text-white">📢 Latest Updates</h2>
-          <div className="w-24 h-6 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+          <h2 className="text-lg font-bold text-gray-800">📢 Latest Updates</h2>
+          <div className="w-20 h-5 bg-gray-200 rounded animate-pulse"></div>
         </div>
         <div className="space-y-3">
           {[1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="bg-white dark:bg-gray-900 rounded-lg p-3 animate-pulse h-16"></div>
+            <div key={i} className="bg-gray-50 rounded-lg p-3 animate-pulse h-16"></div>
           ))}
         </div>
       </div>
@@ -40,9 +40,9 @@ function NotificationSection() {
   }
 
   return (
-    <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4 mb-8">
+    <div className="bg-white rounded-xl p-4 mb-8 border border-gray-200">
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-lg font-bold text-gray-800 dark:text-white">
+        <h2 className="text-lg font-bold text-gray-800">
           📢 Latest Updates
         </h2>
         <Link 

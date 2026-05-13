@@ -1,24 +1,20 @@
-// src/pages/admin/AdminDashboard.jsx - Mobile optimized
-// UPDATED: Added Home Editor Tab
-
+// src/pages/admin/AdminDashboard.jsx - Mobile optimized - White Theme
 import React, { useState, useEffect } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { 
-  LayoutDashboard, Upload, Files, CreditCard, Users, Calendar, Tag, 
-  Menu, X, Home, Bell, Sliders 
-} from 'lucide-react';
+import { LayoutDashboard, Upload, Files, CreditCard, Users, Calendar, Tag, Home, Menu, X } from 'lucide-react';
+import HomeEditor from './HomeEditor';
 
 function AdminDashboard() {
   const { user } = useAuth();
   const location = useLocation();
-  const [activeTab, setActiveTab] = useState('home');
+  const [activeTab, setActiveTab] = useState('upload');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const tabs = [
-    { id: 'home', name: 'Home Editor', icon: Home, path: '/admin/home' },
     { id: 'upload', name: 'Upload', icon: Upload, path: '/admin/upload' },
     { id: 'files', name: 'Files', icon: Files, path: '/admin/files' },
+    { id: 'home', name: 'Home Editor', icon: Home, path: '/admin/home' },
     { id: 'logs', name: 'Payments', icon: CreditCard, path: '/admin/logs' },
     { id: 'users', name: 'Users', icon: Users, path: '/admin/users' },
     { id: 'subscriptions', name: 'Subscriptions', icon: Calendar, path: '/admin/subscriptions' },
@@ -28,7 +24,7 @@ function AdminDashboard() {
   useEffect(() => {
     const currentTab = tabs.find(tab => location.pathname === tab.path);
     if (currentTab) setActiveTab(currentTab.id);
-    else if (location.pathname === '/admin') setActiveTab('home');
+    else if (location.pathname === '/admin') setActiveTab('upload');
   }, [location.pathname]);
 
   return (
@@ -71,7 +67,7 @@ function AdminDashboard() {
 
         {/* Sidebar - Desktop */}
         <div className="hidden md:block w-64 shrink-0">
-          <div className="bg-white rounded-xl shadow-md p-4 sticky top-20">
+          <div className="bg-white rounded-xl shadow-md p-4 sticky top-20 border border-gray-200">
             <div className="text-center mb-4 pb-3 border-b border-gray-200">
               <h3 className="font-semibold text-gray-800">Admin Panel</h3>
               <p className="text-[11px] text-gray-500 mt-1">{user?.email}</p>
@@ -97,7 +93,7 @@ function AdminDashboard() {
 
         {/* Main Content */}
         <div className="flex-1">
-          <div className="bg-white rounded-xl shadow-md p-4 md:p-6">
+          <div className="bg-white rounded-xl shadow-md p-4 md:p-6 border border-gray-200">
             <Outlet />
           </div>
         </div>

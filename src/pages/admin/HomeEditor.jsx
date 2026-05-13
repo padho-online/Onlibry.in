@@ -1,5 +1,5 @@
 // src/pages/admin/HomeEditor.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { 
   getQuickAccessButtons, 
@@ -27,10 +27,17 @@ import {
   reorderSliderCards
 } from '../../services/sliderService';
 
+// Cloudinary configuration
+const CLOUDINARY_CLOUD_NAME = 'djnwoi3hk';
+const CLOUDINARY_UPLOAD_PRESET = 'onlibry_blog';
+
 function HomeEditor() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('buttons');
   const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef(null);
+  const [currentUploadTarget, setCurrentUploadTarget] = useState(null);
   
   // Quick Access Buttons State
   const [buttons, setButtons] = useState([]);
@@ -48,6 +55,7 @@ function HomeEditor() {
   // Slider Cards State
   const [sliderCards, setSliderCards] = useState([]);
   const [editingCard, setEditingCard] = useState(null);
+  const [showCardModal, setShowCardModal] = useState(false);
   
   // Form States
   const [buttonForm, setButtonForm] = useState({ label: '', icon: '📁', path: '', order: 0 });
@@ -58,6 +66,53 @@ function HomeEditor() {
   const [cardForm, setCardForm] = useState({ 
     title: '', description: '', image_url: '', link: '', button_text: 'View More', order: 0 
   });
+
+  // Upload image to Cloudinary
+  const uploadImage = async (file) => {
+    setUploading(true);
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+    formData.append('folder', 'onlibry-notifications');
+    
+    try {
+      const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
+        method: 'POST',
+        body: formData
+      });
+      const data = await response.json();
+      if (data.secure_url) {
+        return data.secure_url;
+      }
+      throw new Error('Upload failed');
+    } catch (error) {
+      console.error('Upload error:', error);
+      alert('Image upload failed. Please try again.');
+      return null;
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleImageUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    const imageUrl = await uploadImage(file);
+    if (imageUrl) {
+      if (currentUploadTarget === 'notification') {
+        setNotificationForm({ ...notificationForm, image_url: imageUrl });
+      } else if (currentUploadTarget === 'slider') {
+        setCardForm({ ...cardForm, image_url: imageUrl });
+      }
+    }
+    fileInputRef.current.value = '';
+  };
+
+  const openImageUpload = (target) => {
+    setCurrentUploadTarget(target);
+    fileInputRef.current.click();
+  };
 
   useEffect(() => {
     loadAllData();
@@ -75,7 +130,7 @@ function HomeEditor() {
   };
 
   const loadButtons = async () => {
-    const data = await getQuickAccessButtons(true); // force refresh
+    const data = await getQuickAccessButtons(true);
     setButtons(data);
   };
 
@@ -207,6 +262,7 @@ function HomeEditor() {
       await addSliderCard(cardForm);
     }
     setEditingCard(null);
+    setShowCardModal(false);
     setCardForm({ title: '', description: '', image_url: '', link: '', button_text: 'View More', order: 0 });
     await loadSliderCards();
   };
@@ -228,6 +284,7 @@ function HomeEditor() {
       button_text: card.button_text || 'View More',
       order: card.order
     });
+    setShowCardModal(true);
   };
 
   const handleReorderCards = async (draggedId, targetId) => {
@@ -239,7 +296,6 @@ function HomeEditor() {
     const [removed] = newCards.splice(draggedIndex, 1);
     newCards.splice(targetIndex, 0, removed);
     
-    // Update order numbers
     const updatedCards = newCards.map((card, idx) => ({ ...card, order: idx + 1 }));
     setSliderCards(updatedCards);
     await reorderSliderCards(updatedCards);
@@ -254,8 +310,7 @@ function HomeEditor() {
     { value: 'purple', label: '🟣 Purple' },
     { value: 'pink', label: '🌸 Pink' },
     { value: 'orange', label: '🟠 Orange' },
-    { value: 'gray', label: '⚪ Gray' },
-    { value: 'indigo', label: '🔷 Indigo' }
+    { value: 'gray', label: '⚪ Gray' }
   ];
 
   // Icon options
@@ -271,6 +326,9 @@ function HomeEditor() {
 
   return (
     <div>
+      {/* Hidden file input for image upload */}
+      <input type="file" ref={fileInputRef} accept="image/*" style={{ display: 'none' }} onChange={handleImageUpload} />
+
       {/* Tabs */}
       <div className="flex flex-wrap gap-2 mb-6 border-b border-gray-200 pb-3">
         <button
@@ -320,7 +378,7 @@ function HomeEditor() {
       {/* ============================================ */}
       {activeTab === 'buttons' && (
         <div>
-          <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 mb-6">
+          <div className="bg-gray-50 rounded-lg p-4 mb-6 border border-gray-200">
             <h3 className="font-semibold text-gray-800 mb-3">
               {editingButton ? '✏️ Edit Button' : '➕ Add New Button'}
             </h3>
@@ -330,33 +388,33 @@ function HomeEditor() {
                 placeholder="Label (e.g., Files)"
                 value={buttonForm.label}
                 onChange={(e) => setButtonForm({ ...buttonForm, label: e.target.value })}
-                className="px-3 py-2 border rounded-lg"
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
               />
               <input
                 type="text"
                 placeholder="Icon (emoji: 📁)"
                 value={buttonForm.icon}
                 onChange={(e) => setButtonForm({ ...buttonForm, icon: e.target.value })}
-                className="px-3 py-2 border rounded-lg"
+                className="px-3 py-2 border border-gray-300 rounded-lg"
               />
               <input
                 type="text"
                 placeholder="Path (e.g., /files)"
                 value={buttonForm.path}
                 onChange={(e) => setButtonForm({ ...buttonForm, path: e.target.value })}
-                className="px-3 py-2 border rounded-lg"
+                className="px-3 py-2 border border-gray-300 rounded-lg"
               />
               <div className="flex gap-2">
                 <button
                   onClick={handleSaveButton}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm"
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700"
                 >
                   {editingButton ? 'Update' : 'Add'}
                 </button>
                 {editingButton && (
                   <button
                     onClick={() => { setEditingButton(null); setButtonForm({ label: '', icon: '📁', path: '', order: 0 }); }}
-                    className="px-4 py-2 bg-gray-500 text-white rounded-lg text-sm"
+                    className="px-4 py-2 bg-gray-500 text-white rounded-lg text-sm hover:bg-gray-600"
                   >
                     Cancel
                   </button>
@@ -366,8 +424,8 @@ function HomeEditor() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-100">
+            <table className="w-full text-sm border border-gray-200 rounded-lg">
+              <thead className="bg-gray-50">
                 <tr>
                   <th className="p-3 text-left">Icon</th>
                   <th className="p-3 text-left">Label</th>
@@ -378,14 +436,14 @@ function HomeEditor() {
               </thead>
               <tbody>
                 {buttons.map((btn) => (
-                  <tr key={btn.id} className="border-b">
+                  <tr key={btn.id} className="border-b border-gray-200 hover:bg-gray-50">
                     <td className="p-3 text-2xl">{btn.icon}</td>
                     <td className="p-3 font-medium">{btn.label}</td>
                     <td className="p-3 text-gray-500">{btn.path}</td>
                     <td className="p-3">{btn.order}</td>
                     <td className="p-3">
-                      <button onClick={() => handleEditButton(btn)} className="text-blue-600 mr-3">✏️</button>
-                      <button onClick={() => handleDeleteButton(btn.id)} className="text-red-600">🗑️</button>
+                      <button onClick={() => handleEditButton(btn)} className="text-blue-600 mr-3 hover:text-blue-800">✏️</button>
+                      <button onClick={() => handleDeleteButton(btn.id)} className="text-red-600 hover:text-red-800">🗑️</button>
                     </td>
                   </tr>
                 ))}
@@ -400,7 +458,7 @@ function HomeEditor() {
       {/* ============================================ */}
       {activeTab === 'categories' && (
         <div>
-          <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 mb-6">
+          <div className="bg-gray-50 rounded-lg p-4 mb-6 border border-gray-200">
             <h3 className="font-semibold text-gray-800 mb-3">
               {editingCategory ? '✏️ Edit Category' : '➕ Add New Category'}
             </h3>
@@ -410,19 +468,19 @@ function HomeEditor() {
                 placeholder="Name (e.g., Exam Notification)"
                 value={categoryForm.name}
                 onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })}
-                className="px-3 py-2 border rounded-lg"
+                className="px-3 py-2 border border-gray-300 rounded-lg"
               />
               <input
                 type="text"
                 placeholder="Slug (e.g., exam)"
                 value={categoryForm.slug}
                 onChange={(e) => setCategoryForm({ ...categoryForm, slug: e.target.value })}
-                className="px-3 py-2 border rounded-lg"
+                className="px-3 py-2 border border-gray-300 rounded-lg"
               />
               <select
                 value={categoryForm.color}
                 onChange={(e) => setCategoryForm({ ...categoryForm, color: e.target.value })}
-                className="px-3 py-2 border rounded-lg"
+                className="px-3 py-2 border border-gray-300 rounded-lg"
               >
                 {colorOptions.map(opt => (
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -431,7 +489,7 @@ function HomeEditor() {
               <select
                 value={categoryForm.icon}
                 onChange={(e) => setCategoryForm({ ...categoryForm, icon: e.target.value })}
-                className="px-3 py-2 border rounded-lg"
+                className="px-3 py-2 border border-gray-300 rounded-lg"
               >
                 {iconOptions.map(icon => (
                   <option key={icon} value={icon}>{icon}</option>
@@ -440,14 +498,14 @@ function HomeEditor() {
               <div className="flex gap-2">
                 <button
                   onClick={handleSaveCategory}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm"
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700"
                 >
                   {editingCategory ? 'Update' : 'Add'}
                 </button>
                 {editingCategory && (
                   <button
                     onClick={() => { setEditingCategory(null); setCategoryForm({ name: '', slug: '', color: 'gray', icon: '📢', order: 0 }); }}
-                    className="px-4 py-2 bg-gray-500 text-white rounded-lg text-sm"
+                    className="px-4 py-2 bg-gray-500 text-white rounded-lg text-sm hover:bg-gray-600"
                   >
                     Cancel
                   </button>
@@ -457,8 +515,8 @@ function HomeEditor() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-100">
+            <table className="w-full text-sm border border-gray-200 rounded-lg">
+              <thead className="bg-gray-50">
                 <tr>
                   <th className="p-3 text-left">Icon</th>
                   <th className="p-3 text-left">Name</th>
@@ -469,7 +527,7 @@ function HomeEditor() {
               </thead>
               <tbody>
                 {categories.map((cat) => (
-                  <tr key={cat.id} className="border-b">
+                  <tr key={cat.id} className="border-b border-gray-200 hover:bg-gray-50">
                     <td className="p-3 text-2xl">{cat.icon}</td>
                     <td className="p-3 font-medium">{cat.name}</td>
                     <td className="p-3 text-gray-500">{cat.slug}</td>
@@ -479,8 +537,8 @@ function HomeEditor() {
                       </span>
                     </td>
                     <td className="p-3">
-                      <button onClick={() => handleEditCategory(cat)} className="text-blue-600 mr-3">✏️</button>
-                      <button onClick={() => handleDeleteCategory(cat.id)} className="text-red-600">🗑️</button>
+                      <button onClick={() => handleEditCategory(cat)} className="text-blue-600 mr-3 hover:text-blue-800">✏️</button>
+                      <button onClick={() => handleDeleteCategory(cat.id)} className="text-red-600 hover:text-red-800">🗑️</button>
                     </td>
                   </tr>
                 ))}
@@ -497,14 +555,14 @@ function HomeEditor() {
         <div>
           <button
             onClick={() => { setEditingNotification(null); setNotificationForm({ title: '', content: '', category_id: '', link: '', image_url: '', is_pinned: 0, status: 'published' }); setShowNotifModal(true); }}
-            className="mb-4 px-4 py-2 bg-green-600 text-white rounded-lg text-sm"
+            className="mb-4 px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700"
           >
             + Create New Notification
           </button>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-100">
+            <table className="w-full text-sm border border-gray-200 rounded-lg">
+              <thead className="bg-gray-50">
                 <tr>
                   <th className="p-3 text-left">Title</th>
                   <th className="p-3 text-left">Category</th>
@@ -518,7 +576,7 @@ function HomeEditor() {
                 {notifications.map((notif) => {
                   const category = categories.find(c => c.id === notif.category_id);
                   return (
-                    <tr key={notif.id} className="border-b">
+                    <tr key={notif.id} className="border-b border-gray-200 hover:bg-gray-50">
                       <td className="p-3 font-medium max-w-[200px] truncate">{notif.title}</td>
                       <td className="p-3">
                         <span className="flex items-center gap-1">
@@ -533,8 +591,8 @@ function HomeEditor() {
                       <td className="p-3">{notif.is_pinned === 1 ? '📌 Yes' : 'No'}</td>
                       <td className="p-3">{notif.views || 0}</td>
                       <td className="p-3">
-                        <button onClick={() => handleEditNotification(notif)} className="text-blue-600 mr-3">✏️</button>
-                        <button onClick={() => handleDeleteNotification(notif.id)} className="text-red-600">🗑️</button>
+                        <button onClick={() => handleEditNotification(notif)} className="text-blue-600 mr-3 hover:text-blue-800">✏️</button>
+                        <button onClick={() => handleDeleteNotification(notif.id)} className="text-red-600 hover:text-red-800">🗑️</button>
                       </td>
                     </tr>
                   );
@@ -550,82 +608,34 @@ function HomeEditor() {
       {/* ============================================ */}
       {activeTab === 'slider' && (
         <div>
-          <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 mb-6">
-            <h3 className="font-semibold text-gray-800 mb-3">
-              {editingCard ? '✏️ Edit Card' : '➕ Add New Card'}
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <input
-                type="text"
-                placeholder="Title"
-                value={cardForm.title}
-                onChange={(e) => setCardForm({ ...cardForm, title: e.target.value })}
-                className="px-3 py-2 border rounded-lg"
-              />
-              <input
-                type="text"
-                placeholder="Description"
-                value={cardForm.description}
-                onChange={(e) => setCardForm({ ...cardForm, description: e.target.value })}
-                className="px-3 py-2 border rounded-lg"
-              />
-              <input
-                type="text"
-                placeholder="Image URL"
-                value={cardForm.image_url}
-                onChange={(e) => setCardForm({ ...cardForm, image_url: e.target.value })}
-                className="px-3 py-2 border rounded-lg"
-              />
-              <input
-                type="text"
-                placeholder="Link (e.g., /files or https://...)"
-                value={cardForm.link}
-                onChange={(e) => setCardForm({ ...cardForm, link: e.target.value })}
-                className="px-3 py-2 border rounded-lg"
-              />
-              <input
-                type="text"
-                placeholder="Button Text (e.g., Explore Now)"
-                value={cardForm.button_text}
-                onChange={(e) => setCardForm({ ...cardForm, button_text: e.target.value })}
-                className="px-3 py-2 border rounded-lg"
-              />
-              <div className="flex gap-2">
-                <button
-                  onClick={handleSaveCard}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm"
-                >
-                  {editingCard ? 'Update' : 'Add'}
-                </button>
-                {editingCard && (
-                  <button
-                    onClick={() => { setEditingCard(null); setCardForm({ title: '', description: '', image_url: '', link: '', button_text: 'View More', order: 0 }); }}
-                    className="px-4 py-2 bg-gray-500 text-white rounded-lg text-sm"
-                  >
-                    Cancel
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
+          <button
+            onClick={() => { setEditingCard(null); setCardForm({ title: '', description: '', image_url: '', link: '', button_text: 'View More', order: 0 }); setShowCardModal(true); }}
+            className="mb-4 px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700"
+          >
+            + Add New Slider Card
+          </button>
 
           <div className="space-y-3">
             {sliderCards.map((card, idx) => (
-              <div key={card.id} className="bg-white dark:bg-gray-800 rounded-lg p-4 border flex items-center gap-4">
+              <div key={card.id} className="bg-white rounded-lg p-4 border border-gray-200 flex items-center gap-4 shadow-sm">
                 <div className="cursor-move text-gray-400 text-2xl">⋮⋮</div>
-                <img src={card.image_url} alt={card.title} className="w-16 h-16 object-cover rounded" />
+                {card.image_url ? (
+                  <img src={card.image_url} alt={card.title} className="w-20 h-16 object-cover rounded-lg" />
+                ) : (
+                  <div className="w-20 h-16 bg-gray-100 rounded-lg flex items-center justify-center text-2xl">🖼️</div>
+                )}
                 <div className="flex-1">
-                  <h4 className="font-semibold">{card.title}</h4>
+                  <h4 className="font-semibold text-gray-800">{card.title}</h4>
                   <p className="text-sm text-gray-500 truncate">{card.description}</p>
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={() => handleEditCard(card)} className="text-blue-600">✏️</button>
-                  <button onClick={() => handleDeleteCard(card.id)} className="text-red-600">🗑️</button>
+                  <button onClick={() => handleEditCard(card)} className="text-blue-600 hover:text-blue-800">✏️</button>
+                  <button onClick={() => handleDeleteCard(card.id)} className="text-red-600 hover:text-red-800">🗑️</button>
                   {idx > 0 && (
-                    <button onClick={() => handleReorderCards(card.id, sliderCards[idx-1].id)} className="text-gray-500">⬆️</button>
+                    <button onClick={() => handleReorderCards(card.id, sliderCards[idx-1].id)} className="text-gray-500 hover:text-gray-700">⬆️</button>
                   )}
                   {idx < sliderCards.length - 1 && (
-                    <button onClick={() => handleReorderCards(card.id, sliderCards[idx+1].id)} className="text-gray-500">⬇️</button>
+                    <button onClick={() => handleReorderCards(card.id, sliderCards[idx+1].id)} className="text-gray-500 hover:text-gray-700">⬇️</button>
                   )}
                 </div>
               </div>
@@ -637,12 +647,12 @@ function HomeEditor() {
       {/* Notification Modal */}
       {showNotifModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
+          <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-bold">
                 {editingNotification ? '✏️ Edit Notification' : '➕ Create Notification'}
               </h3>
-              <button onClick={() => setShowNotifModal(false)} className="text-gray-500 text-2xl">×</button>
+              <button onClick={() => setShowNotifModal(false)} className="text-gray-500 text-2xl hover:text-gray-700">×</button>
             </div>
             
             <div className="space-y-4">
@@ -651,13 +661,13 @@ function HomeEditor() {
                 placeholder="Title"
                 value={notificationForm.title}
                 onChange={(e) => setNotificationForm({ ...notificationForm, title: e.target.value })}
-                className="w-full px-3 py-2 border rounded-lg"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
               />
               
               <select
                 value={notificationForm.category_id}
                 onChange={(e) => setNotificationForm({ ...notificationForm, category_id: e.target.value })}
-                className="w-full px-3 py-2 border rounded-lg"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
               >
                 <option value="">Select Category</option>
                 {categories.map(cat => (
@@ -666,11 +676,11 @@ function HomeEditor() {
               </select>
               
               <textarea
-                placeholder="Content (HTML supported)"
+                placeholder="Content"
                 value={notificationForm.content}
                 onChange={(e) => setNotificationForm({ ...notificationForm, content: e.target.value })}
                 rows="6"
-                className="w-full px-3 py-2 border rounded-lg"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
               />
               
               <input
@@ -678,16 +688,25 @@ function HomeEditor() {
                 placeholder="Link (optional)"
                 value={notificationForm.link}
                 onChange={(e) => setNotificationForm({ ...notificationForm, link: e.target.value })}
-                className="w-full px-3 py-2 border rounded-lg"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
               />
               
-              <input
-                type="text"
-                placeholder="Image URL (optional)"
-                value={notificationForm.image_url}
-                onChange={(e) => setNotificationForm({ ...notificationForm, image_url: e.target.value })}
-                className="w-full px-3 py-2 border rounded-lg"
-              />
+              <div className="flex gap-2 items-center">
+                <input
+                  type="text"
+                  placeholder="Image URL"
+                  value={notificationForm.image_url}
+                  onChange={(e) => setNotificationForm({ ...notificationForm, image_url: e.target.value })}
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg"
+                />
+                <button
+                  onClick={() => openImageUpload('notification')}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"
+                  disabled={uploading}
+                >
+                  {uploading ? '⏳ Uploading...' : '📤 Upload'}
+                </button>
+              </div>
               
               <div className="flex gap-4">
                 <label className="flex items-center gap-2">
@@ -710,10 +729,88 @@ function HomeEditor() {
               </div>
               
               <div className="flex gap-3 pt-4">
-                <button onClick={handleSaveNotification} className="flex-1 py-2 bg-green-600 text-white rounded-lg">
+                <button onClick={handleSaveNotification} className="flex-1 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
                   {editingNotification ? 'Update' : 'Create'}
                 </button>
-                <button onClick={() => setShowNotifModal(false)} className="flex-1 py-2 bg-gray-500 text-white rounded-lg">
+                <button onClick={() => setShowNotifModal(false)} className="flex-1 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Slider Card Modal */}
+      {showCardModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-bold">
+                {editingCard ? '✏️ Edit Slider Card' : '➕ Add Slider Card'}
+              </h3>
+              <button onClick={() => setShowCardModal(false)} className="text-gray-500 text-2xl hover:text-gray-700">×</button>
+            </div>
+            
+            <div className="space-y-4">
+              <input
+                type="text"
+                placeholder="Title"
+                value={cardForm.title}
+                onChange={(e) => setCardForm({ ...cardForm, title: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              />
+              
+              <textarea
+                placeholder="Description"
+                value={cardForm.description}
+                onChange={(e) => setCardForm({ ...cardForm, description: e.target.value })}
+                rows="3"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              />
+              
+              <div className="flex gap-2 items-center">
+                <input
+                  type="text"
+                  placeholder="Image URL"
+                  value={cardForm.image_url}
+                  onChange={(e) => setCardForm({ ...cardForm, image_url: e.target.value })}
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg"
+                />
+                <button
+                  onClick={() => openImageUpload('slider')}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"
+                  disabled={uploading}
+                >
+                  {uploading ? '⏳' : '📤 Upload'}
+                </button>
+              </div>
+              
+              {cardForm.image_url && (
+                <img src={cardForm.image_url} alt="Preview" className="w-full h-32 object-cover rounded-lg" />
+              )}
+              
+              <input
+                type="text"
+                placeholder="Link (e.g., /files or https://...)"
+                value={cardForm.link}
+                onChange={(e) => setCardForm({ ...cardForm, link: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              />
+              
+              <input
+                type="text"
+                placeholder="Button Text (e.g., Explore Now)"
+                value={cardForm.button_text}
+                onChange={(e) => setCardForm({ ...cardForm, button_text: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              />
+              
+              <div className="flex gap-3 pt-4">
+                <button onClick={handleSaveCard} className="flex-1 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+                  {editingCard ? 'Update' : 'Create'}
+                </button>
+                <button onClick={() => setShowCardModal(false)} className="flex-1 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600">
                   Cancel
                 </button>
               </div>

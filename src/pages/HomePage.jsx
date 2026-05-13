@@ -5,23 +5,21 @@ import { useAuth } from '../contexts/AuthContext';
 import QuickAccessButtons from '../components/QuickAccessButtons';
 import NotificationSection from '../components/NotificationSection';
 import NotificationSlider from '../components/NotificationSlider';
-import { FileText, CreditCard, BookOpen, SquarePen, HelpCircle, TrendingUp, Shield, Zap } from 'lucide-react';
+import { FileText, CreditCard, BookOpen, SquarePen, TrendingUp, Shield, Zap } from 'lucide-react';
 
 function HomePage() {
   const { user } = useAuth();
 
   return (
-    <div className="py-4 md:py-8">
-      {/* 🔥 QUICK ACCESS BUTTONS - Dynamic from Admin */}
-      <QuickAccessButtons />
+    <div className="py-4 md:py-8 max-w-7xl mx-auto px-4">
 
       {/* 🎠 CARDS SLIDER - Dynamic from Admin */}
       <NotificationSlider />
+      
+      {/* 🔥 QUICK ACCESS BUTTONS - Dynamic from Admin */}
+      <QuickAccessButtons />
 
-      {/* 📢 NOTIFICATIONS SECTION - Dynamic from Admin */}
-      <NotificationSection />
-
-      {/* Hero Section */}
+        {/* Hero Section */}
       <section className="text-center py-8 md:py-12">
         <h1 className="text-2xl md:text-4xl font-bold text-gray-800 mb-2">
           Welcome to{' '}
@@ -46,30 +44,18 @@ function HomePage() {
         </div>
       </section>
 
-      {/* Stats Section */}
-      <section className="grid grid-cols-2 gap-3 mb-8">
-        <div className="bg-green-50 rounded-xl p-3 text-center">
-          <div className="text-xl font-bold text-green-600">10K+</div>
-          <div className="text-[10px] text-gray-500">Resources</div>
-        </div>
-        <div className="bg-orange-50 rounded-xl p-3 text-center">
-          <div className="text-xl font-bold text-orange-600">50+</div>
-          <div className="text-[10px] text-gray-500">Mock Tests</div>
-        </div>
-        <div className="bg-blue-50 rounded-xl p-3 text-center">
-          <div className="text-xl font-bold text-blue-600">100+</div>
-          <div className="text-[10px] text-gray-500">Quizzes</div>
-        </div>
-        <div className="bg-purple-50 rounded-xl p-3 text-center">
-          <div className="text-xl font-bold text-purple-600">24/7</div>
-          <div className="text-[10px] text-gray-500">Access</div>
-        </div>
-      </section>
+      
+
+      {/* 📢 NOTIFICATIONS SECTION - Dynamic from Admin */}
+      <NotificationSection />
+
+    
+
 
       {/* Features Section */}
       <section className="py-6">
         <h2 className="text-lg md:text-2xl font-bold text-center text-gray-800 mb-5">Why Choose Onlibry?</h2>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="text-center p-3 bg-gray-50 rounded-xl">
             <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-2">
               <BookOpen size={20} className="text-green-600" />
@@ -106,7 +92,7 @@ function HomePage() {
         <section className="mt-6 p-5 bg-gradient-to-r from-green-50 to-orange-50 rounded-xl text-center">
           <h3 className="font-bold text-gray-800 mb-2">Ready to start learning?</h3>
           <p className="text-xs text-gray-500 mb-4">Join thousands of students already using Onlibry</p>
-          <Link to="/login" className="inline-flex items-center gap-2 px-5 py-2 bg-green-600 text-white rounded-lg text-sm font-medium">
+          <Link to="/login" className="inline-flex items-center gap-2 px-5 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition">
             Get Started <Zap size={14} />
           </Link>
         </section>
