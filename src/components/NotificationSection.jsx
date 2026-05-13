@@ -23,12 +23,12 @@ function NotificationSection() {
     return (
       <div className="bg-white rounded-xl p-4 mb-8 border border-gray-200">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg font-bold text-gray-800">📢 Latest Updates</h2>
-          <div className="w-20 h-5 bg-gray-200 rounded animate-pulse"></div>
+          <div className="h-6 w-32 bg-gray-200 rounded animate-pulse"></div>
+          <div className="h-4 w-16 bg-gray-200 rounded animate-pulse"></div>
         </div>
         <div className="space-y-3">
           {[1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="bg-gray-50 rounded-lg p-3 animate-pulse h-16"></div>
+            <div key={i} className="bg-gray-100 rounded-lg p-3 animate-pulse h-16"></div>
           ))}
         </div>
       </div>

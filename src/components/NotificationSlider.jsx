@@ -51,8 +51,8 @@ function NotificationSlider() {
 
   if (loading) {
     return (
-      <div className="bg-gradient-to-r from-green-500 to-green-600 rounded-xl overflow-hidden mb-8">
-        <div className="h-48 md:h-56 animate-pulse bg-white-400"></div>
+      <div className="rounded-xl overflow-hidden mb-8">
+        <div className="h-48 md:h-56 bg-gray-200 animate-pulse rounded-xl"></div>
       </div>
     );
   }
@@ -67,7 +67,7 @@ function NotificationSlider() {
         <div className="flex transition-transform duration-500 ease-out" style={{ transform: `translateX(-${currentIndex * 100}%)` }}>
           {slides.map((slide, index) => (
             <div key={slide.id} className="w-full flex-shrink-0">
-              <div className="relative h-48 md:h-56 bg-gradient-to-r from-white-600 to-green-100 rounded-xl overflow-hidden">
+              <div className="relative h-48 md:h-56 bg-gradient-to-r from-white-700 to-green-300 rounded-xl overflow-hidden">
                 {slide.image_url && (
                   <img 
                     src={slide.image_url} 

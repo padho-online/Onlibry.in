@@ -1,4 +1,4 @@
-// src/pages/MockTestsPage.jsx - Mobile optimized
+// src/pages/MockTestsPage.jsx - Mobile optimized with tooltip
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getAllPapers, getAllCategories, getSubCategoriesForCategory } from '../services/mockTestService';
@@ -23,6 +23,7 @@ function MockTestsPage() {
   const [cartStatus, setCartStatus] = useState({});
   const [purchasedStatus, setPurchasedStatus] = useState({});
   const [showFilters, setShowFilters] = useState(false);
+  const [showTooltipId, setShowTooltipId] = useState(null);
 
   const checkPurchasedMockTest = async (userId, testId) => {
     if (!userId) return false;
@@ -112,6 +113,13 @@ function MockTestsPage() {
     navigate('/pricing', { state: { activeTab: 'cart' } });
   };
 
+  // Get short name for display
+  const getShortName = (name, maxLength = 35) => {
+    if (!name) return '';
+    if (name.length <= maxLength) return name;
+    return name.substring(0, maxLength) + '...';
+  };
+
   if (loading) {
     return <div className="flex justify-center py-12"><div className="w-8 h-8 border-3 border-green-500 border-t-transparent rounded-full animate-spin"></div></div>;
   }
@@ -154,11 +162,31 @@ function MockTestsPage() {
           const inCart = cartStatus[paper.id];
           const isFree = paper.isFree;
           const hasAccess = isFree || isSubscribed || isPurchased;
+          const showTooltip = showTooltipId === paper.id;
+          const isLongName = paper.displayName && paper.displayName.length > 35;
           
           return (
-            <div key={paper.id} onClick={() => handleTestAction(paper)} className="bg-white rounded-xl shadow-md p-3 border border-gray-200 cursor-pointer">
+            <div 
+              key={paper.id} 
+              onClick={() => handleTestAction(paper)} 
+              className="bg-white rounded-xl shadow-md p-3 border border-gray-200 cursor-pointer relative"
+              onMouseEnter={() => isLongName && setShowTooltipId(paper.id)}
+              onMouseLeave={() => setShowTooltipId(null)}
+              onTouchStart={() => isLongName && setShowTooltipId(paper.id)}
+              onTouchEnd={() => setTimeout(() => setShowTooltipId(null), 2000)}
+            >
+              {/* Tooltip for long name */}
+              {showTooltip && isLongName && (
+                <div className="absolute -top-10 left-0 z-20 bg-gray-900 text-white text-xs rounded-lg px-3 py-1.5 whitespace-nowrap shadow-lg max-w-[250px] overflow-x-auto">
+                  {paper.displayName}
+                  <div className="absolute -bottom-1 left-4 w-2 h-2 bg-gray-900 rotate-45"></div>
+                </div>
+              )}
+              
               <div className="flex justify-between items-start mb-1">
-                <h3 className="text-sm font-semibold text-gray-800 line-clamp-2 flex-1">{paper.displayName}</h3>
+                <h3 className="text-sm font-semibold text-gray-800 line-clamp-2 flex-1 cursor-help" title={paper.displayName}>
+                  {getShortName(paper.displayName, 35)}
+                </h3>
                 {!isFree && !hasAccess && <span className="text-[10px] font-semibold text-orange-600 bg-orange-100 px-1.5 py-0.5 rounded-full">₹{paper.price || 49}</span>}
                 {isFree && <span className="text-[10px] font-semibold text-green-600 bg-green-100 px-1.5 py-0.5 rounded-full">Free</span>}
                 {hasAccess && !isFree && <span className="text-[10px] font-semibold text-green-600 bg-green-100 px-1.5 py-0.5 rounded-full">Unlocked</span>}

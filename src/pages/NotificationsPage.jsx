@@ -76,40 +76,42 @@ function NotificationsPage() {
       {/* Header */}
       <div className="text-center mb-6">
         <h1 className="text-2xl md:text-3xl font-bold text-gray-800 mb-2">
-          📢 All Notifications
+    Notifications
         </h1>
-        <p className="text-sm text-gray-500">
-          Stay updated with latest announcements
-        </p>
+       
       </div>
 
-      {/* Category Tabs */}
-      <div className="flex flex-wrap gap-2 mb-6 pb-3 overflow-x-auto">
-        <button
-          onClick={() => handleCategoryChange('all')}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap ${
-            activeCategory === 'all'
-              ? 'bg-green-600 text-white'
-              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          }`}
-        >
-          📋 All
-        </button>
-        
-        {categories.map((category) => (
-          <button
-            key={category.id}
-            onClick={() => handleCategoryChange(category.slug)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap ${
-              activeCategory === category.slug
-                ? getCategoryColor(category.slug)
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            <span className="mr-1">{category.icon}</span>
-            {category.name}
-          </button>
-        ))}
+      {/* Category Tabs - Scrollable Horizontal */}
+      <div className="mb-6">
+        <div className="overflow-x-auto scrollbar-thin pb-2">
+          <div className="flex gap-2 min-w-max">
+            <button
+              onClick={() => handleCategoryChange('all')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap ${
+                activeCategory === 'all'
+                  ? 'bg-green-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              All
+            </button>
+            
+            {categories.map((category) => (
+              <button
+                key={category.id}
+                onClick={() => handleCategoryChange(category.slug)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap ${
+                  activeCategory === category.slug
+                    ? getCategoryColor(category.slug)
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                <span className="mr-1">{category.icon}</span>
+                {category.name}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* Results Count */}
