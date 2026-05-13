@@ -1,5 +1,5 @@
 // src/App.jsx
-// UPDATED - Added Blog CMS Routes
+// UPDATED - Added Blog CMS Routes + Notification Routes + Home Editor Admin Route
 
 import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
@@ -37,6 +37,10 @@ import BlogDashboard from './blogger/pages/BlogDashboard';
 import CreatePost from './blogger/pages/CreatePost';
 import EditPost from './blogger/pages/EditPost';
 
+// Notification Pages (NEW)
+import NotificationsPage from './pages/NotificationsPage';
+import NotificationDetailPage from './pages/NotificationDetailPage';
+
 // Admin Pages
 import AdminDashboard from './pages/admin/AdminDashboard';
 import PaymentLogs from './pages/admin/PaymentLogs';
@@ -45,6 +49,7 @@ import SubscriptionsManagement from './pages/admin/SubscriptionsManagement';
 import PlansEditor from './pages/admin/PlansEditor';
 import FilesManager from './pages/admin/FilesManager';
 import FileUploadManager from './pages/admin/FileUploadManager';
+import HomeEditor from './pages/admin/HomeEditor'; // NEW
 
 function App() {
   useEffect(() => {
@@ -75,6 +80,10 @@ function App() {
                 {/* Blog Routes */}
                 <Route path="/blog" element={<BlogHome />} />
                 <Route path="/blog/:slug" element={<BlogPage />} />
+
+                {/* Notification Routes (NEW) */}
+                <Route path="/notifications" element={<NotificationsPage />} />
+                <Route path="/notification/:id" element={<NotificationDetailPage />} />
 
                 {/* Protected Blog Routes */}
                 <Route
@@ -128,6 +137,7 @@ function App() {
                   <Route index element={<FileUploadManager />} />
                   <Route path="upload" element={<FileUploadManager />} />
                   <Route path="files" element={<FilesManager />} />
+                  <Route path="home" element={<HomeEditor />} /> {/* NEW - Home Editor Tab */}
                   <Route path="logs" element={<PaymentLogs />} />
                   <Route path="users" element={<UsersManagement />} />
                   <Route path="subscriptions" element={<SubscriptionsManagement />} />

@@ -1,19 +1,17 @@
 // src/blogger/pages/BlogPage.jsx
-// Working Like, Save, Share buttons
+// Professional White Mode with Native Share API
 
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { getBlogPostBySlug, likePost, savePost } from '../services/blogService';
+import { getBlogPostBySlug } from '../services/blogService';
 import { formatDate } from '../services/blogService';
-import { Calendar, Clock, User, Tag, Share2, Bookmark, Heart } from 'lucide-react';
+import { Calendar, Clock, User, Share2 } from 'lucide-react';
 
 function BlogPage() {
   const { slug } = useParams();
   const [post, setPost] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [liked, setLiked] = useState(false);
-  const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     loadPost();
@@ -37,32 +35,44 @@ function BlogPage() {
     }
   };
 
-  const handleLike = async () => {
-    if (liked) return;
-    const result = await likePost(post.id);
-    if (result.success) {
-      setLiked(true);
-      setPost((prev) => ({ ...prev, likes: (prev.likes || 0) + 1 }));
+  // Native Share Function - Mobile friendly
+  const handleShare = async () => {
+    const shareData = {
+      title: post?.title || 'Onlibry Blog',
+      text: post?.meta?.description || post?.excerpt || 'Check out this post on Onlibry Blog',
+      url: window.location.href,
+    };
+
+    // Check if Web Share API is supported (mobile devices)
+    if (navigator.share && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+      try {
+        await navigator.share(shareData);
+        console.log('Shared successfully');
+      } catch (error) {
+        console.log('Share cancelled or failed:', error);
+        // Fallback to copy on error
+        fallbackCopy();
+      }
+    } else {
+      // Desktop fallback - copy to clipboard
+      fallbackCopy();
     }
   };
 
-  const handleSave = async () => {
-    if (saved) return;
-    const result = await savePost(post.id);
-    if (result.success) {
-      setSaved(true);
-      alert('Post saved to your library!');
+  // Fallback for desktop or when native share fails
+  const fallbackCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      alert('✅ Link copied to clipboard!');
+    } catch (err) {
+      console.error('Copy failed:', err);
+      alert('Press Ctrl+C to copy the link');
     }
-  };
-
-  const handleShare = () => {
-    navigator.clipboard.writeText(window.location.href);
-    alert('Link copied to clipboard!');
   };
 
   if (loading) {
     return (
-      <div className="flex justify-center py-20">
+      <div className="min-h-screen bg-white flex justify-center py-20">
         <div className="w-8 h-8 border-3 border-green-500 border-t-transparent rounded-full animate-spin"></div>
       </div>
     );
@@ -70,10 +80,10 @@ function BlogPage() {
 
   if (error || !post) {
     return (
-      <div className="text-center py-20">
+      <div className="min-h-screen bg-white text-center py-20">
         <h1 className="text-2xl font-bold text-gray-800 mb-4">Post Not Found</h1>
         <p className="text-gray-500 mb-6">The blog post you're looking for doesn't exist.</p>
-        <Link to="/blog" className="px-5 py-2 bg-green-600 text-white rounded-lg">
+        <Link to="/blog" className="px-5 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
           Back to Blog
         </Link>
       </div>
@@ -91,71 +101,92 @@ function BlogPage() {
       <meta property="og:url" content={window.location.href} />
       <meta name="twitter:card" content="summary_large_image" />
 
-      <article className="max-w-4xl mx-auto px-4 py-8">
-        {/* Tags */}
-        {post.meta?.tags && (
-          <div className="flex flex-wrap gap-2 mb-4">
-            {post.meta.tags.split(',').map((tag, i) => (
-              <span key={i} className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full">
-                #{tag.trim()}
-              </span>
-            ))}
+      {/* Professional White Background */}
+      <div className="min-h-screen bg-white">
+        <article className="max-w-4xl mx-auto px-4 py-12 md:py-16">
+          
+          {/* Title */}
+          <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-gray-900 mb-8 text-center md:text-left leading-tight">
+            {post.title}
+          </h1>
+
+          {/* Featured Image */}
+          {post.meta?.ogImage && (
+            <div className="mb-10">
+              <img 
+                src={post.meta.ogImage} 
+                alt={post.title} 
+                className="w-full rounded-xl shadow-sm border border-gray-100" 
+              />
+            </div>
+          )}
+
+          {/* Content - Professional Typography */}
+          <div 
+            className="prose prose-lg max-w-none 
+                       prose-headings:text-gray-900 
+                       prose-headings:font-bold 
+                       prose-p:text-gray-700 
+                       prose-p:leading-relaxed 
+                       prose-a:text-green-600 
+                       prose-a:no-underline 
+                       prose-a:hover:text-green-700 
+                       prose-a:hover:underline
+                       prose-strong:text-gray-900
+                       prose-li:text-gray-700
+                       prose-blockquote:text-gray-600
+                       prose-blockquote:border-l-green-500
+                       prose-code:text-gray-800
+                       prose-pre:bg-gray-900
+                       prose-pre:text-gray-100
+                       mb-10" 
+            dangerouslySetInnerHTML={{ __html: post.content }} 
+          />
+
+          {/* Divider */}
+          <div className="border-t border-gray-200 my-8"></div>
+
+          {/* Meta Info + Share Icon */}
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+            <div className="flex flex-wrap items-center gap-5 text-sm text-gray-500">
+              <div className="flex items-center gap-2">
+                <User size={15} className="text-gray-400" />
+                <span className="text-gray-700">{post.authorName || 'Onlibry Team'}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Calendar size={15} className="text-gray-400" />
+                <span className="text-gray-700">{formatDate(post.publishedAt || post.createdAt)}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Clock size={15} className="text-gray-400" />
+                <span className="text-gray-700">{post.readingTime?.text || '5 min read'}</span>
+              </div>
+            </div>
+            
+            {/* Share Button - Native on Mobile, Copy on Desktop */}
+            <button
+              onClick={handleShare}
+              className="flex items-center gap-2 px-4 py-2 bg-gray-50 hover:bg-gray-100 rounded-lg transition text-gray-600 hover:text-gray-800 border border-gray-200"
+              title="Share this post"
+            >
+              <Share2 size={16} />
+              <span className="text-sm">Share</span>
+            </button>
           </div>
-        )}
 
-        {/* Title */}
-        <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-gray-800 mb-4">{post.title}</h1>
-
-        {/* Meta Info */}
-        <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500 mb-6 pb-6 border-b border-gray-200">
-          <div className="flex items-center gap-1">
-            <Calendar size={14} />
-            <span>{formatDate(post.publishedAt || post.createdAt)}</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <Clock size={14} />
-            <span>{post.readingTime?.text || '5 min read'}</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <User size={14} />
-            <span>{post.authorName || 'Onlibry Team'}</span>
-          </div>
-        </div>
-
-        {/* Featured Image */}
-        {post.meta?.ogImage && <img src={post.meta.ogImage} alt={post.title} className="w-full rounded-xl mb-8" />}
-
-        {/* Content */}
-        <div className="prose prose-lg max-w-none blog-content" dangerouslySetInnerHTML={{ __html: post.content }} />
-
-        {/* Actions */}
-        <div className="flex gap-3 mt-8 pt-6 border-t border-gray-200">
-          <button
-            onClick={handleShare}
-            className="flex items-center gap-2 px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition"
-          >
-            <Share2 size={16} /> Share
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={saved}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition ${
-              saved ? 'bg-green-100 text-green-600' : 'bg-gray-100 hover:bg-gray-200'
-            }`}
-          >
-            <Bookmark size={16} /> {saved ? 'Saved' : 'Save'}
-          </button>
-          <button
-            onClick={handleLike}
-            disabled={liked}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition ${
-              liked ? 'bg-red-100 text-red-600' : 'bg-gray-100 hover:bg-gray-200'
-            }`}
-          >
-            <Heart size={16} /> {liked ? 'Liked' : 'Like'} ({post.likes || 0})
-          </button>
-        </div>
-      </article>
+          {/* Tags */}
+          {post.meta?.tags && (
+            <div className="flex flex-wrap gap-2 mt-4 pt-2">
+              <span className="text-xs text-gray-400 mr-1">Tags:</span>
+              {post.meta.tags.split(',').map((tag, i) => (
+                <span key={i} className="px-3 py-1 bg-gray-50 text-gray-600 text-xs rounded-full border border-gray-200 hover:bg-gray-100 transition">
+                  #{tag.trim()}
+                </span>
+              ))}
+            </div>
+          )}
+        </article>
+      </div>
     </>
   );
 }

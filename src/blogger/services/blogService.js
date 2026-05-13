@@ -1,5 +1,4 @@
 // src/blogger/services/blogService.js
-// ✅ FIXED: Better error handling for getBlogPostById
 
 const API_URL = import.meta.env.VITE_BLOG_API_URL;
 
@@ -45,12 +44,9 @@ export async function getBlogPostBySlug(slug) {
   }
 }
 
-// ✅ FIXED: Get post by ID with full URL check
+// Get post by ID (for editing)
 export async function getBlogPostById(postId) {
   console.log('📡 Fetching post by ID:', postId);
-  console.log('📡 ID type:', typeof postId);
-  console.log('📡 ID length:', postId?.length);
-  console.log('📡 API URL:', API_URL);
   
   if (!postId) {
     console.error('❌ Invalid post ID:', postId);
@@ -58,23 +54,18 @@ export async function getBlogPostById(postId) {
   }
 
   try {
-    const url = `${API_URL}/api/post/id/${postId}`;
-    console.log('📡 Full URL:', url);
-    
-    const response = await fetch(url);
-    console.log('📡 Response status:', response.status);
+    const response = await fetch(`${API_URL}/api/post/id/${postId}`);
     
     if (!response.ok) {
       if (response.status === 404) {
         console.error('❌ Post not found (404)');
         return null;
       }
-      console.error('❌ HTTP error:', response.status, response.statusText);
+      console.error('❌ HTTP error:', response.status);
       return null;
     }
     
     const data = await response.json();
-    console.log('📡 Response data:', data);
     return data.success ? data.post : null;
   } catch (error) {
     console.error('❌ Get post by ID error:', error);
@@ -211,9 +202,15 @@ export function calculateReadingTime(content) {
 
 export function formatDate(dateString) {
   if (!dateString) return 'N/A';
-  return new Date(dateString).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
+  try {
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return 'N/A';
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+  } catch (error) {
+    return 'N/A';
+  }
 }

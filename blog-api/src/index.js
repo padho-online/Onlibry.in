@@ -16,6 +16,13 @@ function generateSlug(title) {
     .trim();
 }
 
+function cleanExcerpt(html) {
+  // Remove all HTML tags and get plain text
+  const plainText = html.replace(/<[^>]*>/g, '');
+  // Remove extra whitespace and limit to 150 characters
+  return plainText.trim().substring(0, 150);
+}
+
 async function uploadToCloudinary(fileData, cloudName, apiKey, apiSecret) {
   const formData = new FormData();
   formData.append('file', fileData);
@@ -39,9 +46,7 @@ export default {
       return new Response(null, { status: 204, headers: corsHeaders });
     }
     
-    // ============================================
     // GET /api/posts - All published posts
-    // ============================================
     if (method === 'GET' && url.pathname === '/api/posts') {
       const limit = parseInt(url.searchParams.get('limit') || '20');
       
@@ -54,14 +59,35 @@ export default {
         LIMIT ?
       `).bind(limit).all();
       
-      return new Response(JSON.stringify({ success: true, posts: result.results }), {
+      // Format dates and clean excerpt for frontend
+      const posts = result.results.map(post => ({
+        id: post.id,
+        title: post.title,
+        slug: post.slug,
+        excerpt: post.excerpt ? cleanExcerpt(post.excerpt) : '',
+        meta_title: post.meta_title,
+        og_image: post.og_image,
+        tags: post.tags,
+        author_name: post.author_name,
+        published_at: post.published_at,
+        views: post.views,
+        created_at: post.created_at,
+        publishedAt: post.published_at,
+        createdAt: post.created_at,
+        meta: {
+          title: post.meta_title,
+          ogImage: post.og_image,
+          tags: post.tags,
+          description: post.excerpt ? cleanExcerpt(post.excerpt) : ''
+        }
+      }));
+      
+      return new Response(JSON.stringify({ success: true, posts }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
     
-    // ============================================
     // GET /api/post/:slug - Single post by slug
-    // ============================================
     if (method === 'GET' && url.pathname.startsWith('/api/post/') && !url.pathname.includes('/id/')) {
       const slug = url.pathname.split('/api/post/')[1];
       
@@ -76,16 +102,40 @@ export default {
         });
       }
       
+      // Increment views
       await env.DB.prepare(`UPDATE posts SET views = views + 1 WHERE id = ?`).bind(post.id).run();
       
-      return new Response(JSON.stringify({ success: true, post }), {
+      // Format post for frontend
+      const formattedPost = {
+        id: post.id,
+        title: post.title,
+        slug: post.slug,
+        content: post.content,
+        excerpt: post.excerpt ? cleanExcerpt(post.excerpt) : cleanExcerpt(post.content),
+        publishedAt: post.published_at,
+        createdAt: post.created_at,
+        updatedAt: post.updated_at,
+        views: post.views,
+        likes: post.likes || 0,
+        authorId: post.author_id,
+        authorName: post.author_name,
+        authorEmail: post.author_email,
+        status: post.status,
+        meta: {
+          title: post.meta_title,
+          description: post.meta_description || cleanExcerpt(post.content),
+          ogImage: post.og_image,
+          tags: post.tags,
+          slug: post.slug
+        }
+      };
+      
+      return new Response(JSON.stringify({ success: true, post: formattedPost }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
     
-    // ============================================
     // GET /api/post/id/:postId - Single post by ID (for editing)
-    // ============================================
     if (method === 'GET' && url.pathname.startsWith('/api/post/id/')) {
       const postId = url.pathname.split('/api/post/id/')[1];
       
@@ -100,14 +150,37 @@ export default {
         });
       }
       
-      return new Response(JSON.stringify({ success: true, post }), {
+      // Format post for frontend
+      const formattedPost = {
+        id: post.id,
+        title: post.title,
+        slug: post.slug,
+        content: post.content,
+        excerpt: post.excerpt ? cleanExcerpt(post.excerpt) : cleanExcerpt(post.content),
+        publishedAt: post.published_at,
+        createdAt: post.created_at,
+        updatedAt: post.updated_at,
+        views: post.views,
+        likes: post.likes || 0,
+        authorId: post.author_id,
+        authorName: post.author_name,
+        authorEmail: post.author_email,
+        status: post.status,
+        meta: {
+          title: post.meta_title,
+          description: post.meta_description || cleanExcerpt(post.content),
+          ogImage: post.og_image,
+          tags: post.tags,
+          slug: post.slug
+        }
+      };
+      
+      return new Response(JSON.stringify({ success: true, post: formattedPost }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
     
-    // ============================================
     // GET /api/user/posts/:userId - User's posts
-    // ============================================
     if (method === 'GET' && url.pathname.startsWith('/api/user/posts/')) {
       const userId = url.pathname.split('/api/user/posts/')[1];
       
@@ -116,18 +189,26 @@ export default {
         FROM posts WHERE author_id = ? ORDER BY updated_at DESC
       `).bind(userId).all();
       
-      return new Response(JSON.stringify({ success: true, posts: result.results }), {
+      const posts = result.results.map(post => ({
+        id: post.id,
+        title: post.title,
+        slug: post.slug,
+        status: post.status,
+        publishedAt: post.published_at,
+        updatedAt: post.updated_at,
+        views: post.views
+      }));
+      
+      return new Response(JSON.stringify({ success: true, posts }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
     
-    // ============================================
     // POST /api/posts - Create post
-    // ============================================
     if (method === 'POST' && url.pathname === '/api/posts') {
       try {
         const body = await request.json();
-        const { title, content, meta, authorId, authorName, authorEmail, status, readingTime } = body;
+        const { title, content, meta, authorId, authorName, authorEmail, status } = body;
         
         if (!title || !content) {
           return new Response(JSON.stringify({ success: false, error: 'Title and content required' }), {
@@ -139,7 +220,7 @@ export default {
         const id = `${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
         const slug = meta?.slug || generateSlug(title);
         const now = new Date().toISOString();
-        const excerpt = content.replace(/<[^>]*>/g, '').substring(0, 200);
+        const excerpt = cleanExcerpt(content);
         
         await env.DB.prepare(`
           INSERT INTO posts (
@@ -165,9 +246,7 @@ export default {
       }
     }
     
-    // ============================================
     // PUT /api/posts/:id - Update post
-    // ============================================
     if (method === 'PUT' && url.pathname.startsWith('/api/posts/')) {
       try {
         const postId = url.pathname.split('/api/posts/')[1];
@@ -176,10 +255,7 @@ export default {
         
         const now = new Date().toISOString();
         const slug = meta?.slug || generateSlug(title);
-        const excerpt = content.replace(/<[^>]*>/g, '').substring(0, 200);
-        
-        // Get existing post to check published_at
-        const existingPost = await env.DB.prepare(`SELECT published_at FROM posts WHERE id = ?`).bind(postId).first();
+        const excerpt = cleanExcerpt(content);
         
         await env.DB.prepare(`
           UPDATE posts SET
@@ -206,9 +282,7 @@ export default {
       }
     }
     
-    // ============================================
     // DELETE /api/posts/:id - Delete post
-    // ============================================
     if (method === 'DELETE' && url.pathname.startsWith('/api/posts/')) {
       const postId = url.pathname.split('/api/posts/')[1];
       await env.DB.prepare(`DELETE FROM posts WHERE id = ?`).bind(postId).run();
@@ -218,9 +292,7 @@ export default {
       });
     }
     
-    // ============================================
     // POST /api/posts/:id/like - Like post
-    // ============================================
     if (method === 'POST' && url.pathname.match(/\/api\/posts\/.+\/like/)) {
       const postId = url.pathname.split('/api/posts/')[1].split('/like')[0];
       await env.DB.prepare(`UPDATE posts SET likes = likes + 1 WHERE id = ?`).bind(postId).run();
@@ -230,19 +302,14 @@ export default {
       });
     }
     
-    // ============================================
     // POST /api/posts/:id/save - Save post (bookmark)
-    // ============================================
     if (method === 'POST' && url.pathname.match(/\/api\/posts\/.+\/save/)) {
-      // This is a placeholder - you can implement saved posts table if needed
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
     
-    // ============================================
     // POST /api/upload - Upload image to Cloudinary
-    // ============================================
     if (method === 'POST' && url.pathname === '/api/upload') {
       try {
         const formData = await request.formData();
@@ -274,9 +341,7 @@ export default {
       }
     }
     
-    // ============================================
     // 404 - Not found
-    // ============================================
     return new Response(JSON.stringify({ error: 'Not found' }), {
       status: 404,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }

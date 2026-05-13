@@ -1,14 +1,26 @@
-// src/pages/HomePage.jsx - Mobile optimized
+// src/pages/HomePage.jsx
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { FileText, CreditCard, BookOpen,SquarePen, HelpCircle, TrendingUp, Shield, Zap } from 'lucide-react';
+import QuickAccessButtons from '../components/QuickAccessButtons';
+import NotificationSection from '../components/NotificationSection';
+import NotificationSlider from '../components/NotificationSlider';
+import { FileText, CreditCard, BookOpen, SquarePen, HelpCircle, TrendingUp, Shield, Zap } from 'lucide-react';
 
 function HomePage() {
   const { user } = useAuth();
 
   return (
     <div className="py-4 md:py-8">
+      {/* 🔥 QUICK ACCESS BUTTONS - Dynamic from Admin */}
+      <QuickAccessButtons />
+
+      {/* 🎠 CARDS SLIDER - Dynamic from Admin */}
+      <NotificationSlider />
+
+      {/* 📢 NOTIFICATIONS SECTION - Dynamic from Admin */}
+      <NotificationSection />
+
       {/* Hero Section */}
       <section className="text-center py-8 md:py-12">
         <h1 className="text-2xl md:text-4xl font-bold text-gray-800 mb-2">

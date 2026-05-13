@@ -1,10 +1,9 @@
 // src/blogger/pages/EditPost.jsx
-// ✅ FIXED: Post not found issue
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { getBlogPostById, updateBlogPost } from '../services/blogService';
+import { getBlogPostById, updateBlogPost, formatDate } from '../services/blogService';
 import HtmlEditor from '../components/HtmlEditor';
 import SeoPanel from '../components/SeoPanel';
 import PublishPanel from '../components/PublishPanel';
@@ -44,8 +43,6 @@ function EditPost() {
         setMeta(data.meta || {});
       } else {
         setError('Post not found');
-        console.error('❌ Post not found with ID:', id);
-        // Stay on the page but show error
       }
     } catch (error) {
       console.error('❌ Load post error:', error);

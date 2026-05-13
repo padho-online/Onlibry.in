@@ -1,16 +1,22 @@
 // src/pages/admin/AdminDashboard.jsx - Mobile optimized
+// UPDATED: Added Home Editor Tab
+
 import React, { useState, useEffect } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { LayoutDashboard, Upload, Files, CreditCard, Users, Calendar, Tag, Menu, X } from 'lucide-react';
+import { 
+  LayoutDashboard, Upload, Files, CreditCard, Users, Calendar, Tag, 
+  Menu, X, Home, Bell, Sliders 
+} from 'lucide-react';
 
 function AdminDashboard() {
   const { user } = useAuth();
   const location = useLocation();
-  const [activeTab, setActiveTab] = useState('upload');
+  const [activeTab, setActiveTab] = useState('home');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const tabs = [
+    { id: 'home', name: 'Home Editor', icon: Home, path: '/admin/home' },
     { id: 'upload', name: 'Upload', icon: Upload, path: '/admin/upload' },
     { id: 'files', name: 'Files', icon: Files, path: '/admin/files' },
     { id: 'logs', name: 'Payments', icon: CreditCard, path: '/admin/logs' },
@@ -22,7 +28,7 @@ function AdminDashboard() {
   useEffect(() => {
     const currentTab = tabs.find(tab => location.pathname === tab.path);
     if (currentTab) setActiveTab(currentTab.id);
-    else if (location.pathname === '/admin') setActiveTab('upload');
+    else if (location.pathname === '/admin') setActiveTab('home');
   }, [location.pathname]);
 
   return (
