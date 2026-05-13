@@ -39,7 +39,9 @@ export default {
       return new Response(null, { status: 204, headers: corsHeaders });
     }
     
+    // ============================================
     // GET /api/posts - All published posts
+    // ============================================
     if (method === 'GET' && url.pathname === '/api/posts') {
       const limit = parseInt(url.searchParams.get('limit') || '20');
       
@@ -57,8 +59,10 @@ export default {
       });
     }
     
-    // GET /api/post/:slug - Single post
-    if (method === 'GET' && url.pathname.startsWith('/api/post/')) {
+    // ============================================
+    // GET /api/post/:slug - Single post by slug
+    // ============================================
+    if (method === 'GET' && url.pathname.startsWith('/api/post/') && !url.pathname.includes('/id/')) {
       const slug = url.pathname.split('/api/post/')[1];
       
       const post = await env.DB.prepare(`
@@ -79,7 +83,31 @@ export default {
       });
     }
     
+    // ============================================
+    // GET /api/post/id/:postId - Single post by ID (for editing)
+    // ============================================
+    if (method === 'GET' && url.pathname.startsWith('/api/post/id/')) {
+      const postId = url.pathname.split('/api/post/id/')[1];
+      
+      const post = await env.DB.prepare(`
+        SELECT * FROM posts WHERE id = ?
+      `).bind(postId).first();
+      
+      if (!post) {
+        return new Response(JSON.stringify({ success: false, error: 'Post not found' }), {
+          status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+      
+      return new Response(JSON.stringify({ success: true, post }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+    
+    // ============================================
     // GET /api/user/posts/:userId - User's posts
+    // ============================================
     if (method === 'GET' && url.pathname.startsWith('/api/user/posts/')) {
       const userId = url.pathname.split('/api/user/posts/')[1];
       
@@ -93,11 +121,13 @@ export default {
       });
     }
     
+    // ============================================
     // POST /api/posts - Create post
+    // ============================================
     if (method === 'POST' && url.pathname === '/api/posts') {
       try {
         const body = await request.json();
-        const { title, content, meta, authorId, authorName, authorEmail, status } = body;
+        const { title, content, meta, authorId, authorName, authorEmail, status, readingTime } = body;
         
         if (!title || !content) {
           return new Response(JSON.stringify({ success: false, error: 'Title and content required' }), {
@@ -127,6 +157,7 @@ export default {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       } catch (error) {
+        console.error('Create post error:', error);
         return new Response(JSON.stringify({ success: false, error: error.message }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -134,35 +165,50 @@ export default {
       }
     }
     
+    // ============================================
     // PUT /api/posts/:id - Update post
+    // ============================================
     if (method === 'PUT' && url.pathname.startsWith('/api/posts/')) {
-      const postId = url.pathname.split('/api/posts/')[1];
-      const body = await request.json();
-      const { title, content, meta, status } = body;
-      
-      const now = new Date().toISOString();
-      const slug = meta?.slug || generateSlug(title);
-      const excerpt = content.replace(/<[^>]*>/g, '').substring(0, 200);
-      
-      await env.DB.prepare(`
-        UPDATE posts SET
-          title = ?, slug = ?, content = ?, excerpt = ?,
-          meta_title = ?, meta_description = ?, og_image = ?, tags = ?,
-          status = ?, published_at = CASE WHEN ? = 'published' AND published_at IS NULL THEN ? ELSE published_at END,
-          updated_at = ?
-        WHERE id = ?
-      `).bind(
-        title, slug, content, excerpt,
-        meta?.title || title, meta?.description || excerpt, meta?.ogImage || '', meta?.tags || '',
-        status, status, now, now, postId
-      ).run();
-      
-      return new Response(JSON.stringify({ success: true }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
+      try {
+        const postId = url.pathname.split('/api/posts/')[1];
+        const body = await request.json();
+        const { title, content, meta, status } = body;
+        
+        const now = new Date().toISOString();
+        const slug = meta?.slug || generateSlug(title);
+        const excerpt = content.replace(/<[^>]*>/g, '').substring(0, 200);
+        
+        // Get existing post to check published_at
+        const existingPost = await env.DB.prepare(`SELECT published_at FROM posts WHERE id = ?`).bind(postId).first();
+        
+        await env.DB.prepare(`
+          UPDATE posts SET
+            title = ?, slug = ?, content = ?, excerpt = ?,
+            meta_title = ?, meta_description = ?, og_image = ?, tags = ?,
+            status = ?, published_at = CASE WHEN ? = 'published' AND published_at IS NULL THEN ? ELSE published_at END,
+            updated_at = ?
+          WHERE id = ?
+        `).bind(
+          title, slug, content, excerpt,
+          meta?.title || title, meta?.description || excerpt, meta?.ogImage || '', meta?.tags || '',
+          status, status, now, now, postId
+        ).run();
+        
+        return new Response(JSON.stringify({ success: true }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (error) {
+        console.error('Update post error:', error);
+        return new Response(JSON.stringify({ success: false, error: error.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
     }
     
+    // ============================================
     // DELETE /api/posts/:id - Delete post
+    // ============================================
     if (method === 'DELETE' && url.pathname.startsWith('/api/posts/')) {
       const postId = url.pathname.split('/api/posts/')[1];
       await env.DB.prepare(`DELETE FROM posts WHERE id = ?`).bind(postId).run();
@@ -172,7 +218,31 @@ export default {
       });
     }
     
-    // POST /api/upload - Upload image
+    // ============================================
+    // POST /api/posts/:id/like - Like post
+    // ============================================
+    if (method === 'POST' && url.pathname.match(/\/api\/posts\/.+\/like/)) {
+      const postId = url.pathname.split('/api/posts/')[1].split('/like')[0];
+      await env.DB.prepare(`UPDATE posts SET likes = likes + 1 WHERE id = ?`).bind(postId).run();
+      
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+    
+    // ============================================
+    // POST /api/posts/:id/save - Save post (bookmark)
+    // ============================================
+    if (method === 'POST' && url.pathname.match(/\/api\/posts\/.+\/save/)) {
+      // This is a placeholder - you can implement saved posts table if needed
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+    
+    // ============================================
+    // POST /api/upload - Upload image to Cloudinary
+    // ============================================
     if (method === 'POST' && url.pathname === '/api/upload') {
       try {
         const formData = await request.formData();
@@ -196,6 +266,7 @@ export default {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       } catch (error) {
+        console.error('Upload error:', error);
         return new Response(JSON.stringify({ success: false, error: error.message }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -203,6 +274,9 @@ export default {
       }
     }
     
+    // ============================================
+    // 404 - Not found
+    // ============================================
     return new Response(JSON.stringify({ error: 'Not found' }), {
       status: 404,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
