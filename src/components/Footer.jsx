@@ -10,9 +10,9 @@ import {
   CreditCard, 
   Mail, 
   Shield, 
-  Coffee 
+  MessageSquareHeart
 } from 'lucide-react';
-import { FaFacebook, FaTwitter, FaYoutube } from 'react-icons/fa';
+import { FaFacebook, FaInstagram, FaTelegram, FaTwitter, FaWhatsapp, FaYoutube } from 'react-icons/fa';
 
 function Footer() {
   return (
@@ -43,25 +43,25 @@ function Footer() {
           <div>
             <h3 className="text-xs font-semibold text-gray-800 mb-2">Support</h3>
             <ul className="space-y-1.5">
-              <li><a href="https://onlibry.in/feedback.html" className="text-[11px] text-gray-500 hover:text-green-600 flex items-center gap-1"><Mail size={11} /> Contact</a></li>
-              <li><a href="https://onlibry.in/privacy.html" className="text-[11px] text-gray-500 hover:text-green-600 flex items-center gap-1"><Shield size={11} /> Privacy</a></li>
-              <li><a href="https://onlibry.in/Buycoffee.html" className="text-[11px] text-gray-500 hover:text-green-600 flex items-center gap-1"><Coffee size={11} /> Support Us</a></li>
+              <li><a href="/info/contact" className="text-[11px] text-gray-500 hover:text-green-600 flex items-center gap-1"><Mail size={11} /> Contact</a></li>
+              <li><a href="/info/privacy" className="text-[11px] text-gray-500 hover:text-green-600 flex items-center gap-1"><Shield size={11} /> Privacy</a></li>
+              <li><a href="/info/feedback" className="text-[11px] text-gray-500 hover:text-green-600 flex items-center gap-1"><MessageSquareHeart size={11} /> Feedback</a></li>
               <li><Link to="/pricing" className="text-[11px] text-gray-500 hover:text-green-600 flex items-center gap-1"><CreditCard size={11} /> Pricing</Link></li>
             </ul>
           </div>
 
-          {/* Follow Us */}
+          {/* Follow Us */} 
           <div>
             <h3 className="text-xs font-semibold text-gray-800 mb-2">Follow</h3>
             <div className="flex gap-3">
-              <a href="#" className="w-7 h-7 bg-gray-100 rounded-full flex items-center justify-center hover:bg-green-100 transition">
-                <FaFacebook size={14} className="text-gray-600" />
+              <a href="https://chat.whatsapp.com/CoSssFN5KtLEKLxCCafQAV" className="w-7 h-7 bg-gray-100 rounded-full flex items-center justify-center hover:bg-green-100 transition">
+                <FaWhatsapp size={14} className="text-gray-600" />
               </a>
-              <a href="#" className="w-7 h-7 bg-gray-100 rounded-full flex items-center justify-center hover:bg-green-100 transition">
-                <FaTwitter size={14} className="text-gray-600" />
+              <a href="https://t.me/onlibry" className="w-7 h-7 bg-gray-100 rounded-full flex items-center justify-center hover:bg-green-100 transition">
+                <FaTelegram size={14} className="text-gray-600" />
               </a>
-              <a href="#" className="w-7 h-7 bg-gray-100 rounded-full flex items-center justify-center hover:bg-green-100 transition">
-                <FaYoutube size={14} className="text-gray-600" />
+              <a href="https://www.instagram.com/onlibry_xyz" className="w-7 h-7 bg-gray-100 rounded-full flex items-center justify-center hover:bg-green-100 transition">
+                <FaInstagram size={14} className="text-gray-600" />
               </a>
             </div>
           </div>
@@ -73,9 +73,9 @@ function Footer() {
             © {new Date().getFullYear()} Onlibry. All rights reserved.
           </p>
           <div className="flex gap-4">
-            <a href="#" className="text-[10px] text-gray-400 hover:text-green-600">Terms</a>
-            <a href="#" className="text-[10px] text-gray-400 hover:text-green-600">Privacy</a>
-            <a href="#" className="text-[10px] text-gray-400 hover:text-green-600">Cookies</a>
+            <a href="/info/terms" className="text-[10px] text-gray-400 hover:text-green-600">Terms</a>
+            <a href="/info/privacy" className="text-[10px] text-gray-400 hover:text-green-600">Privacy</a>
+            <a href="/info/feedback" className="text-[10px] text-gray-400 hover:text-green-600">Feedback</a>
           </div>
         </div>
       </div>

@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Habibul | Web Developer & Founder of Onlibry.in</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>H</text></svg>">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module" src="https://onlibry.in/onlibry-logger.js"></script> 
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        'poppins': ['Poppins', 'sans-serif'],
+                    },
+                    colors: {
+                        'neon': '#14b8a6',
+                        'dark': '#0f1419',
+                        'darker': '#0a0e13',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        * {
+            scroll-behavior: smooth;
+        }
+        
+        body {
+            font-family: 'Poppins', sans-serif;
+            margin: 0px;
+        }
+        
+        .gradient-text {
+            background: linear-gradient(135deg, #14b8a6, #06b6d4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .glow {
+            box-shadow: 0 0 20px rgba(20, 184, 166, 0.3);
+        }
+        
+        .typewriter {
+            overflow: hidden;
+            border-right: 0.15em solid #14b8a6;
+            white-space: nowrap;
+            margin: 0 auto;
+            letter-spacing: 0.15em;
+            animation: typing 3.5s steps(40, end), blink-caret 0.75s step-end infinite;
+        }
+        
+        @keyframes typing {
+            from { width: 0 }
+            to { width: 100% }
+        }
+        
+        @keyframes blink-caret {
+            from, to { border-color: transparent }
+            50% { border-color: #14b8a6 }
+        }
+        
+        .fade-in {
+            animation: fadeIn 1s ease-in;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .slide-in {
+            animation: slideIn 0.8s ease-out forwards;
+            opacity: 0;
+            transform: translateX(-50px);
+        }
+        
+        @keyframes slideIn {
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+        
+        .hover-scale {
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        
+        .hover-scale:hover {
+            transform: translateY(-5px) scale(1.02);
+            box-shadow: 0 10px 25px rgba(20, 184, 166, 0.2);
+        }
+        
+        .floating-btn {
+            position: fixed;
+            right: 20px;
+            bottom: 20px;
+            z-index: 1000;
+            animation: float 3s ease-in-out infinite;
+        }
+        
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+        
+        .nav-blur {
+            backdrop-filter: blur(10px);
+            background: rgba(15, 20, 25, 0.8);
+        }
+        
+        .skill-pill {
+            background: linear-gradient(135deg, rgba(20, 184, 166, 0.1), rgba(6, 182, 212, 0.1));
+            border: 1px solid rgba(20, 184, 166, 0.3);
+            transition: all 0.3s ease;
+        }
+        
+        .skill-pill:hover {
+            background: linear-gradient(135deg, rgba(20, 184, 166, 0.2), rgba(6, 182, 212, 0.2));
+            border-color: #14b8a6;
+            transform: translateY(-2px);
+        }
+        
+        .project-card {
+            background: linear-gradient(135deg, rgba(20, 184, 166, 0.05), rgba(6, 182, 212, 0.05));
+            border: 1px solid rgba(20, 184, 166, 0.2);
+            transition: all 0.3s ease;
+        }
+        
+        .project-card:hover {
+            border-color: #14b8a6;
+            background: linear-gradient(135deg, rgba(20, 184, 166, 0.1), rgba(6, 182, 212, 0.1));
+        }
+        
+        .timeline-item {
+            position: relative;
+            padding-left: 2rem;
+        }
+        
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0.5rem;
+            width: 12px;
+            height: 12px;
+            background: #14b8a6;
+            border-radius: 50%;
+            box-shadow: 0 0 10px rgba(20, 184, 166, 0.5);
+        }
+        
+        .timeline-item::after {
+            content: '';
+            position: absolute;
+            left: 5px;
+            top: 1.5rem;
+            width: 2px;
+            height: 100%;
+            background: linear-gradient(to bottom, #14b8a6, transparent);
+        }
+        
+        .contact-form input, .contact-form textarea {
+            background: rgba(20, 184, 166, 0.05);
+            border: 1px solid rgba(20, 184, 166, 0.2);
+            transition: all 0.3s ease;
+        }
+        
+        .contact-form input:focus, .contact-form textarea:focus {
+            border-color: #14b8a6;
+            box-shadow: 0 0 0 2px rgba(20, 184, 166, 0.1);
+            outline: none;
+        }
+    </style>
+</head>
+<body class="bg-dark text-white">
+    <!-- Navigation -->
+    <nav class="fixed top-0 w-full z-50 nav-blur border-b border-gray-800">
+        <div class="container mx-auto px-6 py-4">
+            <div class="flex justify-between items-center">
+                <div class="text-2xl font-bold gradient-text">MD.Habibul</div>
+                <div class="hidden md:flex space-x-8">
+                    <a href="#home" class="hover:text-neon transition-colors">Home</a>
+                    <a href="#about" class="hover:text-neon transition-colors">About</a>
+                    <a href="#skills" class="hover:text-neon transition-colors">Skills</a>
+                    <a href="#projects" class="hover:text-neon transition-colors">Projects</a>
+                    <!-- <a href="#achievements" class="hover:text-neon transition-colors">Achievements</a> -->
+                    <a href="#contact" class="hover:text-neon transition-colors">Contact</a>
+                </div>
+                <button class="md:hidden text-neon" id="mobile-menu-btn">
+                    <i class="fas fa-bars text-xl"></i>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Mobile Menu -->
+    <div id="mobile-menu" class="fixed inset-0 bg-darker z-40 hidden">
+        <div class="flex flex-col items-center justify-center h-full space-y-8 text-xl">
+            <a href="#home" class="hover:text-neon transition-colors mobile-menu-link">Home</a>
+            <a href="#about" class="hover:text-neon transition-colors mobile-menu-link">About</a>
+            <a href="#skills" class="hover:text-neon transition-colors mobile-menu-link">Skills</a>
+            <a href="#projects" class="hover:text-neon transition-colors mobile-menu-link">Projects</a>
+            <!-- <a href="#achievements" class="hover:text-neon transition-colors mobile-menu-link">Achievements</a> -->
+            <a href="#contact" class="hover:text-neon transition-colors mobile-menu-link">Contact</a>
+        </div>
+    </div>
+
+    <!-- Hero Section -->
+    <section id="home" class="min-h-screen flex items-center justify-center px-6">
+        <div class="text-center max-w-4xl mx-auto">
+            <div class="fade-in">
+                <h1 class="text-5xl md:text-7xl font-bold mb-4">
+                    Hi, I'm <span class="gradient-text">Habibul</span>
+                </h1>
+                <div class="text-xl md:text-2xl text-gray-300 mb-6 typewriter">
+                    Web Developer | Google Apps Script Expert | Onlibry Founder
+                </div>
+                <p class="text-lg md:text-xl text-gray-400 mb-8 max-w-2xl mx-auto">
+                    Crafting smart digital tools with clean code & fast logic.
+                </p>
+                <div class="flex flex-col sm:flex-row gap-4 justify-center">
+                    <a href="#projects" class="bg-neon text-dark px-8 py-3 rounded-full font-semibold hover:bg-opacity-90 transition-all glow">
+                        View My Work
+                    </a>
+<!--                     <a href="https://drive.google.com/uc?export=download&id=1EtiRMRjriRxoswmJEB67xf6UeX8QjOGA
+" class="border border-neon text-neon px-8 py-3 rounded-full font-semibold hover:bg-neon hover:text-dark transition-all">
+                        Download Resume
+                    </a> -->
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- About Section -->
+    <section id="about" class="py-20 px-6">
+        <div class="container mx-auto max-w-6xl">
+            <div class="grid md:grid-cols-2 gap-12 items-center">
+                <div class="slide-in">
+                    <h2 class="text-4xl font-bold mb-6 gradient-text">About Me</h2>
+                    <p class="text-lg text-gray-300 leading-relaxed mb-6">
+                        I'm Habibul, a Hyderabad-based web developer and automation specialist focused on building efficient, scalable, and user-centric digital solutions. I work extensively with Google Apps Script, JavaScript, and Firebase, alongside advanced expertise in Microsoft Office automation, particularly Excel and Word.
+As the creator of Onlibry.in</p>
+                    <p class="text-lg text-gray-300 leading-relaxed">
+                         I develop tools that simplify educational access, including intelligent systems like SheetFetchX and DriveViewerX. I enjoy transforming complex or disorganized workflows into clean, structured systems that deliver real value.
+                    </p>
+                </div>
+                <div class="flex justify-center">
+  <div class="w-80 h-80 bg-gradient-to-br from-neon to-blue-500 rounded-full flex items-center justify-center overflow-hidden">
+    <img src="https://media.licdn.com/dms/image/v2/D4E03AQGVGLVXY1Hcnw/profile-displayphoto-scale_400_400/B4EZjEDqBZGcAg-/0/1755635950508?e=1780531200&v=beta&t=4hN4tuJ5hn6kFtrVd5BNvgmq3NqkEe9_aVCprajgcRY" alt="Bhaijaan" class="w-full h-full object-cover">
+  </div>
+</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Skills Section -->
+    <section id="skills" class="py-20 px-6 bg-darker">
+        <div class="container mx-auto max-w-6xl">
+            <h2 class="text-4xl font-bold text-center mb-12 gradient-text">Skills & Technologies</h2>
+            <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                <div class="skill-pill px-4 py-3 rounded-full text-center hover-scale" style="color: whitesmoke;">HTML</div>
+                <div class="skill-pill px-4 py-3 rounded-full text-center hover-scale" style="color: whitesmoke;">CSS</div>
+                <div class="skill-pill px-4 py-3 rounded-full text-center hover-scale" style="color: whitesmoke;">JAVA SCRIPT</div>
+                <div class="skill-pill px-4 py-3 rounded-full text-center hover-scale" style="color: whitesmoke;">REACT JS</div>
+                <div class="skill-pill px-4 py-3 rounded-full text-center hover-scale" style="color: whitesmoke;" >AI prompt</div>
+                 <div class="skill-pill px-4 py-3 rounded-full text-center hover-scale" style="color: whitesmoke;" >SQL</div>
+                  <div class="skill-pill px-4 py-3 rounded-full text-center hover-scale" style="color: whitesmoke;" >Cloudflare</div>
+                <div class="skill-pill px-4 py-3 rounded-full text-center hover-scale" style="color: whitesmoke;">Google Apps Script</div>
+                <div class="skill-pill px-4 py-3 rounded-full text-center hover-scale" style="color: whitesmoke;">Firebase</div>
+                <div class="skill-pill px-4 py-3 rounded-full text-center hover-scale" style="color: whitesmoke;">Advanced Excel</div>
+                <div class="skill-pill px-4 py-3 rounded-full text-center hover-scale" style="color: whitesmoke;">SheetFetchX</div>
+                <div class="skill-pill px-4 py-3 rounded-full text-center hover-scale" style="color: whitesmoke;">Github</div>
+                <div class="skill-pill px-4 py-3 rounded-full text-center hover-scale" style="color: whitesmoke;">Responsive Design</div>
+                <div class="skill-pill px-4 py-3 rounded-full text-center hover-scale" style="color: whitesmoke;">API Integration</div>
+                <div class="skill-pill px-4 py-3 rounded-full text-center hover-scale" style="color: whitesmoke;">Microsoft Office</div>
+                <div class="skill-pill px-4 py-3 rounded-full text-center hover-scale" style="color: whitesmoke;">Blogger</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Projects Section -->
+    <section id="projects" class="py-20 px-6">
+        <div class="container mx-auto max-w-6xl">
+            <h2 class="text-4xl font-bold text-center mb-12 gradient-text">Featured Projects</h2>
+            <div class="grid md:grid-cols-2 gap-8">
+                <!-- Project 1 -->
+                <div class="project-card p-6 rounded-lg hover-scale">
+                    <div class="flex justify-between items-start mb-4">
+                        <h3 class="text-2xl font-bold text-neon">Onlibry</h3>
+                        <div class="flex space-x-3">
+                            <a href="https://onlibry.in" class="text-neon hover:text-white transition-colors">
+                                <i class="fas fa-external-link-alt"></i>
+                            </a>
+                            <a href="https://github.com/padho-online/padho" class="text-neon hover:text-white transition-colors">
+                                <i class="fab fa-github"></i>
+                            </a>
+                        </div>
+                    </div>
+                    <p class="text-gray-300 mb-4">
+                        Smart educational library platform using Google Drive, Sheets & Google Apps Script. Features automated content organization, user management, and seamless file sharing for educational institutions.
+                    </p>
+                    <div class="flex flex-wrap gap-2">
+                        <span class="bg-neon bg-opacity-20 text-neon px-3 py-1 rounded-full text-sm">Google Apps Script</span>
+                        <span class="bg-neon bg-opacity-20 text-neon px-3 py-1 rounded-full text-sm">Google Sheets</span>
+                        <span class="bg-neon bg-opacity-20 text-neon px-3 py-1 rounded-full text-sm">HTML/CSS</span>
+                        <span class="bg-neon bg-opacity-20 text-neon px-3 py-1 rounded-full text-sm">JavaScript</span>
+                    </div>
+                </div>
+
+                <!-- Project 2 -->
+                <div class="project-card p-6 rounded-lg hover-scale">
+                    <div class="flex justify-between items-start mb-4">
+                        <h3 class="text-2xl font-bold text-neon">Mock Test System</h3>
+                        <div class="flex space-x-3">
+                            <a href="https://onlibry.in/Mock/index.html" class="text-neon hover:text-white transition-colors">
+                                <i class="fas fa-external-link-alt"></i>
+                            </a>
+                            <a href="https://github.com/padho-online/padho/tree/main/Mock" class="text-neon hover:text-white transition-colors">
+                                <i class="fab fa-github"></i>
+                            </a>
+                        </div>
+                    </div>
+                    <p class="text-gray-300 mb-4">
+                        Firebase-based Competitve exam portal with real-time timer, instant results, smooth navigation, and comprehensive analytics. Built for competitive exam preparation with mobile-first approach. Computer Based Test format.
+                    </p>
+                    <div class="flex flex-wrap gap-2">
+                        <span class="bg-neon bg-opacity-20 text-neon px-3 py-1 rounded-full text-sm">Firebase</span>
+                        <span class="bg-neon bg-opacity-20 text-neon px-3 py-1 rounded-full text-sm">JavaScript</span>
+                        <span class="bg-neon bg-opacity-20 text-neon px-3 py-1 rounded-full text-sm">Tailwind CSS</span>
+                        <span class="bg-neon bg-opacity-20 text-neon px-3 py-1 rounded-full text-sm">Responsive Design</span>
+                    </div>
+                </div>
+
+                <div class="project-card p-6 rounded-lg hover-scale">
+                    <div class="flex justify-between items-start mb-4">
+                        <h3 class="text-2xl font-bold text-neon">Books Circle</h3>
+                        <div class="flex space-x-3">
+                            <a href="https://onlibry.in/bookscircle/index.html" class="text-neon hover:text-white transition-colors">
+                                <i class="fas fa-external-link-alt"></i>
+                            </a>
+                            <a href="https://github.com/padho-online/padho/tree/main/bookscircle" class="text-neon hover:text-white transition-colors">
+                                <i class="fab fa-github"></i>
+                            </a>
+                        </div>
+                    </div>
+                    <p class="text-gray-300 mb-4">
+                        A powerful webapp that allows students to list their used books for selling, renting and donating . And buyers can easily contacts the sellers for required books in lowest price with realtime location tracker.
+                    </p>
+                    <div class="flex flex-wrap gap-2">
+                        <span class="bg-neon bg-opacity-20 text-neon px-3 py-1 rounded-full text-sm">JavaScript</span>
+                        <span class="bg-neon bg-opacity-20 text-neon px-3 py-1 rounded-full text-sm">Google Sheets API</span>
+                        <span class="bg-neon bg-opacity-20 text-neon px-3 py-1 rounded-full text-sm">NPM Package</span>
+                    </div>
+                </div>
+
+                <!-- Project 3 -->
+                <div class="project-card p-6 rounded-lg hover-scale">
+                    <div class="flex justify-between items-start mb-4">
+                        <h3 class="text-2xl font-bold text-neon">SheetFetchX</h3>
+                        <div class="flex space-x-3">
+                            <a href="https://docs.google.com/spreadsheets/d/1-bP--yDacWTX40Yq7NcF6wpOx9mrm1_uCc1usvi1EJo/edit?usp=sharing" class="text-neon hover:text-white transition-colors">
+                                <i class="fas fa-external-link-alt"></i>
+                            </a>
+                            <a href="https://github.com/padho-online/padho/tree/main/FileAdmin" class="text-neon hover:text-white transition-colors">
+                                <i class="fab fa-github"></i>
+                            </a>
+                        </div>
+                    </div>
+                    <p class="text-gray-300 mb-4">
+                        Powerful JavaScript library for seamless Google Sheets integration. Enables developers to fetch, update, and manipulate spreadsheet data with simple API calls and automatic caching.
+                    </p>
+                    <div class="flex flex-wrap gap-2">
+                        <span class="bg-neon bg-opacity-20 text-neon px-3 py-1 rounded-full text-sm">JavaScript</span>
+                        <span class="bg-neon bg-opacity-20 text-neon px-3 py-1 rounded-full text-sm">Google Sheets API</span>
+                        <span class="bg-neon bg-opacity-20 text-neon px-3 py-1 rounded-full text-sm">Node.js</span>
+                        <span class="bg-neon bg-opacity-20 text-neon px-3 py-1 rounded-full text-sm">NPM Package</span>
+                    </div>
+                </div>
+
+                <!-- Project 4 -->
+                <!-- <div class="project-card p-6 rounded-lg hover-scale">
+                    <div class="flex justify-between items-start mb-4">
+                        <h3 class="text-2xl font-bold text-neon">Excel Automation Suite</h3>
+                        <div class="flex space-x-3">
+                            <a href="#" class="text-neon hover:text-white transition-colors">
+                                <i class="fas fa-external-link-alt"></i>
+                            </a>
+                            <a href="#" class="text-neon hover:text-white transition-colors">
+                                <i class="fab fa-github"></i>
+                            </a>
+                        </div>
+                    </div>
+                    <p class="text-gray-300 mb-4">
+                        Comprehensive Excel automation toolkit with custom functions, data processing scripts, and report generation. Streamlines complex spreadsheet operations for business workflows.
+                    </p>
+                    <div class="flex flex-wrap gap-2">
+                        <span class="bg-neon bg-opacity-20 text-neon px-3 py-1 rounded-full text-sm">VBA</span>
+                        <span class="bg-neon bg-opacity-20 text-neon px-3 py-1 rounded-full text-sm">Excel Macros</span>
+                        <span class="bg-neon bg-opacity-20 text-neon px-3 py-1 rounded-full text-sm">Data Processing</span>
+                        <span class="bg-neon bg-opacity-20 text-neon px-3 py-1 rounded-full text-sm">Automation</span>
+                    </div>
+                </div> -->
+            </div>
+        </div>
+    </section>
+
+    <!-- Achievements Section -->
+    <!-- <section id="achievements" class="py-20 px-6 bg-darker">
+        <div class="container mx-auto max-w-4xl">
+            <h2 class="text-4xl font-bold text-center mb-12 gradient-text">Certifications & Achievements</h2>
+            <div class="space-y-8">
+                <div class="timeline-item">
+                    <div class="bg-dark p-6 rounded-lg border border-gray-800">
+                        <h3 class="text-xl font-bold text-neon mb-2">Google Sheets Advanced Automation</h3>
+                        <p class="text-gray-300 mb-2">Mastered complex Google Apps Script automation, custom functions, and API integrations</p>
+                        <span class="text-sm text-gray-400">2024</span>
+                    </div>
+                </div>
+                <div class="timeline-item">
+                    <div class="bg-dark p-6 rounded-lg border border-gray-800">
+                        <h3 class="text-xl font-bold text-neon mb-2">Excel Expert Certification</h3>
+                        <p class="text-gray-300 mb-2">Advanced proficiency in Excel VBA, Power Query, and complex formula optimization</p>
+                        <span class="text-sm text-gray-400">2023</span>
+                    </div>
+                </div>
+                <div class="timeline-item">
+                    <div class="bg-dark p-6 rounded-lg border border-gray-800">
+                        <h3 class="text-xl font-bold text-neon mb-2">Web Development project </h3>
+                        <p class="text-gray-300 mb-2">Made a student friendly Digital library which is verified by Osmania University, Secunderabad</p>
+                        <span class="text-sm text-gray-400">2023</span>
+                    </div>
+                </div>
+               
+            </div>
+        </div>
+    </section> -->
+
+    <!-- Contact Section -->
+    <section id="contact" class="py-20 px-6">
+        <div class="container mx-auto max-w-4xl">
+            <h2 class="text-4xl font-bold text-center mb-12 gradient-text">Let's Work Together</h2>
+            <div class="grid md:grid-cols-2 gap-12">
+                <div>
+                    <h3 class="text-2xl font-bold mb-6">Get In Touch</h3>
+                    <div class="space-y-4">
+                        <div class="flex items-center space-x-4">
+                            <i class="fas fa-envelope text-neon text-xl"></i>
+                            <span>mdhabibul12212141@outlook.com</span>
+                        </div>
+                        <div class="flex items-center space-x-4">
+                            <i class="fas fa-map-marker-alt text-neon text-xl"></i>
+                            <span>Hyderabad, Telangana, India</span>
+                        </div>
+                    </div>
+                    <div class="flex space-x-6 mt-8">
+                        <a href="https://github.com/padho-online" class="text-neon hover:text-white transition-colors text-2xl">
+                            <i class="fab fa-github"></i>
+                        </a>
+                        <a href="https://www.linkedin.com/in/mohammed-habibul-5887302b2/" class="text-neon hover:text-white transition-colors text-2xl">
+                            <i class="fab fa-linkedin"></i>
+                        </a>
+                        <a href="https://wa.me/919515043932" class="text-neon hover:text-white transition-colors text-2xl">
+                            <i class="fab fa-whatsapp"></i>
+                        </a>
+                        <a href="https://instagram.com/habibul_81292" class="text-neon hover:text-white transition-colors text-2xl">
+                            <i class="fab fa-instagram"></i>
+                        </a>
+                    </div>
+                </div>
+
+               <!-- In your Contact Section, replace the form with this: -->
+<form id="contactForm" class="contact-form space-y-6">
+    <input type="text" id="name" placeholder="Your Name" class="w-full px-4 py-3 rounded-lg text-white" required>
+    <input type="email" id="email" placeholder="Your Email" class="w-full px-4 py-3 rounded-lg text-white" required>
+    <textarea id="message" placeholder="Your Message" rows="5" class="w-full px-4 py-3 rounded-lg text-white resize-none" required></textarea>
+    <button type="submit" class="bg-neon text-dark px-8 py-3 rounded-lg font-semibold hover:bg-opacity-90 transition-all glow w-full">
+        Send Message
+    </button>
+</form>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="py-8 px-6 bg-darker border-t border-gray-800">
+        <div class="container mx-auto text-center">
+            <p class="text-gray-400">
+                © 2026 MD.Habibul. Crafted with ❤️.
+            </p>
+        </div>
+    </footer>
+
+    <!-- Floating Contact Button -->
+    <div class="floating-btn">
+        <a href="mailto:mdhabibul12212141@outlook.com" class="bg-neon text-dark p-4 rounded-full shadow-lg hover:bg-opacity-90 transition-all glow">
+            <i class="fas fa-envelope text-xl"></i>
+        </a>
+    </div>
+
+    <script>
+document.addEventListener('DOMContentLoaded', function () {
+    // ---------- Mobile Menu Toggle ----------
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+
+    if (mobileMenuBtn && mobileMenu) {
+        mobileMenuBtn.addEventListener('click', () => {
+            mobileMenu.classList.toggle('hidden');
+            document.body.style.overflow = mobileMenu.classList.contains('hidden') ? 'auto' : 'hidden';
+        });
+
+        document.querySelectorAll('.mobile-menu-link').forEach(link => {
+            link.addEventListener('click', () => {
+                mobileMenu.classList.add('hidden');
+                document.body.style.overflow = 'auto';
+            });
+        });
+    }
+
+    // ---------- Smooth Scroll for Anchors ----------
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+        anchor.addEventListener('click', function (e) {
+            e.preventDefault();
+            const target = document.querySelector(this.getAttribute('href'));
+            if (target) {
+                target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        });
+    });
+
+    // ---------- Scroll Reveal Animations ----------
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.classList.add('slide-in');
+            }
+        });
+    }, { threshold: 0.1, rootMargin: '0px 0px -50px 0px' });
+
+    document.querySelectorAll('.timeline-item, .project-card, .skill-pill').forEach(el => observer.observe(el));
+
+  // ---------- Contact Form Submission ----------
+const contactForm = document.getElementById('contactForm');
+
+if (contactForm) {
+    contactForm.addEventListener('submit', async function (e) {
+        e.preventDefault();
+
+        const form = e.target;
+        const submitBtn = form.querySelector('button[type="submit"]');
+
+        // ✅ Prevent double submissions
+        if (submitBtn.disabled) return;
+
+        const originalText = submitBtn.innerHTML;
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
+
+        const formData = {
+            name: form.name.value.trim(),
+            email: form.email.value.trim(),
+            message: form.message.value.trim()
+        };
+
+        const GAS_URL = 'https://script.google.com/macros/s/AKfycbwWPZYFfc9NP1i9ZffQTjC9KWQRRkwgSTxsENyjom28ic4ySYwaK0Qq7pzjtfPf5W17wg/exec';
+        const FORMSUBMIT_URL = 'https://formsubmit.co/ajax/mdhabibul12212141@outlook.com';
+
+        let sent = false;
+
+        // ---------- 1. Try Google Apps Script ----------
+        try {
+            await fetch(GAS_URL, {
+                method: 'POST',
+                mode: 'no-cors', // GAS requires no-cors for speed
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(formData)
+            });
+            sent = true;
+            showToast('✅ Message sent successfully!');
+            form.reset();
+        } catch (gasError) {
+            console.warn('Google Apps Script failed:', gasError);
+        }
+
+        // ---------- 2. Fallback to FormSubmit ----------
+        if (!sent) {
+            try {
+                const res = await fetch(FORMSUBMIT_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        ...formData,
+                        _subject: 'New Contact Form Submission',
+                        _template: 'box',
+                        _captcha: 'false',
+                        _replyto: formData.email
+                    })
+                });
+
+                const data = await res.json();
+                if (data.success) {
+                    showToast('✅ Message sent via backup!');
+                    form.reset();
+                    sent = true;
+                } else {
+                    throw new Error(data.message || 'FormSubmit failed');
+                }
+            } catch (backupError) {
+                console.error('Backup FormSubmit also failed:', backupError);
+                showToast('❌ Unable to send. Please email directly.', 'error');
+            }
+        }
+
+        // ---------- Reset UI ----------
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalText;
+    });
+}
+
+
+    // ---------- Toast Function ----------
+    function showToast(message, type = 'success') {
+        document.querySelectorAll('.custom-toast').forEach(t => t.remove());
+        const toast = document.createElement('div');
+        toast.className = `custom-toast fixed bottom-5 right-5 px-6 py-3 rounded-lg shadow-lg z-50 text-white font-medium flex items-center ${type === 'success' ? 'bg-green-500' : 'bg-red-500'}`;
+        toast.innerHTML = `<span>${message}</span><button class="ml-4" onclick="this.parentElement.remove()"><i class="fas fa-times"></i></button>`;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 5000);
+    }
+
+    // ---------- Typewriter Effect ----------
+    const typewriter = document.querySelector('.typewriter');
+    if (typewriter) {
+    const texts = [
+       "Website Developer..", 
+        "Microsoft Office Expert..",
+        "Smart Solutions coder..",
+        "Automating Education Technology..",
+        "Founder of Onlibry.in.."
+    ];
+        let i = 0, j = 0, isDel = false;
+
+        (function loop() {
+            const txt = texts[i];
+            typewriter.textContent = isDel ? txt.substring(0, j--) : txt.substring(0, j++);
+            if (!isDel && j === txt.length) { isDel = true; setTimeout(loop, 2000); }
+            else if (isDel && j === 0) { isDel = false; i = (i + 1) % texts.length; setTimeout(loop, 500); }
+            else setTimeout(loop, isDel ? 50 : 100);
+        })();
+    }
+
+    // ---------- Hero Parallax ----------
+    const hero = document.querySelector('#home');
+    if (hero) {
+        window.addEventListener('scroll', () => {
+            const yOffset = window.pageYOffset;
+            hero.style.transform = `translateY(${yOffset * 0.5}px)`;
+        });
+    }
+
+    // ---------- Nav Active Highlight ----------
+    window.addEventListener('scroll', () => {
+        const sections = document.querySelectorAll('section[id]');
+        const navLinks = document.querySelectorAll('nav a[href^="#"]');
+        let current = '';
+        sections.forEach(sec => {
+            if (window.scrollY >= sec.offsetTop - 100 && window.scrollY < sec.offsetTop + sec.offsetHeight) {
+                current = sec.id;
+            }
+        });
+        navLinks.forEach(link => {
+            link.classList.remove('text-neon');
+            if (link.getAttribute('href') === `#${current}`) {
+                link.classList.add('text-neon');
+            }
+        });
+    });
+
+    // ---------- Scroll to Top Button ----------
+    const scrollBtn = document.createElement('button');
+    scrollBtn.innerHTML = '<i class="fas fa-arrow-up"></i>';
+    scrollBtn.className = 'fixed bottom-20 right-20 bg-neon text-dark p-3 rounded-full shadow-lg hover:bg-opacity-90 transition-all glow hidden z-50';
+    scrollBtn.style.animation = 'float 3s ease-in-out infinite';
+    document.body.appendChild(scrollBtn);
+
+    scrollBtn.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+    window.addEventListener('scroll', () => {
+        scrollBtn.classList.toggle('hidden', window.pageYOffset <= 300);
+    });
+
+    // ---------- Page Loader ----------
+    window.addEventListener('load', () => {
+        document.body.classList.add('loaded');
+    });
+
+    // ---------- Skill Pills Animation ----------
+    const skillsSection = document.querySelector('#skills');
+    if (skillsSection) {
+        const skillObs = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.querySelectorAll('.skill-pill').forEach((el, i) => {
+                        setTimeout(() => el.style.animation = 'slideIn 0.5s ease-out forwards', i * 100);
+                    });
+                }
+            });
+        }, { threshold: 0.5 });
+        skillObs.observe(skillsSection);
+    }
+
+    // ---------- Cursor Trail ----------
+    if (window.innerWidth > 768) {
+        const cursor = document.createElement('div');
+        cursor.className = 'fixed w-4 h-4 bg-neon rounded-full pointer-events-none z-50 opacity-50';
+        cursor.style.transform = 'translate(-50%, -50%)';
+        document.body.appendChild(cursor);
+        document.addEventListener('mousemove', e => {
+            cursor.style.left = `${e.clientX}px`;
+            cursor.style.top = `${e.clientY}px`;
+        });
+    }
+
+    // ---------- Project Card Hover ----------
+    document.querySelectorAll('.project-card').forEach(card => {
+        card.addEventListener('mouseenter', () => {
+            card.style.transform = 'translateY(-10px) scale(1.02)';
+            card.style.boxShadow = '0 10px 25px rgba(20, 184, 166, 0.3)';
+        });
+        card.addEventListener('mouseleave', () => {
+            card.style.transform = 'translateY(0) scale(1)';
+            card.style.boxShadow = '';
+        });
+    });
+
+    // ---------- Theme Toggle ----------
+    const themeToggle = document.createElement('button');
+    themeToggle.innerHTML = '<i class="fas fa-sun"></i>';
+    themeToggle.className = 'fixed top-20 right-6 bg-neon text-dark p-3 rounded-full shadow-lg hover:bg-opacity-90 transition-all glow z-50';
+    themeToggle.title = 'Toggle Theme';
+    document.body.appendChild(themeToggle);
+
+    let dark = true;
+    themeToggle.addEventListener('click', () => {
+        document.documentElement.classList.toggle('light-mode');
+        themeToggle.innerHTML = dark ? '<i class="fas fa-moon"></i>' : '<i class="fas fa-sun"></i>';
+        dark = !dark;
+    });
+
+    const lightStyles = document.createElement('style');
+    lightStyles.textContent = `
+        .light-mode body {
+            background: linear-gradient(135deg, #f0f9ff, #e0f2fe);
+            color: #1f2937;
+        }
+        .light-mode .project-card,
+        .light-mode .skill-pill,
+        .light-mode .contact-form input,
+        .light-mode .contact-form textarea {
+            background: rgba(20, 184, 166, 0.1);
+            color: #1f2937;
+        }
+        .light-mode .text-gray-300,
+        .light-mode .text-gray-400 {
+            color: #4b5563;
+        }
+    `;
+    document.head.appendChild(lightStyles);
+
+    // ---------- Konami Code ----------
+    let konamiCode = [];
+    const sequence = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'KeyB', 'KeyA'];
+
+    document.addEventListener('keydown', e => {
+        konamiCode.push(e.code);
+        if (konamiCode.length > sequence.length) konamiCode.shift();
+        if (konamiCode.join(',') === sequence.join(',')) {
+            document.body.style.animation = 'rainbow 2s infinite';
+            setTimeout(() => {
+                document.body.style.animation = '';
+                showToast('🎉 Konami Code activated! You found the easter egg!');
+            }, 2000);
+            konamiCode = [];
+        }
+    });
+
+    const rainbowAnim = document.createElement('style');
+    rainbowAnim.textContent = `
+        @keyframes rainbow {
+            0% { filter: hue-rotate(0deg); }
+            25% { filter: hue-rotate(90deg); }
+            50% { filter: hue-rotate(180deg); }
+            75% { filter: hue-rotate(270deg); }
+            100% { filter: hue-rotate(360deg); }
+        }
+    `;
+    document.head.appendChild(rainbowAnim);
+
+    // ---------- Ready Log ----------
+    console.log('🚀 Portfolio loaded with upgraded features!');
+    console.log('🎮 Konami Code: ↑↑↓↓←→←→BA');
+});
+</script>
+
+
+</body>
+</html>

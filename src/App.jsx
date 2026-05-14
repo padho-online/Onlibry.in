@@ -41,6 +41,10 @@ import EditPost from './blogger/pages/EditPost';
 import NotificationsPage from './pages/NotificationsPage';
 import NotificationDetailPage from './pages/NotificationDetailPage';
 
+// Import Info Pages
+import InfoHub from './Info/InfoHub';
+
+
 // Admin Pages
 import AdminDashboard from './pages/admin/AdminDashboard';
 import PaymentLogs from './pages/admin/PaymentLogs';
@@ -84,6 +88,11 @@ function App() {
                 {/* Notification Routes (NEW) */}
                 <Route path="/notifications" element={<NotificationsPage />} />
                 <Route path="/notification/:id" element={<NotificationDetailPage />} />
+
+                {/* Info Pages */}
+                <Route path="/info" element={<InfoHub />} />
+                <Route path="/info/:tab" element={<InfoHub />} />
+               
 
                 {/* Protected Blog Routes */}
                 <Route
