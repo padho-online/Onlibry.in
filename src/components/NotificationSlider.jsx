@@ -67,7 +67,7 @@ function NotificationSlider() {
         <div className="flex transition-transform duration-500 ease-out" style={{ transform: `translateX(-${currentIndex * 100}%)` }}>
           {slides.map((slide, index) => (
             <div key={slide.id} className="w-full flex-shrink-0">
-              <div className="relative h-48 md:h-56 bg-gradient-to-r from-white-700 to-green-300 rounded-xl overflow-hidden">
+              <div className="relative h-48 md:h-56 bg-gradient-to-r from-green-600 to-green-500 rounded-xl overflow-hidden">
                 {slide.image_url && (
                   <img 
                     src={slide.image_url} 
@@ -90,17 +90,35 @@ function NotificationSlider() {
         </div>
       </div>
 
+      {/* Navigation Arrows - Always visible on mobile, visible on hover on desktop */}
       {slides.length > 1 && (
         <>
-          <button onClick={(e) => { e.stopPropagation(); goToPrev(); }} className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition hover:bg-black/70">◀</button>
-          <button onClick={(e) => { e.stopPropagation(); goToNext(); }} className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition hover:bg-black/70">▶</button>
+          <button 
+            onClick={(e) => { e.stopPropagation(); goToPrev(); }} 
+            className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 text-white p-2 rounded-full transition hover:bg-black/70 z-10 md:opacity-0 md:group-hover:opacity-100 opacity-100"
+          >
+            ◀
+          </button>
+          <button 
+            onClick={(e) => { e.stopPropagation(); goToNext(); }} 
+            className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 text-white p-2 rounded-full transition hover:bg-black/70 z-10 md:opacity-0 md:group-hover:opacity-100 opacity-100"
+          >
+            ▶
+          </button>
         </>
       )}
 
+      {/* Dots Indicator */}
       {slides.length > 1 && (
-        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-2">
+        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-2 z-10">
           {slides.map((_, index) => (
-            <button key={index} onClick={(e) => { e.stopPropagation(); goToSlide(index); }} className={`w-2 h-2 rounded-full transition-all ${index === currentIndex ? 'bg-white w-4' : 'bg-white/50'}`} />
+            <button 
+              key={index} 
+              onClick={(e) => { e.stopPropagation(); goToSlide(index); }} 
+              className={`w-2 h-2 rounded-full transition-all ${
+                index === currentIndex ? 'bg-white w-4' : 'bg-white/50'
+              }`}
+            />
           ))}
         </div>
       )}
