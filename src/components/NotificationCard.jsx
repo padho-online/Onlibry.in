@@ -1,5 +1,21 @@
 // src/components/NotificationCard.jsx
 import React from 'react';
+import { getIconComponent } from './IconPicker';
+
+// Get color class for category dot
+const getCategoryDotColor = (color) => {
+  const colorMap = {
+    red: 'bg-red-500',
+    blue: 'bg-blue-500',
+    green: 'bg-green-500',
+    yellow: 'bg-yellow-500',
+    purple: 'bg-purple-500',
+    pink: 'bg-pink-500',
+    orange: 'bg-orange-500',
+    gray: 'bg-gray-500'
+  };
+  return colorMap[color] || 'bg-gray-500';
+};
 
 function NotificationCard({ notification, compact = false }) {
   
@@ -22,7 +38,6 @@ function NotificationCard({ notification, compact = false }) {
   };
   
   const handleClick = () => {
-    // If link is provided, open that link
     if (notification.link && notification.link.trim() !== '') {
       if (notification.link.startsWith('/')) {
         window.location.href = notification.link;
@@ -30,23 +45,10 @@ function NotificationCard({ notification, compact = false }) {
         window.open(notification.link, '_blank');
       }
     }
-    // No link = do nothing
   };
   
-  // Color mapping for category (only dot/border, no tag text)
-  const getCategoryDotColor = (color) => {
-    const colorMap = {
-      red: 'bg-red-500',
-      blue: 'bg-blue-500',
-      green: 'bg-green-500',
-      yellow: 'bg-yellow-500',
-      purple: 'bg-purple-500',
-      pink: 'bg-pink-500',
-      orange: 'bg-orange-500',
-      gray: 'bg-gray-500'
-    };
-    return colorMap[color] || 'bg-gray-500';
-  };
+  const CategoryIcon = getIconComponent(notification.category_icon);
+  const dotColor = getCategoryDotColor(notification.category_color);
   
   if (compact) {
     return (
@@ -56,12 +58,14 @@ function NotificationCard({ notification, compact = false }) {
         style={{ cursor: notification.link ? 'pointer' : 'default' }}
       >
         <div className="flex items-start gap-2">
-          {/* Category Color Dot */}
-          <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${getCategoryDotColor(notification.category_color)}`}></div>
+          <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${dotColor}`}></div>
           <div className="flex-1">
-            <h4 className="text-sm font-semibold text-gray-800 mb-1">
-              {notification.title}
-            </h4>
+            <div className="flex items-center gap-2 mb-1">
+              <CategoryIcon size={12} className="text-gray-500" />
+              <h4 className="text-sm font-semibold text-gray-800">
+                {notification.title}
+              </h4>
+            </div>
             <p className="text-xs text-gray-500 line-clamp-2">
               {truncateText(notification.content, 80)}
             </p>
@@ -83,8 +87,10 @@ function NotificationCard({ notification, compact = false }) {
       style={{ cursor: notification.link ? 'pointer' : 'default' }}
     >
       <div className="flex items-start gap-3">
-        {/* Category Color Dot */}
-        <div className={`w-3 h-3 rounded-full mt-1 flex-shrink-0 ${getCategoryDotColor(notification.category_color)}`}></div>
+        <div className="flex flex-col items-center gap-1">
+          <div className={`w-3 h-3 rounded-full ${dotColor}`}></div>
+          <CategoryIcon size={16} className="text-gray-500" />
+        </div>
         <div className="flex-1">
           <h3 className="text-base font-bold text-gray-800 mb-2">
             {notification.title}

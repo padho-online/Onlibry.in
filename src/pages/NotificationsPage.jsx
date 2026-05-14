@@ -4,6 +4,23 @@ import { useSearchParams } from 'react-router-dom';
 import { getAllNotifications } from '../services/notificationService';
 import { getAllCategories } from '../services/categoryService';
 import NotificationCard from '../components/NotificationCard';
+import { getIconComponent } from '../components/IconPicker';
+import * as Icons from 'lucide-react';
+
+// Get category color class
+const getCategoryColorClass = (color) => {
+  const colorMap = {
+    red: 'border-red-500 bg-red-50 text-red-700',
+    blue: 'border-blue-500 bg-blue-50 text-blue-700',
+    green: 'border-green-500 bg-green-50 text-green-700',
+    yellow: 'border-yellow-500 bg-yellow-50 text-yellow-700',
+    purple: 'border-purple-500 bg-purple-50 text-purple-700',
+    pink: 'border-pink-500 bg-pink-50 text-pink-700',
+    orange: 'border-orange-500 bg-orange-50 text-orange-700',
+    gray: 'border-gray-500 bg-gray-50 text-gray-700'
+  };
+  return colorMap[color] || colorMap.gray;
+};
 
 function NotificationsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -56,29 +73,16 @@ function NotificationsPage() {
     setSearchParams({ category: activeCategory, page: newPage.toString() });
   };
 
-  const getCategoryColor = (slug) => {
-    const category = categories.find(c => c.slug === slug);
-    const colorMap = {
-      red: 'border-red-500 bg-red-50 text-red-700',
-      blue: 'border-blue-500 bg-blue-50 text-blue-700',
-      green: 'border-green-500 bg-green-50 text-green-700',
-      yellow: 'border-yellow-500 bg-yellow-50 text-yellow-700',
-      purple: 'border-purple-500 bg-purple-50 text-purple-700',
-      pink: 'border-pink-500 bg-pink-50 text-pink-700',
-      orange: 'border-orange-500 bg-orange-50 text-orange-700',
-      gray: 'border-gray-500 bg-gray-50 text-gray-700'
-    };
-    return colorMap[category?.color || 'gray'] || colorMap.gray;
-  };
-
   return (
     <div className="py-4 md:py-6 max-w-4xl mx-auto px-4">
       {/* Header */}
       <div className="text-center mb-6">
         <h1 className="text-2xl md:text-3xl font-bold text-gray-800 mb-2">
-    Notifications
+          📢 All Notifications
         </h1>
-       
+        <p className="text-sm text-gray-500">
+          Stay updated with latest announcements
+        </p>
       </div>
 
       {/* Category Tabs - Scrollable Horizontal */}
@@ -87,29 +91,34 @@ function NotificationsPage() {
           <div className="flex gap-2 min-w-max">
             <button
               onClick={() => handleCategoryChange('all')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap ${
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap flex items-center gap-1 ${
                 activeCategory === 'all'
                   ? 'bg-green-600 text-white'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
+              <Icons.LayoutGrid size={14} />
               All
             </button>
             
-            {categories.map((category) => (
-              <button
-                key={category.id}
-                onClick={() => handleCategoryChange(category.slug)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap ${
-                  activeCategory === category.slug
-                    ? getCategoryColor(category.slug)
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                <span className="mr-1">{category.icon}</span>
-                {category.name}
-              </button>
-            ))}
+            {categories.map((category) => {
+              const IconComponent = getIconComponent(category.icon, Icons.Bell);
+              const isActive = activeCategory === category.slug;
+              return (
+                <button
+                  key={category.id}
+                  onClick={() => handleCategoryChange(category.slug)}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap flex items-center gap-1 ${
+                    isActive
+                      ? getCategoryColorClass(category.color)
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  <IconComponent size={14} />
+                  {category.name}
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -138,7 +147,7 @@ function NotificationsPage() {
         </div>
       ) : notifications.length === 0 ? (
         <div className="text-center py-12 bg-gray-50 rounded-xl">
-          <div className="text-5xl mb-3">📭</div>
+          <Icons.BellOff size={48} className="mx-auto text-gray-300 mb-3" />
           <p className="text-gray-500 text-lg">No notifications found</p>
           <p className="text-sm text-gray-400 mt-1">
             {activeCategory !== 'all' ? 'Try changing the category filter' : 'Check back later for updates'}
@@ -146,7 +155,7 @@ function NotificationsPage() {
           {activeCategory !== 'all' && (
             <button
               onClick={() => handleCategoryChange('all')}
-              className="mt-4 px-4 py-2 bg-green-600 text-white rounded-lg text-sm"
+              className="mt-4 px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 transition"
             >
               View All Notifications
             </button>
@@ -166,13 +175,14 @@ function NotificationsPage() {
           <button
             onClick={() => handlePageChange(pagination.page - 1)}
             disabled={pagination.page === 1}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-1 ${
               pagination.page === 1
                 ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
-            ← Previous
+            <Icons.ChevronLeft size={14} />
+            Previous
           </button>
           
           <span className="px-4 py-2 text-sm text-gray-600">
@@ -182,13 +192,14 @@ function NotificationsPage() {
           <button
             onClick={() => handlePageChange(pagination.page + 1)}
             disabled={pagination.page === pagination.totalPages}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-1 ${
               pagination.page === pagination.totalPages
                 ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
-            Next →
+            Next
+            <Icons.ChevronRight size={14} />
           </button>
         </div>
       )}

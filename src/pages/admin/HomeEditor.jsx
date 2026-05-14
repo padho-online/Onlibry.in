@@ -26,6 +26,8 @@ import {
   deleteSliderCard,
   reorderSliderCards
 } from '../../services/sliderService';
+import * as Icons from 'lucide-react';
+import IconPicker, { AVAILABLE_ICONS, CATEGORY_ICONS, getIconComponent } from '../../components/IconPicker';
 
 // Cloudinary configuration
 const CLOUDINARY_CLOUD_NAME = 'djnwoi3hk';
@@ -58,8 +60,8 @@ function HomeEditor() {
   const [showCardModal, setShowCardModal] = useState(false);
   
   // Form States
-  const [buttonForm, setButtonForm] = useState({ label: '', icon: '📁', path: '', order: 0 });
-  const [categoryForm, setCategoryForm] = useState({ name: '', slug: '', color: 'gray', icon: '📢', order: 0 });
+  const [buttonForm, setButtonForm] = useState({ label: '', icon: 'Folder', path: '', order: 0 });
+  const [categoryForm, setCategoryForm] = useState({ name: '', slug: '', color: 'gray', icon: 'Bell', order: 0 });
   const [notificationForm, setNotificationForm] = useState({ 
     title: '', content: '', category_id: '', link: '', image_url: '', is_pinned: 0, status: 'published' 
   });
@@ -160,7 +162,7 @@ function HomeEditor() {
       await addQuickAccessButton(buttonForm);
     }
     setEditingButton(null);
-    setButtonForm({ label: '', icon: '📁', path: '', order: 0 });
+    setButtonForm({ label: '', icon: 'Folder', path: '', order: 0 });
     await loadButtons();
   };
 
@@ -192,7 +194,7 @@ function HomeEditor() {
       await addCategory(categoryForm);
     }
     setEditingCategory(null);
-    setCategoryForm({ name: '', slug: '', color: 'gray', icon: '📢', order: 0 });
+    setCategoryForm({ name: '', slug: '', color: 'gray', icon: 'Bell', order: 0 });
     await loadCategories();
   };
 
@@ -313,9 +315,6 @@ function HomeEditor() {
     { value: 'gray', label: '⚪ Gray' }
   ];
 
-  // Icon options
-  const iconOptions = ['📢', '📝', '📚', '👑', '🎯', '🔔', '⭐', '💡', '🎓', '📖', '✏️', '🏆'];
-
   if (loading) {
     return (
       <div className="flex justify-center py-12">
@@ -331,46 +330,10 @@ function HomeEditor() {
 
       {/* Tabs */}
       <div className="flex flex-wrap gap-2 mb-6 border-b border-gray-200 pb-3">
-        <button
-          onClick={() => setActiveTab('buttons')}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-            activeTab === 'buttons'
-              ? 'bg-green-600 text-white'
-              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          }`}
-        >
-          🔘 Quick Access Buttons
-        </button>
-        <button
-          onClick={() => setActiveTab('categories')}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-            activeTab === 'categories'
-              ? 'bg-green-600 text-white'
-              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          }`}
-        >
-          🏷️ Categories
-        </button>
-        <button
-          onClick={() => setActiveTab('notifications')}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-            activeTab === 'notifications'
-              ? 'bg-green-600 text-white'
-              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          }`}
-        >
-          📢 Notifications
-        </button>
-        <button
-          onClick={() => setActiveTab('slider')}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-            activeTab === 'slider'
-              ? 'bg-green-600 text-white'
-              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          }`}
-        >
-          🎠 Slider Cards
-        </button>
+        <button onClick={() => setActiveTab('buttons')} className={`px-4 py-2 rounded-lg text-sm font-medium transition ${activeTab === 'buttons' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>🔘 Quick Access Buttons</button>
+        <button onClick={() => setActiveTab('categories')} className={`px-4 py-2 rounded-lg text-sm font-medium transition ${activeTab === 'categories' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>🏷️ Categories</button>
+        <button onClick={() => setActiveTab('notifications')} className={`px-4 py-2 rounded-lg text-sm font-medium transition ${activeTab === 'notifications' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>📢 Notifications</button>
+        <button onClick={() => setActiveTab('slider')} className={`px-4 py-2 rounded-lg text-sm font-medium transition ${activeTab === 'slider' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>🎠 Slider Cards</button>
       </div>
 
       {/* ============================================ */}
@@ -382,21 +345,27 @@ function HomeEditor() {
             <h3 className="font-semibold text-gray-800 mb-3">
               {editingButton ? '✏️ Edit Button' : '➕ Add New Button'}
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <input
                 type="text"
                 placeholder="Label (e.g., Files)"
                 value={buttonForm.label}
                 onChange={(e) => setButtonForm({ ...buttonForm, label: e.target.value })}
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
               />
-              <input
-                type="text"
-                placeholder="Icon (emoji: 📁)"
+              
+              {/* Icon Picker - Using Reusable Component */}
+              <IconPicker
                 value={buttonForm.icon}
-                onChange={(e) => setButtonForm({ ...buttonForm, icon: e.target.value })}
-                className="px-3 py-2 border border-gray-300 rounded-lg"
+                onChange={(iconName) => setButtonForm({ ...buttonForm, icon: iconName })}
+                placeholder="Select Icon"
+                iconSize={20}
+                iconColor="text-green-600"
+                pickerWidth="w-96"
+                pickerColumns={6}
+                iconsList={AVAILABLE_ICONS}
               />
+              
               <input
                 type="text"
                 placeholder="Path (e.g., /files)"
@@ -404,22 +373,16 @@ function HomeEditor() {
                 onChange={(e) => setButtonForm({ ...buttonForm, path: e.target.value })}
                 className="px-3 py-2 border border-gray-300 rounded-lg"
               />
-              <div className="flex gap-2">
-                <button
-                  onClick={handleSaveButton}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700"
-                >
-                  {editingButton ? 'Update' : 'Add'}
+            </div>
+            <div className="flex gap-2 mt-3">
+              <button onClick={handleSaveButton} className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700">
+                {editingButton ? 'Update' : 'Add'}
+              </button>
+              {editingButton && (
+                <button onClick={() => { setEditingButton(null); setButtonForm({ label: '', icon: 'Folder', path: '', order: 0 }); }} className="px-4 py-2 bg-gray-500 text-white rounded-lg text-sm hover:bg-gray-600">
+                  Cancel
                 </button>
-                {editingButton && (
-                  <button
-                    onClick={() => { setEditingButton(null); setButtonForm({ label: '', icon: '📁', path: '', order: 0 }); }}
-                    className="px-4 py-2 bg-gray-500 text-white rounded-lg text-sm hover:bg-gray-600"
-                  >
-                    Cancel
-                  </button>
-                )}
-              </div>
+              )}
             </div>
           </div>
 
@@ -435,18 +398,23 @@ function HomeEditor() {
                 </tr>
               </thead>
               <tbody>
-                {buttons.map((btn) => (
-                  <tr key={btn.id} className="border-b border-gray-200 hover:bg-gray-50">
-                    <td className="p-3 text-2xl">{btn.icon}</td>
-                    <td className="p-3 font-medium">{btn.label}</td>
-                    <td className="p-3 text-gray-500">{btn.path}</td>
-                    <td className="p-3">{btn.order}</td>
-                    <td className="p-3">
-                      <button onClick={() => handleEditButton(btn)} className="text-blue-600 mr-3 hover:text-blue-800">✏️</button>
-                      <button onClick={() => handleDeleteButton(btn.id)} className="text-red-600 hover:text-red-800">🗑️</button>
-                    </td>
-                  </tr>
-                ))}
+                {buttons.map((btn) => {
+                  const IconComponent = getIconComponent(btn.icon);
+                  return (
+                    <tr key={btn.id} className="border-b border-gray-200 hover:bg-gray-50">
+                      <td className="p-3">
+                        {IconComponent ? <IconComponent size={20} className="text-green-600" /> : <Icons.Folder size={20} className="text-green-600" />}
+                      </td>
+                      <td className="p-3 font-medium">{btn.label}</td>
+                      <td className="p-3 text-gray-500">{btn.path}</td>
+                      <td className="p-3">{btn.order}</td>
+                      <td className="p-3">
+                        <button onClick={() => handleEditButton(btn)} className="text-blue-600 mr-3 hover:text-blue-800">✏️</button>
+                        <button onClick={() => handleDeleteButton(btn.id)} className="text-red-600 hover:text-red-800">🗑️</button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -462,7 +430,7 @@ function HomeEditor() {
             <h3 className="font-semibold text-gray-800 mb-3">
               {editingCategory ? '✏️ Edit Category' : '➕ Add New Category'}
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
               <input
                 type="text"
                 placeholder="Name (e.g., Exam Notification)"
@@ -486,31 +454,28 @@ function HomeEditor() {
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
                 ))}
               </select>
-              <select
+              
+              {/* Category Icon Picker */}
+              <IconPicker
                 value={categoryForm.icon}
-                onChange={(e) => setCategoryForm({ ...categoryForm, icon: e.target.value })}
-                className="px-3 py-2 border border-gray-300 rounded-lg"
-              >
-                {iconOptions.map(icon => (
-                  <option key={icon} value={icon}>{icon}</option>
-                ))}
-              </select>
-              <div className="flex gap-2">
-                <button
-                  onClick={handleSaveCategory}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700"
-                >
-                  {editingCategory ? 'Update' : 'Add'}
+                onChange={(iconName) => setCategoryForm({ ...categoryForm, icon: iconName })}
+                placeholder="Select Category Icon"
+                iconSize={18}
+                iconColor={`text-${categoryForm.color}-600`}
+                pickerWidth="w-80"
+                pickerColumns={4}
+                iconsList={CATEGORY_ICONS}
+              />
+            </div>
+            <div className="flex gap-2 mt-3">
+              <button onClick={handleSaveCategory} className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700">
+                {editingCategory ? 'Update' : 'Add'}
+              </button>
+              {editingCategory && (
+                <button onClick={() => { setEditingCategory(null); setCategoryForm({ name: '', slug: '', color: 'gray', icon: 'Bell', order: 0 }); }} className="px-4 py-2 bg-gray-500 text-white rounded-lg text-sm hover:bg-gray-600">
+                  Cancel
                 </button>
-                {editingCategory && (
-                  <button
-                    onClick={() => { setEditingCategory(null); setCategoryForm({ name: '', slug: '', color: 'gray', icon: '📢', order: 0 }); }}
-                    className="px-4 py-2 bg-gray-500 text-white rounded-lg text-sm hover:bg-gray-600"
-                  >
-                    Cancel
-                  </button>
-                )}
-              </div>
+              )}
             </div>
           </div>
 
@@ -526,22 +491,27 @@ function HomeEditor() {
                 </tr>
               </thead>
               <tbody>
-                {categories.map((cat) => (
-                  <tr key={cat.id} className="border-b border-gray-200 hover:bg-gray-50">
-                    <td className="p-3 text-2xl">{cat.icon}</td>
-                    <td className="p-3 font-medium">{cat.name}</td>
-                    <td className="p-3 text-gray-500">{cat.slug}</td>
-                    <td className="p-3">
-                      <span className={`px-2 py-1 rounded-full text-xs bg-${cat.color}-100 text-${cat.color}-700`}>
-                        {cat.color}
-                      </span>
-                    </td>
-                    <td className="p-3">
-                      <button onClick={() => handleEditCategory(cat)} className="text-blue-600 mr-3 hover:text-blue-800">✏️</button>
-                      <button onClick={() => handleDeleteCategory(cat.id)} className="text-red-600 hover:text-red-800">🗑️</button>
-                    </td>
-                  </tr>
-                ))}
+                {categories.map((cat) => {
+                  const IconComponent = getIconComponent(cat.icon);
+                  return (
+                    <tr key={cat.id} className="border-b border-gray-200 hover:bg-gray-50">
+                      <td className="p-3">
+                        {IconComponent ? <IconComponent size={18} className={`text-${cat.color}-600`} /> : <Icons.Bell size={18} className={`text-${cat.color}-600`} />}
+                      </td>
+                      <td className="p-3 font-medium">{cat.name}</td>
+                      <td className="p-3 text-gray-500">{cat.slug}</td>
+                      <td className="p-3">
+                        <span className={`px-2 py-1 rounded-full text-xs bg-${cat.color}-100 text-${cat.color}-700`}>
+                          {cat.color}
+                        </span>
+                      </td>
+                      <td className="p-3">
+                        <button onClick={() => handleEditCategory(cat)} className="text-blue-600 mr-3 hover:text-blue-800">✏️</button>
+                        <button onClick={() => handleDeleteCategory(cat.id)} className="text-red-600 hover:text-red-800">🗑️</button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -553,10 +523,7 @@ function HomeEditor() {
       {/* ============================================ */}
       {activeTab === 'notifications' && (
         <div>
-          <button
-            onClick={() => { setEditingNotification(null); setNotificationForm({ title: '', content: '', category_id: '', link: '', image_url: '', is_pinned: 0, status: 'published' }); setShowNotifModal(true); }}
-            className="mb-4 px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700"
-          >
+          <button onClick={() => { setEditingNotification(null); setNotificationForm({ title: '', content: '', category_id: '', link: '', image_url: '', is_pinned: 0, status: 'published' }); setShowNotifModal(true); }} className="mb-4 px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700">
             + Create New Notification
           </button>
 
@@ -575,12 +542,13 @@ function HomeEditor() {
               <tbody>
                 {notifications.map((notif) => {
                   const category = categories.find(c => c.id === notif.category_id);
+                  const IconComponent = category ? getIconComponent(category.icon) : Icons.Bell;
                   return (
                     <tr key={notif.id} className="border-b border-gray-200 hover:bg-gray-50">
                       <td className="p-3 font-medium max-w-[200px] truncate">{notif.title}</td>
                       <td className="p-3">
                         <span className="flex items-center gap-1">
-                          <span>{category?.icon}</span> {category?.name}
+                          {IconComponent ? <IconComponent size={14} /> : <Icons.Bell size={14} />} {category?.name}
                         </span>
                       </td>
                       <td className="p-3">
@@ -608,10 +576,7 @@ function HomeEditor() {
       {/* ============================================ */}
       {activeTab === 'slider' && (
         <div>
-          <button
-            onClick={() => { setEditingCard(null); setCardForm({ title: '', description: '', image_url: '', link: '', button_text: 'View More', order: 0 }); setShowCardModal(true); }}
-            className="mb-4 px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700"
-          >
+          <button onClick={() => { setEditingCard(null); setCardForm({ title: '', description: '', image_url: '', link: '', button_text: 'View More', order: 0 }); setShowCardModal(true); }} className="mb-4 px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700">
             + Add New Slider Card
           </button>
 
@@ -622,7 +587,9 @@ function HomeEditor() {
                 {card.image_url ? (
                   <img src={card.image_url} alt={card.title} className="w-20 h-16 object-cover rounded-lg" />
                 ) : (
-                  <div className="w-20 h-16 bg-gray-100 rounded-lg flex items-center justify-center text-2xl">🖼️</div>
+                  <div className="w-20 h-16 bg-gray-100 rounded-lg flex items-center justify-center">
+                    <Icons.Image size={24} className="text-gray-400" />
+                  </div>
                 )}
                 <div className="flex-1">
                   <h4 className="font-semibold text-gray-800">{card.title}</h4>
@@ -631,12 +598,8 @@ function HomeEditor() {
                 <div className="flex gap-2">
                   <button onClick={() => handleEditCard(card)} className="text-blue-600 hover:text-blue-800">✏️</button>
                   <button onClick={() => handleDeleteCard(card.id)} className="text-red-600 hover:text-red-800">🗑️</button>
-                  {idx > 0 && (
-                    <button onClick={() => handleReorderCards(card.id, sliderCards[idx-1].id)} className="text-gray-500 hover:text-gray-700">⬆️</button>
-                  )}
-                  {idx < sliderCards.length - 1 && (
-                    <button onClick={() => handleReorderCards(card.id, sliderCards[idx+1].id)} className="text-gray-500 hover:text-gray-700">⬇️</button>
-                  )}
+                  {idx > 0 && <button onClick={() => handleReorderCards(card.id, sliderCards[idx-1].id)} className="text-gray-500 hover:text-gray-700">⬆️</button>}
+                  {idx < sliderCards.length - 1 && <button onClick={() => handleReorderCards(card.id, sliderCards[idx+1].id)} className="text-gray-500 hover:text-gray-700">⬇️</button>}
                 </div>
               </div>
             ))}
@@ -649,9 +612,7 @@ function HomeEditor() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-bold">
-                {editingNotification ? '✏️ Edit Notification' : '➕ Create Notification'}
-              </h3>
+              <h3 className="text-lg font-bold">{editingNotification ? '✏️ Edit Notification' : '➕ Create Notification'}</h3>
               <button onClick={() => setShowNotifModal(false)} className="text-gray-500 text-2xl hover:text-gray-700">×</button>
             </div>
             
@@ -661,7 +622,7 @@ function HomeEditor() {
                 placeholder="Title"
                 value={notificationForm.title}
                 onChange={(e) => setNotificationForm({ ...notificationForm, title: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
               />
               
               <select
@@ -671,7 +632,9 @@ function HomeEditor() {
               >
                 <option value="">Select Category</option>
                 {categories.map(cat => (
-                  <option key={cat.id} value={cat.id}>{cat.icon} {cat.name}</option>
+                  <option key={cat.id} value={cat.id}>
+                    {cat.name}
+                  </option>
                 ))}
               </select>
               
@@ -746,9 +709,7 @@ function HomeEditor() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-bold">
-                {editingCard ? '✏️ Edit Slider Card' : '➕ Add Slider Card'}
-              </h3>
+              <h3 className="text-lg font-bold">{editingCard ? '✏️ Edit Slider Card' : '➕ Add Slider Card'}</h3>
               <button onClick={() => setShowCardModal(false)} className="text-gray-500 text-2xl hover:text-gray-700">×</button>
             </div>
             
