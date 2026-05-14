@@ -1,5 +1,5 @@
 // src/services/quickAccessService.js
-// Quick Access Buttons Service - With Admin CRUD
+// Quick Access Buttons Service - With Admin CRUD + Reorder
 
 const API_URL = import.meta.env.VITE_NOTIFICATION_API_URL;
 const ADMIN_KEY = import.meta.env.VITE_NOTIFICATION_ADMIN_KEY;
@@ -125,7 +125,7 @@ export async function deleteQuickAccessButton(id) {
   }
 }
 
-// Reorder buttons
+// Reorder buttons - NEW
 export async function reorderQuickAccessButtons(buttons) {
   try {
     const response = await fetch(`${API_URL}/api/admin/quick-access/reorder`, {

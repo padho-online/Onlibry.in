@@ -279,3 +279,6 @@ main {
   display: none;
 }
 
+.max-w-4xl{
+  padding: 0px;
+}

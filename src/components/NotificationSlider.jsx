@@ -67,7 +67,7 @@ function NotificationSlider() {
         <div className="flex transition-transform duration-500 ease-out" style={{ transform: `translateX(-${currentIndex * 100}%)` }}>
           {slides.map((slide, index) => (
             <div key={slide.id} className="w-full flex-shrink-0">
-              <div className="relative h-48 md:h-56 bg-gradient-to-r from-green-600 to-green-500 rounded-xl overflow-hidden">
+              <div className="relative h-48 md:h-56 bg-gradient-to-r from-orange-100 to-green-100 rounded-xl overflow-hidden">
                 {slide.image_url && (
                   <img 
                     src={slide.image_url} 

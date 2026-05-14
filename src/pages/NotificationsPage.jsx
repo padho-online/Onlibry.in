@@ -78,11 +78,9 @@ function NotificationsPage() {
       {/* Header */}
       <div className="text-center mb-6">
         <h1 className="text-2xl md:text-3xl font-bold text-gray-800 mb-2">
-          📢 All Notifications
+          Notifications📢
         </h1>
-        <p className="text-sm text-gray-500">
-          Stay updated with latest announcements
-        </p>
+    
       </div>
 
       {/* Category Tabs - Scrollable Horizontal */}

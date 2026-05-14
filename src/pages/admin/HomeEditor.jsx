@@ -5,7 +5,8 @@ import {
   getQuickAccessButtons, 
   updateQuickAccessButton,
   addQuickAccessButton,
-  deleteQuickAccessButton
+  deleteQuickAccessButton,
+  reorderQuickAccessButtons
 } from '../../services/quickAccessService';
 import { 
   getAllCategories,
@@ -38,6 +39,7 @@ function HomeEditor() {
   const [activeTab, setActiveTab] = useState('buttons');
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [reordering, setReordering] = useState(false);
   const fileInputRef = useRef(null);
   const [currentUploadTarget, setCurrentUploadTarget] = useState(null);
   
@@ -181,6 +183,42 @@ function HomeEditor() {
       path: button.path,
       order: button.order
     });
+  };
+
+  // Move button up (decrease order)
+  const moveButtonUp = async (index) => {
+    if (index === 0) return;
+    
+    const newButtons = [...buttons];
+    const temp = newButtons[index];
+    newButtons[index] = newButtons[index - 1];
+    newButtons[index - 1] = temp;
+    
+    // Update order numbers
+    const updatedButtons = newButtons.map((btn, idx) => ({ ...btn, order: idx + 1 }));
+    setButtons(updatedButtons);
+    
+    setReordering(true);
+    await reorderQuickAccessButtons(updatedButtons);
+    setReordering(false);
+  };
+
+  // Move button down (increase order)
+  const moveButtonDown = async (index) => {
+    if (index === buttons.length - 1) return;
+    
+    const newButtons = [...buttons];
+    const temp = newButtons[index];
+    newButtons[index] = newButtons[index + 1];
+    newButtons[index + 1] = temp;
+    
+    // Update order numbers
+    const updatedButtons = newButtons.map((btn, idx) => ({ ...btn, order: idx + 1 }));
+    setButtons(updatedButtons);
+    
+    setReordering(true);
+    await reorderQuickAccessButtons(updatedButtons);
+    setReordering(false);
   };
 
   // ============================================
@@ -341,6 +379,12 @@ function HomeEditor() {
       {/* ============================================ */}
       {activeTab === 'buttons' && (
         <div>
+          {reordering && (
+            <div className="mb-4 p-2 bg-blue-100 text-blue-700 rounded-lg text-sm text-center">
+              ⏳ Saving order...
+            </div>
+          )}
+
           <div className="bg-gray-50 rounded-lg p-4 mb-6 border border-gray-200">
             <h3 className="font-semibold text-gray-800 mb-3">
               {editingButton ? '✏️ Edit Button' : '➕ Add New Button'}
@@ -390,24 +434,46 @@ function HomeEditor() {
             <table className="w-full text-sm border border-gray-200 rounded-lg">
               <thead className="bg-gray-50">
                 <tr>
+                  <th className="p-3 text-left">Order</th>
                   <th className="p-3 text-left">Icon</th>
                   <th className="p-3 text-left">Label</th>
                   <th className="p-3 text-left">Path</th>
-                  <th className="p-3 text-left">Order</th>
                   <th className="p-3 text-left">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {buttons.map((btn) => {
+                {buttons.map((btn, idx) => {
                   const IconComponent = getIconComponent(btn.icon);
                   return (
                     <tr key={btn.id} className="border-b border-gray-200 hover:bg-gray-50">
                       <td className="p-3">
+                        <div className="flex items-center gap-1">
+                          <span className="text-gray-500 w-8">{btn.order}</span>
+                          <div className="flex flex-col">
+                            <button
+                              onClick={() => moveButtonUp(idx)}
+                              disabled={idx === 0 || reordering}
+                              className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30"
+                              title="Move Up"
+                            >
+                              ▲
+                            </button>
+                            <button
+                              onClick={() => moveButtonDown(idx)}
+                              disabled={idx === buttons.length - 1 || reordering}
+                              className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30"
+                              title="Move Down"
+                            >
+                              ▼
+                            </button>
+                          </div>
+                        </div>
+                       </td>
+                      <td className="p-3">
                         {IconComponent ? <IconComponent size={20} className="text-green-600" /> : <Icons.Folder size={20} className="text-green-600" />}
-                      </td>
+                       </td>
                       <td className="p-3 font-medium">{btn.label}</td>
                       <td className="p-3 text-gray-500">{btn.path}</td>
-                      <td className="p-3">{btn.order}</td>
                       <td className="p-3">
                         <button onClick={() => handleEditButton(btn)} className="text-blue-600 mr-3 hover:text-blue-800">✏️</button>
                         <button onClick={() => handleDeleteButton(btn.id)} className="text-red-600 hover:text-red-800">🗑️</button>
@@ -418,6 +484,12 @@ function HomeEditor() {
               </tbody>
             </table>
           </div>
+          
+          {buttons.length === 0 && (
+            <div className="text-center py-8 text-gray-500">
+              No buttons added yet. Click "Add New Button" to create one.
+            </div>
+          )}
         </div>
       )}
 
@@ -497,7 +569,7 @@ function HomeEditor() {
                     <tr key={cat.id} className="border-b border-gray-200 hover:bg-gray-50">
                       <td className="p-3">
                         {IconComponent ? <IconComponent size={18} className={`text-${cat.color}-600`} /> : <Icons.Bell size={18} className={`text-${cat.color}-600`} />}
-                      </td>
+                       </td>
                       <td className="p-3 font-medium">{cat.name}</td>
                       <td className="p-3 text-gray-500">{cat.slug}</td>
                       <td className="p-3">
@@ -583,7 +655,10 @@ function HomeEditor() {
           <div className="space-y-3">
             {sliderCards.map((card, idx) => (
               <div key={card.id} className="bg-white rounded-lg p-4 border border-gray-200 flex items-center gap-4 shadow-sm">
-                <div className="cursor-move text-gray-400 text-2xl">⋮⋮</div>
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-400 text-sm w-8">#{idx + 1}</span>
+                  <div className="cursor-move text-gray-400 text-2xl">⋮⋮</div>
+                </div>
                 {card.image_url ? (
                   <img src={card.image_url} alt={card.title} className="w-20 h-16 object-cover rounded-lg" />
                 ) : (
@@ -598,8 +673,12 @@ function HomeEditor() {
                 <div className="flex gap-2">
                   <button onClick={() => handleEditCard(card)} className="text-blue-600 hover:text-blue-800">✏️</button>
                   <button onClick={() => handleDeleteCard(card.id)} className="text-red-600 hover:text-red-800">🗑️</button>
-                  {idx > 0 && <button onClick={() => handleReorderCards(card.id, sliderCards[idx-1].id)} className="text-gray-500 hover:text-gray-700">⬆️</button>}
-                  {idx < sliderCards.length - 1 && <button onClick={() => handleReorderCards(card.id, sliderCards[idx+1].id)} className="text-gray-500 hover:text-gray-700">⬇️</button>}
+                  {idx > 0 && (
+                    <button onClick={() => handleReorderCards(card.id, sliderCards[idx-1].id)} className="text-gray-500 hover:text-gray-700">⬆️</button>
+                  )}
+                  {idx < sliderCards.length - 1 && (
+                    <button onClick={() => handleReorderCards(card.id, sliderCards[idx+1].id)} className="text-gray-500 hover:text-gray-700">⬇️</button>
+                  )}
                 </div>
               </div>
             ))}
