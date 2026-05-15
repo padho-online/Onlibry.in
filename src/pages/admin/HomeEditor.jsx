@@ -366,12 +366,20 @@ function HomeEditor() {
       {/* Hidden file input for image upload */}
       <input type="file" ref={fileInputRef} accept="image/*" style={{ display: 'none' }} onChange={handleImageUpload} />
 
-      {/* Tabs */}
-      <div className="flex flex-wrap gap-2 mb-6 border-b border-gray-200 pb-3">
-        <button onClick={() => setActiveTab('buttons')} className={`px-4 py-2 rounded-lg text-sm font-medium transition ${activeTab === 'buttons' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>🔘 Quick Access Buttons</button>
-        <button onClick={() => setActiveTab('categories')} className={`px-4 py-2 rounded-lg text-sm font-medium transition ${activeTab === 'categories' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>🏷️ Categories</button>
-        <button onClick={() => setActiveTab('notifications')} className={`px-4 py-2 rounded-lg text-sm font-medium transition ${activeTab === 'notifications' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>📢 Notifications</button>
-        <button onClick={() => setActiveTab('slider')} className={`px-4 py-2 rounded-lg text-sm font-medium transition ${activeTab === 'slider' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>🎠 Slider Cards</button>
+           {/* Tabs - Horizontal Scrollable for Mobile */}
+      <div className="flex gap-2 mb-6 border-b border-gray-200 pb-3 overflow-x-auto scrollbar-thin">
+        <button onClick={() => setActiveTab('buttons')} className={`px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap ${activeTab === 'buttons' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+          🔘 Quick Access Buttons
+        </button>
+        <button onClick={() => setActiveTab('categories')} className={`px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap ${activeTab === 'categories' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+          🏷️ Categories
+        </button>
+        <button onClick={() => setActiveTab('notifications')} className={`px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap ${activeTab === 'notifications' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+          📢 Notifications
+        </button>
+        <button onClick={() => setActiveTab('slider')} className={`px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap ${activeTab === 'slider' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+          🎠 Slider Cards
+        </button>
       </div>
 
       {/* ============================================ */}

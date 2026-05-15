@@ -1,9 +1,11 @@
-// src/pages/PricingPage.jsx - Mobile optimized
+// src/pages/PricingPage.jsx - Complete Fixed with Payment Logs
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { loadRazorpayScript, createRazorpayOrder } from "../services/razorpay";
+import { loadRazorpayScript, createRazorpayOrder, logPaymentEvent } from "../services/razorpay";
+import { db } from '../config/firebase';
+import { doc, getDoc } from 'firebase/firestore';
 import { CreditCard, ShoppingCart, Trash2, Zap, Check, Crown, Calendar, Lock } from 'lucide-react';
 
 function PricingPage() {
@@ -15,48 +17,179 @@ function PricingPage() {
   const [processingPlan, setProcessingPlan] = useState(null);
   const [activeTab, setActiveTab] = useState('subscription');
   const [razorpayLoaded, setRazorpayLoaded] = useState(false);
+  const [plans, setPlans] = useState([]);
+  const [plansLoading, setPlansLoading] = useState(true);
+
+  // Default plans (fallback if Firestore fails)
+  const defaultPlans = [
+    { id: 'free', name: 'FREE', price: 0, period: 'lifetime', durationDays: 0, features: ['Access to free resources', 'Selected PYQs', 'Limited searches', 'Ads enabled'], enabled: true, isPopular: false },
+    { id: 'monthly', name: 'PRO MONTHLY', price: 99, period: 'month', durationDays: 30, features: ['All premium files', 'Unlimited downloads', 'Ad-free', 'Mock tests', 'Priority support'], enabled: true, isPopular: true },
+    { id: 'yearly', name: 'PRO ANNUAL', price: 499, period: 'year', durationDays: 365, features: ['All Pro features', 'Best value', 'Premium badge', 'Early access'], enabled: true, isPopular: true, monthlyEquivalent: 42 }
+  ];
 
   useEffect(() => {
     loadRazorpayScript().then(setRazorpayLoaded);
     if (location.state?.activeTab === 'cart') setActiveTab('cart');
+    loadPlans();
   }, []);
 
-  const plans = [
-    { name: 'FREE', price: 0, period: 'lifetime', priceDisplay: '₹0', features: ['Access to free resources', 'Selected PYQs', 'Limited searches', 'Ads enabled'], buttonClass: 'bg-gray-500', popular: false },
-    { name: 'PRO MONTHLY', price: 99, period: 'month', priceDisplay: '₹99', durationDays: 30, features: ['All premium files', 'Unlimited downloads', 'Ad-free', 'Mock tests', 'Priority support'], buttonClass: 'bg-green-600', popular: true },
-    { name: 'PRO ANNUAL', price: 499, period: 'year', priceDisplay: '₹499', durationDays: 365, monthlyEquivalent: 42, features: ['All Pro features', 'Best value', 'Premium badge', 'Early access'], buttonClass: 'bg-orange-600', popular: true }
-  ];
-
-  const handleSubscribe = async (planName, price, durationDays) => {
-    if (!user) { navigate('/login'); return; }
-    if (price === 0) return;
-    if (!razorpayLoaded) { alert('Loading payment gateway...'); return; }
-    
-    setProcessingPlan(planName);
-    setLoading(true);
+  const loadPlans = async () => {
+    setPlansLoading(true);
     try {
-      const order = await createRazorpayOrder(price);
+      const plansDoc = await getDoc(doc(db, 'config', 'plans'));
+      if (plansDoc.exists()) {
+        const plansData = plansDoc.data();
+        const plansArray = Object.values(plansData)
+          .filter(plan => plan.enabled !== false)
+          .map(plan => ({
+            ...plan,
+            priceDisplay: plan.price === 0 ? 'Free' : `₹${plan.price}`,
+            buttonClass: getButtonClass(plan.id),
+            isPopular: plan.id === 'monthly' || plan.id === 'yearly'
+          }))
+          .sort((a, b) => a.price - b.price);
+        setPlans(plansArray);
+      } else {
+        setPlans(defaultPlans);
+      }
+    } catch (error) {
+      console.error('Error loading plans:', error);
+      setPlans(defaultPlans);
+    }
+    setPlansLoading(false);
+  };
+
+  const getButtonClass = (planId) => {
+    if (planId === 'free') return 'bg-gray-500';
+    if (planId === 'monthly') return 'bg-green-600';
+    if (planId === 'yearly') return 'bg-orange-600';
+    return 'bg-green-600';
+  };
+
+  const getPeriodText = (period, durationDays) => {
+    if (period === 'lifetime') return 'lifetime';
+    if (period === 'month') return 'month';
+    if (period === 'year') return 'year';
+    if (durationDays === 7) return 'week';
+    if (durationDays === 30) return 'month';
+    if (durationDays === 365) return 'year';
+    return period || `${durationDays} days`;
+  };
+
+  // Log payment to Google Sheet
+  const logPayment = async (event, plan, amount, status, paymentId = null, orderId = null, error = null) => {
+    try {
+      const SHEET_API_URL = import.meta.env.VITE_SHEET_API_URL;
+      if (SHEET_API_URL) {
+        await fetch(SHEET_API_URL, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'paymentLog',
+            event: event,
+            userId: user?.uid || 'guest',
+            userEmail: user?.email || 'guest',
+            plan: plan,
+            amount: amount,
+            status: status,
+            paymentId: paymentId,
+            orderId: orderId,
+            error: error,
+            timestamp: new Date().toISOString()
+          })
+        });
+      }
+      console.log(`✅ Payment logged: ${event} - ${status}`);
+    } catch (err) {
+      console.error('Payment logging failed:', err);
+    }
+  };
+
+  const handleSubscribe = async (plan) => {
+    console.log('🚀 handleSubscribe called with plan:', plan);
+    
+    if (!user) { 
+      navigate('/login', { state: { from: '/pricing' } }); 
+      return; 
+    }
+    
+    if (plan.price === 0) return;
+    if (!razorpayLoaded) { 
+      alert('Loading payment gateway...'); 
+      return; 
+    }
+    
+    // Log payment initiation
+    await logPayment('payment_initiated', plan.name, plan.price, 'pending');
+    
+    setProcessingPlan(plan.name);
+    setLoading(true);
+    
+    try {
+      const order = await createRazorpayOrder(plan.price);
+      console.log('✅ Order created:', order);
+      
+      // Log order created
+      await logPayment('order_created', plan.name, plan.price, 'pending', null, order.id);
+      
       const options = {
         key: 'rzp_live_SiS2QOdZl6zCUx',
         amount: order.amount,
         currency: order.currency,
         name: 'Onlibry',
-        description: `${planName} Subscription`,
+        description: `${plan.name} Subscription`,
         image: 'https://onlibry.in/logo transparent.png',
         order_id: order.id,
         handler: async (response) => {
-          await updateSubscription(user.uid, planName.toLowerCase().replace('pro ', ''), durationDays);
-          alert(`Successfully subscribed to ${planName}! 🎉`);
-          window.location.reload();
+          console.log('✅ Payment successful!', response);
+          
+          // Log payment success
+          await logPayment('payment_success', plan.name, plan.price, 'success', response.razorpay_payment_id, response.razorpay_order_id);
+          
+          try {
+            // Update subscription in Firestore
+            const result = await updateSubscription(user.uid, plan.id, plan.durationDays);
+            console.log('Subscription update result:', result);
+            
+            if (result.success) {
+              // Log subscription update success
+              await logPayment('subscription_updated', plan.name, plan.price, 'success', response.razorpay_payment_id);
+              alert(`Successfully subscribed to ${plan.name}! 🎉`);
+              window.location.reload();
+            } else {
+              // Log subscription update failure
+              await logPayment('subscription_update_failed', plan.name, plan.price, 'failed', response.razorpay_payment_id, null, result.error);
+              alert('Payment successful but subscription update failed. Please contact support.');
+            }
+          } catch (err) {
+            console.error('Subscription update error:', err);
+            await logPayment('subscription_update_error', plan.name, plan.price, 'failed', response.razorpay_payment_id, null, err.message);
+            alert('Error updating subscription. Please contact support.');
+          }
         },
-        prefill: { name: user.displayName || '', email: user.email || '' },
+        modal: {
+          ondismiss: () => {
+            console.log('Payment modal closed by user');
+            logPayment('payment_cancelled', plan.name, plan.price, 'cancelled');
+            setLoading(false);
+            setProcessingPlan(null);
+          }
+        },
+        prefill: { 
+          name: user.displayName || '', 
+          email: user.email || '' 
+        },
         theme: { color: '#22c55e' }
       };
+      
       const rzp = new window.Razorpay(options);
       rzp.open();
+      
     } catch (error) {
-      alert('Payment failed. Please try again.');
-    } finally {
+      console.error('Payment error:', error);
+      await logPayment('payment_error', plan.name, plan.price, 'failed', null, null, error.message);
+      alert('Payment failed. Please try again. Error: ' + error.message);
       setLoading(false);
       setProcessingPlan(null);
     }
@@ -65,9 +198,14 @@ function PricingPage() {
   const handleCartCheckout = async () => {
     if (!user) { navigate('/login'); return; }
     if (cartItems.length === 0) { alert('Cart is empty'); return; }
+    
+    await logPayment('cart_checkout_initiated', 'Cart Purchase', cartTotal, 'pending');
     setLoading(true);
+    
     try {
       const order = await createRazorpayOrder(cartTotal);
+      await logPayment('cart_order_created', 'Cart Purchase', cartTotal, 'pending', null, order.id);
+      
       const options = {
         key: 'rzp_live_SiS2QOdZl6zCUx',
         amount: order.amount,
@@ -77,9 +215,16 @@ function PricingPage() {
         image: 'https://onlibry.in/logo transparent.png',
         order_id: order.id,
         handler: async (response) => {
+          await logPayment('cart_payment_success', 'Cart Purchase', cartTotal, 'success', response.razorpay_payment_id, response.razorpay_order_id);
           alert(`Successfully purchased ${cartItems.length} item(s)! 🎉`);
           clearCart();
           navigate('/saved-files');
+        },
+        modal: {
+          ondismiss: () => {
+            logPayment('cart_payment_cancelled', 'Cart Purchase', cartTotal, 'cancelled');
+            setLoading(false);
+          }
         },
         prefill: { name: user.displayName || '', email: user.email || '' },
         theme: { color: '#22c55e' }
@@ -87,6 +232,7 @@ function PricingPage() {
       const rzp = new window.Razorpay(options);
       rzp.open();
     } catch (error) {
+      await logPayment('cart_payment_error', 'Cart Purchase', cartTotal, 'failed', null, null, error.message);
       alert('Checkout failed. Please try again.');
     } finally {
       setLoading(false);
@@ -95,9 +241,14 @@ function PricingPage() {
 
   const handleSingleCheckout = async (item) => {
     if (!user) { navigate('/login'); return; }
+    
+    await logPayment('single_item_checkout', item.name, item.price, 'pending');
     setLoading(true);
+    
     try {
       const order = await createRazorpayOrder(item.price);
+      await logPayment('single_item_order_created', item.name, item.price, 'pending', null, order.id);
+      
       const options = {
         key: 'rzp_live_SiS2QOdZl6zCUx',
         amount: order.amount,
@@ -107,8 +258,15 @@ function PricingPage() {
         image: 'https://onlibry.in/logo transparent.png',
         order_id: order.id,
         handler: async (response) => {
+          await logPayment('single_item_payment_success', item.name, item.price, 'success', response.razorpay_payment_id, response.razorpay_order_id);
           alert(`Successfully purchased "${item.name}"! 🎉`);
           removeFromCart(item.id);
+        },
+        modal: {
+          ondismiss: () => {
+            logPayment('single_item_payment_cancelled', item.name, item.price, 'cancelled');
+            setLoading(false);
+          }
         },
         prefill: { name: user.displayName || '', email: user.email || '' },
         theme: { color: '#22c55e' }
@@ -116,11 +274,30 @@ function PricingPage() {
       const rzp = new window.Razorpay(options);
       rzp.open();
     } catch (error) {
+      await logPayment('single_item_payment_error', item.name, item.price, 'failed', null, null, error.message);
       alert('Purchase failed. Please try again.');
     } finally {
       setLoading(false);
     }
   };
+
+  // Check if user is on current plan
+  const isCurrentPlan = (plan) => {
+    if (!isSubscribed) return false;
+    const currentType = subscriptionType?.toLowerCase();
+    if (plan.id === 'free') return false;
+    if (plan.id === 'monthly' && currentType === 'monthly') return true;
+    if (plan.id === 'yearly' && currentType === 'yearly') return true;
+    return plan.id === currentType;
+  };
+
+  if (plansLoading) {
+    return (
+      <div className="flex justify-center py-12">
+        <div className="w-8 h-8 border-4 border-green-500 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="py-3 md:py-6">
@@ -155,32 +332,53 @@ function PricingPage() {
 
       {activeTab === 'subscription' && (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {plans.map((plan) => {
-              const isCurrent = isSubscribed && subscriptionType?.toLowerCase() === plan.name.toLowerCase().replace('pro ', '');
+              const isCurrent = isCurrentPlan(plan);
+              const periodText = getPeriodText(plan.period, plan.durationDays);
+              const monthlyEquivalent = plan.price / (plan.durationDays / 30);
+              
               return (
-                <div key={plan.name} className={`relative bg-white rounded-xl shadow-md p-4 border ${plan.popular ? 'border-green-500 ring-2 ring-green-500/20' : 'border-gray-200'}`}>
-                  {plan.popular && <div className="absolute top-0 right-0 bg-green-500 text-white text-[9px] px-2 py-0.5 rounded-bl-lg">POPULAR</div>}
+                <div key={plan.id} className={`relative bg-white rounded-xl shadow-md p-4 border ${plan.isPopular ? 'border-green-500 ring-2 ring-green-500/20' : 'border-gray-200'}`}>
+                  {plan.isPopular && plan.price > 0 && (
+                    <div className="absolute top-0 right-0 bg-green-500 text-white text-[9px] px-2 py-0.5 rounded-bl-lg">POPULAR</div>
+                  )}
                   <h3 className="text-base font-bold text-gray-800">{plan.name}</h3>
                   <div className="mt-2 mb-3">
-                    <span className="text-2xl font-bold">{plan.priceDisplay}</span>
-                    {plan.period !== 'lifetime' && <span className="text-xs text-gray-500">/{plan.period}</span>}
+                    <span className="text-2xl font-bold">{plan.price === 0 ? 'Free' : `₹${plan.price}`}</span>
+                    {periodText !== 'lifetime' && plan.price > 0 && (
+                      <span className="text-xs text-gray-500">/{periodText}</span>
+                    )}
                   </div>
-                  {plan.monthlyEquivalent && <p className="text-[10px] text-green-600 mb-3">Just ₹{plan.monthlyEquivalent}/month</p>}
+                  {plan.price > 0 && plan.durationDays > 30 && (
+                    <p className="text-[10px] text-green-600 mb-3">Just ₹{Math.round(monthlyEquivalent)}/month</p>
+                  )}
                   <ul className="space-y-1.5 mb-4">
-                    {plan.features.map((f, i) => <li key={i} className="flex items-center gap-1.5 text-[11px] text-gray-600"><Check size={10} className="text-green-500" />{f}</li>)}
+                    {(plan.features || []).map((feature, i) => (
+                      <li key={i} className="flex items-center gap-1.5 text-[11px] text-gray-600">
+                        <Check size={10} className="text-green-500" />
+                        {feature}
+                      </li>
+                    ))}
                   </ul>
-                  <button onClick={() => handleSubscribe(plan.name, plan.price, plan.durationDays)} disabled={isCurrent || plan.price === 0} className={`w-full py-2 rounded-lg text-white text-sm font-medium ${isCurrent ? 'bg-gray-400' : plan.buttonClass} disabled:opacity-50`}>
-                    {isCurrent ? 'Current Plan' : plan.buttonText || (plan.name === 'FREE' ? 'Current' : 'Upgrade')}
+                  <button 
+                    onClick={() => handleSubscribe(plan)} 
+                    disabled={isCurrent || plan.price === 0 || (isSubscribed && plan.price > 0)} 
+                    className={`w-full py-2 rounded-lg text-white text-sm font-medium ${isCurrent ? 'bg-gray-400' : plan.buttonClass} disabled:opacity-50`}
+                  >
+                    {isCurrent ? 'Current Plan' : (plan.price === 0 ? 'Free' : 'Upgrade')}
                   </button>
                 </div>
               );
             })}
           </div>
-          <div className="mt-8 p-4 bg-gray-50 rounded-xl text-center">
-            <h3 className="font-semibold text-gray-800 mb-2">Need Just One File?</h3>
-            <button onClick={() => setActiveTab('cart')} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">View Cart ({getCartCount()})</button>
-          </div>
+          
+          {plans.filter(p => p.price > 0).length > 0 && (
+            <div className="mt-8 p-4 bg-gray-50 rounded-xl text-center">
+              <h3 className="font-semibold text-gray-800 mb-2">Need Just One File?</h3>
+              <button onClick={() => setActiveTab('cart')} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">View Cart ({getCartCount()})</button>
+            </div>
+          )}
         </>
       )}
 
@@ -191,21 +389,43 @@ function PricingPage() {
             <p className="text-[11px] opacity-90">Review and purchase</p>
           </div>
           {cartItems.length === 0 ? (
-            <div className="p-8 text-center"><ShoppingCart size={40} className="mx-auto text-gray-300 mb-3" /><p className="text-gray-500 text-sm">Cart is empty</p><button onClick={() => navigate('/files')} className="mt-3 text-green-600 text-sm">Browse Files</button></div>
+            <div className="p-8 text-center">
+              <ShoppingCart size={40} className="mx-auto text-gray-300 mb-3" />
+              <p className="text-gray-500 text-sm">Cart is empty</p>
+              <button onClick={() => navigate('/files')} className="mt-3 text-green-600 text-sm">Browse Files</button>
+            </div>
           ) : (
             <>
               <div className="divide-y divide-gray-100">
                 {cartItems.map(item => (
                   <div key={item.id} className="p-3 flex justify-between items-center">
-                    <div><h3 className="font-medium text-sm">{item.name}</h3><p className="text-[10px] text-gray-400">{item.type === 'file' ? '📄 File' : item.type === 'mocktest' ? '📝 Mock Test' : '❓ Quiz'}</p></div>
-                    <div className="text-right"><p className="font-bold text-green-600 text-sm">₹{item.price}</p><div className="flex gap-2 mt-1"><button onClick={() => handleSingleCheckout(item)} className="text-[10px] px-2 py-1 bg-blue-600 text-white rounded">Buy</button><button onClick={() => removeFromCart(item.id)} className="text-[10px] px-2 py-1 bg-red-500 text-white rounded">Remove</button></div></div>
+                    <div>
+                      <h3 className="font-medium text-sm">{item.name}</h3>
+                      <p className="text-[10px] text-gray-400">
+                        {item.type === 'file' ? '📄 File' : item.type === 'mocktest' ? '📝 Mock Test' : '❓ Quiz'}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-bold text-green-600 text-sm">₹{item.price}</p>
+                      <div className="flex gap-2 mt-1">
+                        <button onClick={() => handleSingleCheckout(item)} className="text-[10px] px-2 py-1 bg-blue-600 text-white rounded">Buy</button>
+                        <button onClick={() => removeFromCart(item.id)} className="text-[10px] px-2 py-1 bg-red-500 text-white rounded">Remove</button>
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>
               <div className="p-3 bg-gray-50 border-t">
-                <div className="flex justify-between mb-3"><span className="text-sm font-medium">Total:</span><span className="text-lg font-bold text-green-600">₹{cartTotal}</span></div>
-                <button onClick={handleCartCheckout} disabled={!razorpayLoaded} className="w-full py-2 bg-green-600 text-white rounded-lg text-sm font-medium">Checkout (₹{cartTotal})</button>
-                <button onClick={clearCart} className="w-full mt-2 py-2 bg-red-500 text-white rounded-lg text-sm">Clear Cart</button>
+                <div className="flex justify-between mb-3">
+                  <span className="text-sm font-medium">Total:</span>
+                  <span className="text-lg font-bold text-green-600">₹{cartTotal}</span>
+                </div>
+                <button onClick={handleCartCheckout} disabled={!razorpayLoaded} className="w-full py-2 bg-green-600 text-white rounded-lg text-sm font-medium">
+                  Checkout (₹{cartTotal})
+                </button>
+                <button onClick={clearCart} className="w-full mt-2 py-2 bg-red-500 text-white rounded-lg text-sm">
+                  Clear Cart
+                </button>
               </div>
             </>
           )}

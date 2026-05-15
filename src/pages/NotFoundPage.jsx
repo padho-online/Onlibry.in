@@ -8,11 +8,21 @@ function NotFoundPage() {
       <p className="text-xl text-gray-600 dark:text-gray-400 mb-8">
         Oops! Page not found.
       </p>
+      
       <Link
         to="/"
-        className="px-6 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition"
+        className="px-6 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-cyan-700 transition"
       >
         Go Back Home
+      </Link>
+      <p className="text-xl text-gray-600 dark:text-gray-400 mb-8">
+      </p>
+      
+      <Link
+        to="/info/feedback"
+        className="px-6 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-orange-700 transition"
+      >
+        Report Us through feedback
       </Link>
     </div>
   );

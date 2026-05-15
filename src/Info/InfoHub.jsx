@@ -3,12 +3,12 @@ import React, { useState, useEffect } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { 
-  FaShieldAlt, FaFileAlt, FaEnvelope, FaCommentDots, FaStar, FaPaperPlane,
+  FaShieldAlt, FaFileAlt, FaEnvelope, FaCommentDots, FaStar, 
   FaArrowLeft, FaPhone, FaMapMarkerAlt, FaClock, FaGlobe, FaCheckCircle,
   FaFacebook, FaTwitter, FaInstagram, FaLinkedin, FaYoutube,
   FaExclamationTriangle, FaHome, FaUser,
-  FaTelegram,
-  FaWhatsapp
+  FaTelegram, FaWhatsapp,
+  FaInfoCircle  
 } from 'react-icons/fa';
 import { FiSend } from 'react-icons/fi';
 
@@ -40,12 +40,12 @@ function InfoHub() {
 
   // Update active tab when URL param changes
   useEffect(() => {
-    if (tab && ['privacy', 'terms', 'contact', 'feedback'].includes(tab)) {
-      setActiveTab(tab);
-    } else if (!tab) {
-      setActiveTab('privacy');
-    }
-  }, [tab]);
+  if (tab && ['about', 'privacy', 'terms', 'contact', 'feedback'].includes(tab)) {
+    setActiveTab(tab);
+  } else if (!tab) {
+    setActiveTab('about');  // Default 'about' kar do
+  }
+}, [tab]);
 
   // Auto-fill user info if logged in
   useEffect(() => {
@@ -139,11 +139,12 @@ function InfoHub() {
   };
 
   const tabs = [
-    { id: 'privacy', label: 'Privacy Policy', icon: FaShieldAlt, path: '/info/privacy' },
-    { id: 'terms', label: 'Terms & Conditions', icon: FaFileAlt, path: '/info/terms' },
-    { id: 'contact', label: 'Contact Us', icon: FaEnvelope, path: '/info/contact' },
-    { id: 'feedback', label: 'Feedback', icon: FaCommentDots, path: '/info/feedback' }
-  ];
+  { id: 'about', label: 'About Us', icon: FaInfoCircle, path: '/info/about' },
+  { id: 'privacy', label: 'Privacy Policy', icon: FaShieldAlt, path: '/info/privacy' },
+  { id: 'terms', label: 'Terms & Conditions', icon: FaFileAlt, path: '/info/terms' },
+  { id: 'contact', label: 'Contact Us', icon: FaEnvelope, path: '/info/contact' },
+  { id: 'feedback', label: 'Feedback', icon: FaCommentDots, path: '/info/feedback' }
+];
 
   return (
     <div className="py-6 md:py-10 max-w-6xl mx-auto px-4">
@@ -153,18 +154,18 @@ function InfoHub() {
       </Link>
 
       {/* Header */}
-      <div className="text-center mb-8">
-        <div className="flex justify-center mb-3">
-          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
-            <FaHome size={32} className="text-green-600" />
-          </div>
-        </div>
-        <h1 className="text-2xl md:text-3xl font-bold text-gray-800 mb-2">Help & Information Center</h1>
-        <p className="text-sm text-gray-500">Privacy policy, terms, contact info & feedback</p>
-      </div>
+<div className="text-center mb-8">
+  <div className="flex items-center justify-center gap-3 mb-2">
+    <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
+      <FaHome size={32} className="text-green-600" />
+    </div>
+    <h1 className="text-2xl md:text-3xl font-bold text-gray-800">Help & Information Center</h1>
+  </div>
+  <p className="text-sm text-gray-500">Privacy policy, terms, contact info & feedback</p>
+</div>
 
-      {/* Tabs with Links */}
-      <div className="flex flex-wrap gap-2 mb-8 border-b border-gray-200 pb-3 overflow-x-auto">
+            {/* Tabs with Links - Horizontal Scrollable for Mobile */}
+      <div className="flex gap-2 mb-8 border-b border-gray-200 pb-3 overflow-x-auto scrollbar-thin">
         {tabs.map((tabItem) => {
           const Icon = tabItem.icon;
           const isActive = activeTab === tabItem.id;
@@ -185,6 +186,120 @@ function InfoHub() {
           );
         })}
       </div>
+
+  {/* ============================================ */}
+{/* ABOUT US TAB */}
+{/* ============================================ */}
+{activeTab === 'about' && (
+  <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 md:p-8">
+    <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-200">
+      <FaInfoCircle size={28} className="text-green-600" />
+      <h2 className="text-xl md:text-2xl font-bold text-gray-800">About Onlibry</h2>
+    </div>
+    
+    <div className="space-y-6">
+      {/* Mission Section */}
+      <section>
+        <h3 className="text-lg font-semibold text-green-600 mb-2">Our Mission</h3>
+        <p className="text-gray-600 leading-relaxed">
+          Onlibry's mission is to provide every student with free, quality educational materials. 
+          We believe that money should never be a barrier to learning and education.
+        </p>
+      </section>
+
+      {/* What We Offer */}
+      <section>
+        <h3 className="text-lg font-semibold text-green-600 mb-2">What We Offer</h3>
+        <ul className="space-y-2 text-gray-600">
+          <li className="flex items-start gap-2">
+            <FaCheckCircle className="text-green-500 mt-1 flex-shrink-0" size={14} />
+            <span>📚 <strong>10,000+ Study Materials</strong> - Books, PYQs, Notes</span>
+          </li>
+          <li className="flex items-start gap-2">
+            <FaCheckCircle className="text-green-500 mt-1 flex-shrink-0" size={14} />
+            <span>✏️ <strong>Mock Tests</strong> - Real exam pattern practice</span>
+          </li>
+          <li className="flex items-start gap-2">
+            <FaCheckCircle className="text-green-500 mt-1 flex-shrink-0" size={14} />
+            <span>❓ <strong>Quizzes</strong> - Test your knowledge</span>
+          </li>
+          <li className="flex items-start gap-2">
+            <FaCheckCircle className="text-green-500 mt-1 flex-shrink-0" size={14} />
+            <span>📁 <strong>Organized Folders</strong> - Easy navigation</span>
+          </li>
+          <li className="flex items-start gap-2">
+            <FaCheckCircle className="text-green-500 mt-1 flex-shrink-0" size={14} />
+            <span>🔒 <strong>Secure Access</strong> - Your data is safe with us</span>
+          </li>
+        </ul>
+      </section>
+
+      {/* Our Story */}
+      <section>
+        <h3 className="text-lg font-semibold text-green-600 mb-2">Our Story</h3>
+        <p className="text-gray-600 leading-relaxed">
+          Onlibry was created by a group of passionate educators and developers. We noticed that 
+          many students lack access to quality study materials or cannot afford expensive courses. 
+          That's why we built Onlibry - a free digital library where any student can find the 
+          resources they need for their studies.
+        </p>
+      </section>
+
+      {/* Our Team */}
+      <section>
+        <h3 className="text-lg font-semibold text-green-600 mb-2">Our Team</h3>
+        <p className="text-gray-600 leading-relaxed">
+          We are a small but dedicated team constantly working to improve the website and add 
+          new materials. If you'd like to contribute or have any suggestions, please feel free 
+          to reach out to us.
+        </p>
+      </section>
+
+      {/* Why Onlibry */}
+      <section>
+        <h3 className="text-lg font-semibold text-green-600 mb-2">Why Choose Onlibry?</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+          <div className="bg-gray-50 rounded-lg p-3 text-center">
+            <div className="text-2xl mb-1">💰</div>
+            <p className="font-medium text-gray-800">100% Free</p>
+            <p className="text-xs text-gray-500">No hidden charges</p>
+          </div>
+          <div className="bg-gray-50 rounded-lg p-3 text-center">
+            <div className="text-2xl mb-1">📱</div>
+            <p className="font-medium text-gray-800">Mobile Friendly</p>
+            <p className="text-xs text-gray-500">Learn on the go</p>
+          </div>
+          <div className="bg-gray-50 rounded-lg p-3 text-center">
+            <div className="text-2xl mb-1">🔄</div>
+            <p className="font-medium text-gray-800">Regular Updates</p>
+            <p className="text-xs text-gray-500">New content added daily</p>
+          </div>
+          <div className="bg-gray-50 rounded-lg p-3 text-center">
+            <div className="text-2xl mb-1">👥</div>
+            <p className="font-medium text-gray-800">Community Support</p>
+            <p className="text-xs text-gray-500">Active Telegram & WhatsApp groups</p>
+          </div>
+        </div>
+      </section>
+
+      {/* Contact CTA */}
+      <section className="bg-green-50 rounded-lg p-4 text-center">
+        <h3 className="text-lg font-semibold text-gray-800 mb-2">Have Questions?</h3>
+        <p className="text-sm text-gray-600 mb-3">
+          We'd love to hear from you. Feel free to reach out to us.
+        </p>
+        <Link 
+          to="/info/contact" 
+          className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 transition"
+          onClick={() => handleTabChange('contact')}
+        >
+          <FaEnvelope size={14} />
+          Contact Us
+        </Link>
+      </section>
+    </div>
+  </div>
+)}
 
       {/* ============================================ */}
       {/* PRIVACY POLICY TAB */}
@@ -428,9 +543,9 @@ function InfoHub() {
                   <a href="https://www.instagram.com/onlibry_xyz" className="flex items-center gap-2 text-gray-600 hover:text-green-600 transition">
                     <FaInstagram size={18} /> Instagram
                   </a>
-                  <a href="https://www.linkedin.com/in/habibul-mohammed-b29a4537a/" className="flex items-center gap-2 text-gray-600 hover:text-green-600 transition">
+                  {/* <a href="https://www.linkedin.com/in/habibul-mohammed-b29a4537a/" className="flex items-center gap-2 text-gray-600 hover:text-green-600 transition">
                     <FaLinkedin size={18} /> LinkedIn
-                  </a>
+                  </a> */}
                   {/* <a href="#" className="flex items-center gap-2 text-gray-600 hover:text-green-600 transition">
                     <FaYoutube size={18} /> YouTube
                   </a> */}

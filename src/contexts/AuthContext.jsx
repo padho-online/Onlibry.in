@@ -1,6 +1,6 @@
 // src/contexts/AuthContext.jsx
-// UPDATED - Removed cloudFunctions dependency, using direct Firestore
-// ADDED - Subscription purchase tracking (purchasedMockTests: 'all', purchasedQuizzes: 'all')
+// UPDATED - Fixed subscription update with proper error handling
+// ADDED - Better subscription verification and debugging
 
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { auth, db } from '../config/firebase';
@@ -32,33 +32,59 @@ export function AuthProvider({ children }) {
 
   // Check subscription directly from Firestore
   const checkUserSubscription = async (userId) => {
+    if (!userId) {
+      setIsSubscribed(false);
+      setSubscriptionType(null);
+      return false;
+    }
+    
     try {
       const userDoc = await getDoc(doc(db, 'users', userId));
       if (userDoc.exists()) {
         const userData = userDoc.data();
         const subscription = userData.subscription || {};
         
-        if (subscription.isActive && subscription.endDate) {
-          const endDate = subscription.endDate.toDate ? subscription.endDate.toDate() : new Date(subscription.endDate);
-          if (endDate > new Date()) {
+        console.log('📊 Checking subscription for user:', userId);
+        console.log('📊 Subscription data:', subscription);
+        
+        // Check if subscription is active and not expired
+        if (subscription.isActive === true && subscription.endDate) {
+          let endDate;
+          if (subscription.endDate.toDate) {
+            endDate = subscription.endDate.toDate();
+          } else {
+            endDate = new Date(subscription.endDate);
+          }
+          
+          const now = new Date();
+          
+          if (endDate > now) {
             setIsSubscribed(true);
             setSubscriptionType(subscription.type || 'monthly');
             localStorage.setItem('isSubscribed', 'true');
+            localStorage.setItem('subscriptionType', subscription.type || 'monthly');
+            console.log('✅ User is subscribed until:', endDate);
             return true;
+          } else {
+            console.log('⚠️ Subscription expired on:', endDate);
           }
+        } else {
+          console.log('⚠️ No active subscription found');
         }
+      } else {
+        console.log('⚠️ User document not found');
       }
       
       setIsSubscribed(false);
       setSubscriptionType(null);
       localStorage.setItem('isSubscribed', 'false');
+      localStorage.removeItem('subscriptionType');
       return false;
       
     } catch (error) {
       console.error('Error checking subscription:', error);
       setIsSubscribed(false);
       setSubscriptionType(null);
-      localStorage.setItem('isSubscribed', 'false');
       return false;
     }
   };
@@ -112,6 +138,7 @@ export function AuthProvider({ children }) {
       setSubscriptionType(null);
       setSavedFiles([]);
       localStorage.setItem('isSubscribed', 'false');
+      localStorage.removeItem('subscriptionType');
       return { success: true };
     } catch (error) {
       console.error('Logout error:', error);
@@ -120,34 +147,75 @@ export function AuthProvider({ children }) {
   };
 
   // Update subscription (for admin/payment)
-  // 🔥 UPDATED: When user buys subscription, give access to ALL mock tests and quizzes
+  // 🔥 FIXED: Better error handling and verification
   const updateSubscription = async (userId, planType, durationInDays) => {
+    console.log('📝 Updating subscription for user:', userId);
+    console.log('📝 Plan Type:', planType);
+    console.log('📝 Duration Days:', durationInDays);
+    
+    if (!userId) {
+      console.error('❌ No userId provided');
+      return { success: false, error: 'No userId provided' };
+    }
+    
     try {
       const endDate = new Date();
       endDate.setDate(endDate.getDate() + durationInDays);
-
-      await setDoc(doc(db, 'users', userId), {
+      const endDateISO = endDate.toISOString();
+      
+      console.log('📝 Subscription end date:', endDateISO);
+      
+      const userRef = doc(db, 'users', userId);
+      
+      // First, get current user data to merge properly
+      const userDoc = await getDoc(userRef);
+      const currentData = userDoc.exists() ? userDoc.data() : {};
+      
+      // Update subscription data
+      const updateData = {
         subscription: {
           type: planType,
           startDate: serverTimestamp(),
-          endDate: endDate.toISOString(),
+          endDate: endDateISO,
           isActive: true,
         },
-        // 🔥 When user buys subscription, give access to all premium mock tests and quizzes
         purchasedMockTests: 'all',
         purchasedQuizzes: 'all',
-        lastSubscriptionAt: serverTimestamp()
-      }, { merge: true });
-
+        lastSubscriptionAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      };
+      
+      console.log('📝 Updating Firestore with:', updateData);
+      
+      await setDoc(userRef, updateData, { merge: true });
+      
+      console.log('✅ Firestore update successful');
+      
+      // Update local state
       setIsSubscribed(true);
       setSubscriptionType(planType);
       localStorage.setItem('isSubscribed', 'true');
-
+      localStorage.setItem('subscriptionType', planType);
+      
+      // Verify the update
+      const verifyDoc = await getDoc(userRef);
+      const verifiedData = verifyDoc.data();
+      console.log('✅ Verified subscription data:', verifiedData?.subscription);
+      
       return { success: true };
+      
     } catch (error) {
-      console.error('Error updating subscription:', error);
+      console.error('❌ Error updating subscription:', error);
       return { success: false, error: error.message };
     }
+  };
+
+  // Force refresh subscription status
+  const refreshSubscription = async () => {
+    if (user) {
+      return await checkUserSubscription(user.uid);
+    }
+    return false;
   };
 
   // Auth state listener
@@ -173,6 +241,7 @@ export function AuthProvider({ children }) {
         setSubscriptionType(null);
         setSavedFiles([]);
         localStorage.setItem('isSubscribed', 'false');
+        localStorage.removeItem('subscriptionType');
       }
       
       setLoading(false);
@@ -194,6 +263,7 @@ export function AuthProvider({ children }) {
         logout,
         checkSubscription: checkUserSubscription,
         updateSubscription,
+        refreshSubscription,
       }}
     >
       {children}
