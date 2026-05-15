@@ -1,7 +1,4 @@
 // src/contexts/AuthContext.jsx
-// UPDATED - Fixed subscription update with proper error handling
-// ADDED - Better subscription verification and debugging
-
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { auth, db } from '../config/firebase';
 import {
@@ -14,7 +11,6 @@ import {
   doc,
   getDoc,
   setDoc,
-  updateDoc,
   serverTimestamp,
 } from 'firebase/firestore';
 import { logUserLogin, setCurrentUserGetter } from '../services/loggerService';
@@ -45,7 +41,6 @@ export function AuthProvider({ children }) {
         const subscription = userData.subscription || {};
         
         console.log('📊 Checking subscription for user:', userId);
-        console.log('📊 Subscription data:', subscription);
         
         // Check if subscription is active and not expired
         if (subscription.isActive === true && subscription.endDate) {
@@ -54,6 +49,14 @@ export function AuthProvider({ children }) {
             endDate = subscription.endDate.toDate();
           } else {
             endDate = new Date(subscription.endDate);
+          }
+          
+          // Check if endDate is valid
+          if (isNaN(endDate.getTime())) {
+            console.log('⚠️ Invalid end date format');
+            setIsSubscribed(false);
+            setSubscriptionType(null);
+            return false;
           }
           
           const now = new Date();
@@ -68,11 +71,7 @@ export function AuthProvider({ children }) {
           } else {
             console.log('⚠️ Subscription expired on:', endDate);
           }
-        } else {
-          console.log('⚠️ No active subscription found');
         }
-      } else {
-        console.log('⚠️ User document not found');
       }
       
       setIsSubscribed(false);
@@ -120,7 +119,6 @@ export function AuthProvider({ children }) {
         setSavedFiles(userData.savedFiles || []);
       }
 
-      // Check subscription
       await checkUserSubscription(firebaseUser.uid);
 
       return { success: true, user: firebaseUser };
@@ -146,35 +144,60 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // Update subscription (for admin/payment)
-  // 🔥 FIXED: Better error handling and verification
+  // Update subscription - FIXED VERSION
   const updateSubscription = async (userId, planType, durationInDays) => {
-    console.log('📝 Updating subscription for user:', userId);
-    console.log('📝 Plan Type:', planType);
-    console.log('📝 Duration Days:', durationInDays);
+    console.log('📝 updateSubscription called with:', { userId, planType, durationInDays });
     
     if (!userId) {
       console.error('❌ No userId provided');
       return { success: false, error: 'No userId provided' };
     }
     
+    // Handle different plan type formats
+    let finalPlanType = planType;
+    let finalDuration = durationInDays;
+    
+    // If planType is 'pro monthly' or 'pro monthly', extract just 'monthly'
+    if (planType && typeof planType === 'string') {
+      if (planType.toLowerCase().includes('monthly')) {
+        finalPlanType = 'monthly';
+        finalDuration = 30;
+      } else if (planType.toLowerCase().includes('yearly') || planType.toLowerCase().includes('annual')) {
+        finalPlanType = 'yearly';
+        finalDuration = 365;
+      }
+    }
+    
+    // If duration is not provided, set default
+    if (!finalDuration || isNaN(finalDuration)) {
+      if (finalPlanType === 'monthly') finalDuration = 30;
+      else if (finalPlanType === 'yearly') finalDuration = 365;
+      else finalDuration = 30;
+    }
+    
+    console.log('📝 Processed plan:', { finalPlanType, finalDuration });
+    
     try {
-      const endDate = new Date();
-      endDate.setDate(endDate.getDate() + durationInDays);
-      const endDateISO = endDate.toISOString();
+      // Calculate end date - SAFE METHOD
+      const now = new Date();
+      const endDate = new Date(now);
+      endDate.setDate(now.getDate() + parseInt(finalDuration));
       
-      console.log('📝 Subscription end date:', endDateISO);
+      // Validate dates
+      if (isNaN(now.getTime()) || isNaN(endDate.getTime())) {
+        console.error('❌ Invalid date calculation');
+        return { success: false, error: 'Invalid date calculation' };
+      }
+      
+      const endDateISO = endDate.toISOString();
+      console.log('📝 Start date:', now.toISOString());
+      console.log('📝 End date:', endDateISO);
       
       const userRef = doc(db, 'users', userId);
       
-      // First, get current user data to merge properly
-      const userDoc = await getDoc(userRef);
-      const currentData = userDoc.exists() ? userDoc.data() : {};
-      
-      // Update subscription data
       const updateData = {
         subscription: {
-          type: planType,
+          type: finalPlanType,
           startDate: serverTimestamp(),
           endDate: endDateISO,
           isActive: true,
@@ -185,22 +208,15 @@ export function AuthProvider({ children }) {
         updatedAt: serverTimestamp()
       };
       
-      console.log('📝 Updating Firestore with:', updateData);
-      
+      console.log('📝 Updating Firestore...');
       await setDoc(userRef, updateData, { merge: true });
-      
       console.log('✅ Firestore update successful');
       
       // Update local state
       setIsSubscribed(true);
-      setSubscriptionType(planType);
+      setSubscriptionType(finalPlanType);
       localStorage.setItem('isSubscribed', 'true');
-      localStorage.setItem('subscriptionType', planType);
-      
-      // Verify the update
-      const verifyDoc = await getDoc(userRef);
-      const verifiedData = verifyDoc.data();
-      console.log('✅ Verified subscription data:', verifiedData?.subscription);
+      localStorage.setItem('subscriptionType', finalPlanType);
       
       return { success: true };
       
