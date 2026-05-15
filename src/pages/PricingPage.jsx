@@ -7,6 +7,7 @@ import { loadRazorpayScript, createRazorpayOrder, logPaymentEvent } from "../ser
 import { db } from '../config/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { CreditCard, ShoppingCart, Trash2, Zap, Check, Crown, Calendar, Lock } from 'lucide-react';
+import { savePurchaseToD1 } from '../services/purchaseD1Service';
 
 function PricingPage() {
   const { user, isSubscribed, subscriptionType, updateSubscription } = useAuth();
@@ -291,9 +292,9 @@ const handleSingleCheckout = async (item) => {
         console.log('Payment ID:', response.razorpay_payment_id);
         console.log('Order ID:', response.razorpay_order_id);
         
-        // 🔥 DIRECT FIREBASE UPDATE WITH FULL DEBUG
+        // 🔥 SAVE TO BOTH FIRESTORE AND D1
         try {
-          // Import Firebase directly
+          // ========== 1. SAVE TO FIRESTORE ==========
           const { getFirestore, doc, updateDoc, arrayUnion, serverTimestamp, getDoc } = await import('firebase/firestore');
           const { getAuth } = await import('firebase/auth');
           const { app } = await import('../config/firebase');
@@ -301,9 +302,6 @@ const handleSingleCheckout = async (item) => {
           const db = getFirestore(app);
           const auth = getAuth(app);
           const currentUser = auth.currentUser;
-          
-          console.log('Current user from auth:', currentUser?.uid);
-          console.log('Target user ID:', user.uid);
           
           if (!currentUser) {
             console.error('❌ No current user found!');
@@ -314,67 +312,41 @@ const handleSingleCheckout = async (item) => {
           
           const userRef = doc(db, 'users', user.uid);
           
-          // Check current document first
-          console.log('📡 Fetching current user document...');
-          const userDoc = await getDoc(userRef);
-          
-          if (!userDoc.exists()) {
-            console.error('❌ User document does not exist!');
-            alert('User document not found. Please contact support.');
-            return;
-          }
-          
-          const currentData = userDoc.data();
-          console.log('📊 Current user data:', currentData);
-          console.log('📊 Current purchasedFiles:', currentData.purchasedFiles);
-          
-          // Prepare update data
-          const updateData = {
+          // Update Firestore
+          await updateDoc(userRef, {
             purchasedFiles: arrayUnion(item.id),
             lastPurchaseAt: serverTimestamp(),
             updatedAt: serverTimestamp()
-          };
+          });
+          console.log('✅ Firestore updated successfully');
           
-          console.log('📝 Updating with:', updateData);
+          // ========== 2. SAVE TO D1 DATABASE ==========
+          const { savePurchaseToD1 } = await import('../services/purchaseD1Service');
+          const d1Result = await savePurchaseToD1({
+            userId: user.uid,
+            fileId: item.id,
+            itemType: item.type || 'file',
+            itemName: item.name,
+            price: item.price,
+            paymentId: response.razorpay_payment_id,
+            orderId: response.razorpay_order_id
+          });
+          console.log('✅ D1 save result:', d1Result);
           
-          // Perform update
-          await updateDoc(userRef, updateData);
-          console.log('✅ UpdateDoc executed successfully');
-          
-          // Verify update
-          const verifyDoc = await getDoc(userRef);
-          const verifiedData = verifyDoc.data();
-          console.log('✅ Verified purchasedFiles:', verifiedData.purchasedFiles);
-          
-          // Check if item.id is in the array
-          const isInArray = verifiedData.purchasedFiles?.includes(item.id);
-          console.log('✅ Is item in purchasedFiles?', isInArray);
-          
-          if (!isInArray) {
-            console.error('❌ Item NOT found in purchasedFiles after update!');
-            // Try alternative approach - set entire array
-            const existingFiles = verifiedData.purchasedFiles || [];
-            if (!existingFiles.includes(item.id)) {
-              existingFiles.push(item.id);
-              await updateDoc(userRef, { purchasedFiles: existingFiles });
-              console.log('✅ Alternative update done, new array:', existingFiles);
-            }
-          }
-          
-          // Save to localStorage as backup
+          // ========== 3. SAVE TO LOCALSTORAGE (BACKUP) ==========
           const purchasedHistory = JSON.parse(localStorage.getItem('onlibry_purchased') || '[]');
           if (!purchasedHistory.includes(item.id)) {
             purchasedHistory.push(item.id);
             localStorage.setItem('onlibry_purchased', JSON.stringify(purchasedHistory));
-            console.log('✅ Added to localStorage backup:', purchasedHistory);
+            console.log('✅ Added to localStorage backup');
           }
           
-          // Remove from cart
+          // ========== 4. REMOVE FROM CART ==========
           removeFromCart(item.id);
           
           alert(`✅ Successfully purchased "${item.name}"! 🎉`);
           
-          // Ask user if want to view now
+          // ========== 5. REDIRECT ==========
           const viewNow = window.confirm('File purchased successfully! Would you like to view it now?');
           if (viewNow) {
             navigate(`/viewer/${item.id}`);
@@ -382,12 +354,10 @@ const handleSingleCheckout = async (item) => {
             navigate('/saved-files');
           }
           
-        } catch (firestoreError) {
-          console.error('❌❌❌ FIRESTORE ERROR ❌❌❌');
-          console.error('Error details:', firestoreError);
-          console.error('Error message:', firestoreError.message);
-          console.error('Error code:', firestoreError.code);
-          alert(`Payment successful but file access update failed.\n\nError: ${firestoreError.message}\n\nPayment ID: ${response.razorpay_payment_id}\n\nPlease contact support with this payment ID.`);
+        } catch (error) {
+          console.error('❌❌❌ PURCHASE SAVE ERROR ❌❌❌');
+          console.error('Error details:', error);
+          alert(`Payment successful but save failed.\n\nError: ${error.message}\n\nPayment ID: ${response.razorpay_payment_id}\n\nPlease contact support.`);
         }
       },
       modal: {
