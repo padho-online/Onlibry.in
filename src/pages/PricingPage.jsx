@@ -264,6 +264,8 @@ const handleSingleCheckout = async (item) => {
   }
   
   console.log('🛒 Single checkout for item:', item);
+  console.log('🛒 User ID:', user.uid);
+  console.log('🛒 Item ID:', item.id);
   
   await logPayment('single_item_checkout', user.uid, user.email, item.name, item.price, 'pending');
   setLoading(true);
@@ -285,12 +287,18 @@ const handleSingleCheckout = async (item) => {
         
         await logPayment('single_item_payment_success', user.uid, user.email, item.name, item.price, 'success', response.razorpay_payment_id, response.razorpay_order_id);
         
-        // 🔥 CRITICAL FIX: Add purchased file to Firestore
+        // 🔥 CRITICAL FIX: Add purchased file to Firestore - DIRECT APPROACH
         try {
-          const { doc, updateDoc, arrayUnion, serverTimestamp } = await import('firebase/firestore');
+          // Import Firestore functions
+          const { doc, updateDoc, arrayUnion, serverTimestamp, getDoc } = await import('firebase/firestore');
           const { db } = await import('../config/firebase');
           
           const userRef = doc(db, 'users', user.uid);
+          
+          // First check current purchased files
+          const userDoc = await getDoc(userRef);
+          const currentData = userDoc.data();
+          console.log('📊 Current purchasedFiles:', currentData?.purchasedFiles);
           
           // Add to purchasedFiles array
           await updateDoc(userRef, {
@@ -298,12 +306,27 @@ const handleSingleCheckout = async (item) => {
             lastPurchaseAt: serverTimestamp()
           });
           
+          // Verify update
+          const verifyDoc = await getDoc(userRef);
+          const verifiedData = verifyDoc.data();
+          console.log('✅ Verified purchasedFiles:', verifiedData?.purchasedFiles);
+          
+          // Also save to localStorage for immediate access
+          const purchasedHistory = JSON.parse(localStorage.getItem('onlibry_purchased') || '[]');
+          if (!purchasedHistory.includes(item.id)) {
+            purchasedHistory.push(item.id);
+            localStorage.setItem('onlibry_purchased', JSON.stringify(purchasedHistory));
+          }
+          
           console.log('✅ File added to purchasedFiles:', item.id);
           
-          // Also remove from cart
+          // Remove from cart
           removeFromCart(item.id);
           
           alert(`Successfully purchased "${item.name}"! 🎉`);
+          
+          // Force refresh saved files page by clearing cache
+          localStorage.removeItem('onlibry_saved_files_cache');
           
           // Ask user if want to view now
           if (window.confirm('Would you like to view the file now?')) {
