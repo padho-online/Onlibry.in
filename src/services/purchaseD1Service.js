@@ -6,6 +6,7 @@ const API_URL = import.meta.env.VITE_NOTIFICATION_API_URL;
 // Save purchase to D1 database
 export async function savePurchaseToD1(purchaseData) {
   try {
+    console.log('📦 Saving to D1:', purchaseData);
     const response = await fetch(`${API_URL}/api/purchase/save`, {
       method: 'POST',
       headers: {
@@ -15,7 +16,7 @@ export async function savePurchaseToD1(purchaseData) {
     });
     
     const data = await response.json();
-    console.log('📦 Purchase saved to D1:', data);
+    console.log('📦 D1 Save Response:', data);
     return data;
     
   } catch (error) {
@@ -27,8 +28,10 @@ export async function savePurchaseToD1(purchaseData) {
 // Get user's all purchases from D1
 export async function getUserPurchasesFromD1(userId) {
   try {
+    console.log('📦 Fetching D1 purchases for user:', userId);
     const response = await fetch(`${API_URL}/api/purchase/user/${userId}`);
     const data = await response.json();
+    console.log('📦 D1 Fetch Response:', data);
     
     if (data.success) {
       return data.purchases || [];

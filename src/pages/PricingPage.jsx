@@ -266,11 +266,8 @@ const handleSingleCheckout = async (item) => {
   
   console.log('========== SINGLE CHECKOUT START ==========');
   console.log('Item:', item);
-  console.log('User UID:', user.uid);
-  console.log('User Email:', user.email);
+  console.log('User ID:', user.uid);
   console.log('Item ID:', item.id);
-  console.log('Item Name:', item.name);
-  console.log('Item Price:', item.price);
   
   setLoading(true);
   
@@ -288,39 +285,26 @@ const handleSingleCheckout = async (item) => {
       order_id: order.id,
       handler: async (response) => {
         console.log('========== PAYMENT SUCCESSFUL ==========');
-        console.log('Payment Response:', response);
         console.log('Payment ID:', response.razorpay_payment_id);
         console.log('Order ID:', response.razorpay_order_id);
         
-        // 🔥 SAVE TO BOTH FIRESTORE AND D1
+        // 1. Save to Firestore
         try {
-          // ========== 1. SAVE TO FIRESTORE ==========
-          const { getFirestore, doc, updateDoc, arrayUnion, serverTimestamp, getDoc } = await import('firebase/firestore');
-          const { getAuth } = await import('firebase/auth');
-          const { app } = await import('../config/firebase');
-          
-          const db = getFirestore(app);
-          const auth = getAuth(app);
-          const currentUser = auth.currentUser;
-          
-          if (!currentUser) {
-            console.error('❌ No current user found!');
-            alert('Session expired. Please login again.');
-            navigate('/login');
-            return;
-          }
+          const { doc, updateDoc, arrayUnion, serverTimestamp } = await import('firebase/firestore');
+          const { db } = await import('../config/firebase');
           
           const userRef = doc(db, 'users', user.uid);
-          
-          // Update Firestore
           await updateDoc(userRef, {
             purchasedFiles: arrayUnion(item.id),
-            lastPurchaseAt: serverTimestamp(),
-            updatedAt: serverTimestamp()
+            lastPurchaseAt: serverTimestamp()
           });
-          console.log('✅ Firestore updated successfully');
-          
-          // ========== 2. SAVE TO D1 DATABASE ==========
+          console.log('✅ Firestore updated');
+        } catch (firestoreError) {
+          console.error('❌ Firestore error:', firestoreError);
+        }
+        
+        // 2. Save to D1 Database
+        try {
           const { savePurchaseToD1 } = await import('../services/purchaseD1Service');
           const d1Result = await savePurchaseToD1({
             userId: user.uid,
@@ -331,38 +315,22 @@ const handleSingleCheckout = async (item) => {
             paymentId: response.razorpay_payment_id,
             orderId: response.razorpay_order_id
           });
-          console.log('✅ D1 save result:', d1Result);
-          
-          // ========== 3. SAVE TO LOCALSTORAGE (BACKUP) ==========
-          const purchasedHistory = JSON.parse(localStorage.getItem('onlibry_purchased') || '[]');
-          if (!purchasedHistory.includes(item.id)) {
-            purchasedHistory.push(item.id);
-            localStorage.setItem('onlibry_purchased', JSON.stringify(purchasedHistory));
-            console.log('✅ Added to localStorage backup');
-          }
-          
-          // ========== 4. REMOVE FROM CART ==========
-          removeFromCart(item.id);
-          
-          alert(`✅ Successfully purchased "${item.name}"! 🎉`);
-          
-          // ========== 5. REDIRECT ==========
-          const viewNow = window.confirm('File purchased successfully! Would you like to view it now?');
-          if (viewNow) {
-            navigate(`/viewer/${item.id}`);
-          } else {
-            navigate('/saved-files');
-          }
-          
-        } catch (error) {
-          console.error('❌❌❌ PURCHASE SAVE ERROR ❌❌❌');
-          console.error('Error details:', error);
-          alert(`Payment successful but save failed.\n\nError: ${error.message}\n\nPayment ID: ${response.razorpay_payment_id}\n\nPlease contact support.`);
+          console.log('✅ D1 Save Result:', d1Result);
+        } catch (d1Error) {
+          console.error('❌ D1 error:', d1Error);
         }
+        
+        // 3. Remove from cart
+        removeFromCart(item.id);
+        
+        alert(`Successfully purchased "${item.name}"! 🎉`);
+        
+        // 4. Redirect to saved files
+        window.location.href = '/saved-files';
       },
       modal: {
         ondismiss: () => {
-          console.log('Payment modal closed by user');
+          console.log('Payment modal closed');
           setLoading(false);
         }
       },
@@ -378,7 +346,7 @@ const handleSingleCheckout = async (item) => {
     
   } catch (error) {
     console.error('❌ Payment error:', error);
-    alert('Purchase failed. Please try again. Error: ' + error.message);
+    alert('Purchase failed. Please try again.');
   } finally {
     setLoading(false);
   }

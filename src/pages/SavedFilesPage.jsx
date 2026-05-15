@@ -58,34 +58,77 @@ function SavedFilesPage() {
     }
   };
 
- const loadPurchasedItems = async () => {
+const loadPurchasedItems = async () => {
   setLoadingPurchased(true);
   try {
-    // 🔥 NEW: Load purchases from D1 database
+    // 🔥 Get purchases from D1 database
     const { getUserPurchasesFromD1 } = await import('../services/purchaseD1Service');
     const d1Purchases = await getUserPurchasesFromD1(user.uid);
     console.log('📊 D1 Purchases:', d1Purchases);
     
     // Get file IDs from D1 purchases
-    const purchasedFileIds = d1Purchases.filter(p => p.item_type === 'file').map(p => p.file_id);
+    const purchasedFileIds = d1Purchases
+      .filter(p => p.item_type === 'file')
+      .map(p => p.file_id);
     console.log('📊 Purchased file IDs from D1:', purchasedFileIds);
     
-    if (purchasedFileIds.length > 0) {
+    // Also get from Firestore as backup
+    const userDoc = await getDoc(doc(db, 'users', user.uid));
+    const userData = userDoc.data();
+    const firestorePurchasedIds = userData?.purchasedFiles || [];
+    console.log('📊 Firestore purchased IDs:', firestorePurchasedIds);
+    
+    // Merge both sources
+    const allPurchasedIds = [...new Set([...purchasedFileIds, ...firestorePurchasedIds])];
+    console.log('📊 All purchased IDs (merged):', allPurchasedIds);
+    
+    const mockData = userData?.purchasedMockTests || [];
+    const quizData = userData?.purchasedQuizzes || [];
+    const hasSubscription = isSubscribed;
+
+    // Load purchased files
+    if (allPurchasedIds.length > 0) {
       const allFiles = await getAllFilesFromSheet();
-      const files = purchasedFileIds.map(id => allFiles.find(f => f.id === id || f.cloudflareKey === id)).filter(Boolean);
+      console.log('📊 Total files in sheet:', allFiles.length);
+      
+      const files = allPurchasedIds.map(id => {
+        const found = allFiles.find(f => f.id === id || f.cloudflareKey === id);
+        if (!found) {
+          console.log('⚠️ File not found for ID:', id);
+        }
+        return found;
+      }).filter(Boolean);
+      
       console.log('📊 Purchased files found:', files.length);
       setPurchasedFiles(files);
       files.forEach(f => setPurchasedAccessStatus(prev => ({ ...prev, [f.id]: true })));
+    } else {
+      console.log('📊 No purchased files found');
+      setPurchasedFiles([]);
     }
     
-    // Rest of the code for mock tests and quizzes...
+    if (mockData === 'all' || hasSubscription) {
+      const allTests = await getAllMockTests();
+      setPurchasedMockTests(allTests);
+    } else if (mockData.length) {
+      const allTests = await getAllMockTests();
+      setPurchasedMockTests(allTests.filter(t => mockData.includes(t.id)));
+    }
     
+    if (quizData === 'all' || hasSubscription) {
+      const allQuizzes = await getAllQuizzes();
+      setPurchasedQuizzes(allQuizzes);
+    } else if (quizData.length) {
+      const allQuizzes = await getAllQuizzes();
+      setPurchasedQuizzes(allQuizzes.filter(q => quizData.includes(q.id)));
+    }
   } catch (error) { 
     console.error('Error loading purchased items:', error); 
   } finally { 
     setLoadingPurchased(false); 
   }
 };
+
 
   const handleRefresh = async () => {
     setRefreshing(true);
