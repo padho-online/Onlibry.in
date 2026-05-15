@@ -1,5 +1,8 @@
 // src/services/paymentLogService.js
-// Payment logging service using Google Sheet (Pure JavaScript - No JSX)
+// Payment logging service - Saves to Firestore (for admin panel) + Google Sheet
+
+import { db } from '../config/firebase';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
 const SHEET_API_URL = import.meta.env.VITE_SHEET_API_URL;
 
@@ -14,105 +17,102 @@ async function getClientIP() {
   }
 }
 
-// Send to Google Sheet
-async function sendToSheet(action, data) {
+// 🔥 Save to Firestore (for admin panel)
+async function saveToFirestore(logData) {
+  try {
+    const docRef = await addDoc(collection(db, 'paymentLogs'), {
+      ...logData,
+      timestamp: serverTimestamp(),
+      createdAt: new Date().toISOString()
+    });
+    console.log('✅ Payment log saved to Firestore:', docRef.id);
+    return true;
+  } catch (error) {
+    console.error('❌ Firestore error:', error);
+    return false;
+  }
+}
+
+// Send to Google Sheet (backup)
+async function sendToSheet(data) {
+  if (!SHEET_API_URL) return false;
   try {
     await fetch(SHEET_API_URL, {
       method: 'POST',
       mode: 'no-cors',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action, ...data, timestamp: new Date().toISOString() })
+      body: JSON.stringify({ action: 'paymentLog', ...data, timestamp: new Date().toISOString() })
     });
     return true;
   } catch (error) {
-    console.error('Error logging payment:', error);
+    console.error('Sheet error:', error);
     return false;
   }
 }
 
-// Log payment initiation
-export async function logPaymentInitiation(userId, userEmail, planName, amount) {
-  return await sendToSheet('paymentLog', {
+// Main log function
+async function logPayment(event, userId, userEmail, planName, amount, status, paymentId = null, orderId = null, error = null) {
+  const ipAddress = await getClientIP();
+  
+  const logData = {
+    event: event,
     userId: userId || 'guest',
     userEmail: userEmail || 'guest',
-    event: 'payment_initiated',
     plan: planName,
     amount: amount || 0,
-    status: 'pending',
-    ipAddress: await getClientIP()
-  });
-}
-
-// Log payment success
-export async function logPaymentSuccess(userId, userEmail, planName, amount, paymentId, orderId) {
-  return await sendToSheet('paymentLog', {
-    userId: userId || 'guest',
-    userEmail: userEmail || 'guest',
-    event: 'payment_success',
-    plan: planName,
-    amount: amount || 0,
+    status: status,
     paymentId: paymentId || 'N/A',
     orderId: orderId || 'N/A',
-    status: 'success',
-    ipAddress: await getClientIP()
-  });
+    error: error || '',
+    ipAddress: ipAddress,
+    userAgent: navigator.userAgent
+  };
+  
+  // Save to Firestore (for admin panel display)
+  await saveToFirestore(logData);
+  
+  // Also send to Google Sheet (backup)
+  await sendToSheet(logData);
+  
+  return true;
 }
 
-// Log payment failure
+export async function logPaymentInitiation(userId, userEmail, planName, amount) {
+  return await logPayment('payment_initiated', userId, userEmail, planName, amount, 'pending');
+}
+
+export async function logPaymentSuccess(userId, userEmail, planName, amount, paymentId, orderId) {
+  return await logPayment('payment_success', userId, userEmail, planName, amount, 'success', paymentId, orderId);
+}
+
 export async function logPaymentFailure(userId, userEmail, planName, amount, errorMessage) {
-  return await sendToSheet('paymentLog', {
-    userId: userId || 'guest',
-    userEmail: userEmail || 'guest',
-    event: 'payment_failed',
-    plan: planName,
-    amount: amount || 0,
-    error: errorMessage || 'Unknown error',
-    status: 'failed',
-    ipAddress: await getClientIP()
-  });
+  return await logPayment('payment_failed', userId, userEmail, planName, amount, 'failed', null, null, errorMessage);
 }
 
-// Log modal close (user cancelled)
 export async function logPaymentModalClose(userId, userEmail, planName, amount) {
-  return await sendToSheet('paymentLog', {
-    userId: userId || 'guest',
-    userEmail: userEmail || 'guest',
-    event: 'payment_modal_closed',
-    plan: planName,
-    amount: amount || 0,
-    status: 'cancelled',
-    ipAddress: await getClientIP()
-  });
+  return await logPayment('payment_cancelled', userId, userEmail, planName, amount, 'cancelled');
 }
 
-// Get all payment logs (from Google Sheet - via API call)
 export async function getAllPaymentLogs(limitCount = 100) {
   try {
     const response = await fetch(`${SHEET_API_URL}?action=getPaymentLogs&limit=${limitCount}`);
     const data = await response.json();
-    
-    if (data.success && data.logs) {
-      return data.logs;
-    }
+    if (data.success && data.logs) return data.logs;
     return [];
   } catch (error) {
-    console.error('Error fetching payment logs:', error);
+    console.error('Error fetching logs:', error);
     return [];
   }
 }
 
-// Get payment logs for a specific user
 export async function getUserPaymentLogs(userId) {
   try {
     const response = await fetch(`${SHEET_API_URL}?action=getUserPaymentLogs&userId=${userId}`);
     const data = await response.json();
-    
-    if (data.success && data.logs) {
-      return data.logs;
-    }
+    if (data.success && data.logs) return data.logs;
     return [];
   } catch (error) {
-    console.error('Error fetching user payment logs:', error);
+    console.error('Error fetching user logs:', error);
     return [];
   }
 }

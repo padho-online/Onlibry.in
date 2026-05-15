@@ -257,47 +257,90 @@ const handleSubscribe = async (plan) => {
     }
   };
 
-  const handleSingleCheckout = async (item) => {
-    if (!user) { navigate('/login'); return; }
+const handleSingleCheckout = async (item) => {
+  if (!user) { 
+    navigate('/login'); 
+    return; 
+  }
+  
+  console.log('🛒 Single checkout for item:', item);
+  
+  await logPayment('single_item_checkout', user.uid, user.email, item.name, item.price, 'pending');
+  setLoading(true);
+  
+  try {
+    const order = await createRazorpayOrder(item.price);
+    await logPayment('single_item_order_created', user.uid, user.email, item.name, item.price, 'pending', null, order.id);
     
-    await logPayment('single_item_checkout', item.name, item.price, 'pending');
-    setLoading(true);
-    
-    try {
-      const order = await createRazorpayOrder(item.price);
-      await logPayment('single_item_order_created', item.name, item.price, 'pending', null, order.id);
-      
-      const options = {
-        key: 'rzp_live_SiS2QOdZl6zCUx',
-        amount: order.amount,
-        currency: order.currency,
-        name: 'Onlibry',
-        description: `Purchase: ${item.name}`,
-        image: 'https://onlibry.in/logo transparent.png',
-        order_id: order.id,
-        handler: async (response) => {
-          await logPayment('single_item_payment_success', item.name, item.price, 'success', response.razorpay_payment_id, response.razorpay_order_id);
-          alert(`Successfully purchased "${item.name}"! 🎉`);
+    const options = {
+      key: 'rzp_live_SiS2QOdZl6zCUx',
+      amount: order.amount,
+      currency: order.currency,
+      name: 'Onlibry',
+      description: `Purchase: ${item.name}`,
+      image: 'https://onlibry.in/logo transparent.png',
+      order_id: order.id,
+      handler: async (response) => {
+        console.log('✅ Payment success!', response);
+        
+        await logPayment('single_item_payment_success', user.uid, user.email, item.name, item.price, 'success', response.razorpay_payment_id, response.razorpay_order_id);
+        
+        // 🔥 CRITICAL FIX: Add purchased file to Firestore
+        try {
+          const { doc, updateDoc, arrayUnion, serverTimestamp } = await import('firebase/firestore');
+          const { db } = await import('../config/firebase');
+          
+          const userRef = doc(db, 'users', user.uid);
+          
+          // Add to purchasedFiles array
+          await updateDoc(userRef, {
+            purchasedFiles: arrayUnion(item.id),
+            lastPurchaseAt: serverTimestamp()
+          });
+          
+          console.log('✅ File added to purchasedFiles:', item.id);
+          
+          // Also remove from cart
           removeFromCart(item.id);
-        },
-        modal: {
-          ondismiss: () => {
-            logPayment('single_item_payment_cancelled', item.name, item.price, 'cancelled');
-            setLoading(false);
+          
+          alert(`Successfully purchased "${item.name}"! 🎉`);
+          
+          // Ask user if want to view now
+          if (window.confirm('Would you like to view the file now?')) {
+            navigate(`/viewer/${item.id}`);
+          } else {
+            navigate('/saved-files');
           }
-        },
-        prefill: { name: user.displayName || '', email: user.email || '' },
-        theme: { color: '#22c55e' }
-      };
-      const rzp = new window.Razorpay(options);
-      rzp.open();
-    } catch (error) {
-      await logPayment('single_item_payment_error', item.name, item.price, 'failed', null, null, error.message);
-      alert('Purchase failed. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
+          
+        } catch (firestoreError) {
+          console.error('❌ Firestore update error:', firestoreError);
+          alert('Payment successful but file access update failed. Please contact support with your payment ID: ' + response.razorpay_payment_id);
+        }
+      },
+      modal: {
+        ondismiss: () => {
+          logPayment('single_item_payment_cancelled', user.uid, user.email, item.name, item.price, 'cancelled');
+          setLoading(false);
+        }
+      },
+      prefill: { 
+        name: user.displayName || '', 
+        email: user.email || '' 
+      },
+      theme: { color: '#22c55e' }
+    };
+    
+    const rzp = new window.Razorpay(options);
+    rzp.open();
+    
+  } catch (error) {
+    console.error('❌ Payment error:', error);
+    await logPayment('single_item_payment_error', user.uid, user.email, item.name, item.price, 'failed', null, null, error.message);
+    alert('Purchase failed. Please try again.');
+  } finally {
+    setLoading(false);
+  }
+};
 
   // Check if user is on current plan
   const isCurrentPlan = (plan) => {
