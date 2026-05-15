@@ -191,7 +191,7 @@ export default {
     }
     
     // ============================================
-    // ROUTE 5: Delete File (Admin only)
+    // ROUTE 5: Delete File (Admins only)
     // DELETE /delete/:fileId
     // ============================================
     if (method === 'DELETE' && url.pathname.startsWith('/delete/')) {
