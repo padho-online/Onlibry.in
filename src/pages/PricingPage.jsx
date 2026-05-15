@@ -33,31 +33,32 @@ function PricingPage() {
     loadPlans();
   }, []);
 
-  const loadPlans = async () => {
-    setPlansLoading(true);
-    try {
-      const plansDoc = await getDoc(doc(db, 'config', 'plans'));
-      if (plansDoc.exists()) {
-        const plansData = plansDoc.data();
-        const plansArray = Object.values(plansData)
-          .filter(plan => plan.enabled !== false)
-          .map(plan => ({
-            ...plan,
-            priceDisplay: plan.price === 0 ? 'Free' : `₹${plan.price}`,
-            buttonClass: getButtonClass(plan.id),
-            isPopular: plan.id === 'monthly' || plan.id === 'yearly'
-          }))
-          .sort((a, b) => a.price - b.price);
-        setPlans(plansArray);
-      } else {
-        setPlans(defaultPlans);
-      }
-    } catch (error) {
-      console.error('Error loading plans:', error);
+const loadPlans = async () => {
+  setPlansLoading(true);
+  try {
+    const plansDoc = await getDoc(doc(db, 'config', 'plans'));
+    if (plansDoc.exists()) {
+      const plansData = plansDoc.data();
+      const plansArray = Object.values(plansData)
+        .filter(plan => plan.enabled !== false)
+        .map(plan => ({
+          ...plan,
+          id: plan.id || (plan.name?.toLowerCase().replace(/\s+/g, '_')), // 🔥 Ensure id exists
+          priceDisplay: plan.price === 0 ? 'Free' : `₹${plan.price}`,
+          buttonClass: getButtonClass(plan.id),
+          isPopular: plan.id === 'monthly' || plan.id === 'yearly'
+        }))
+        .sort((a, b) => a.price - b.price);
+      setPlans(plansArray);
+    } else {
       setPlans(defaultPlans);
     }
-    setPlansLoading(false);
-  };
+  } catch (error) {
+    console.error('Error loading plans:', error);
+    setPlans(defaultPlans);
+  }
+  setPlansLoading(false);
+};
 
   const getButtonClass = (planId) => {
     if (planId === 'free') return 'bg-gray-500';
@@ -105,95 +106,112 @@ function PricingPage() {
       console.error('Payment logging failed:', err);
     }
   };
-
-  const handleSubscribe = async (plan) => {
-    console.log('🚀 handleSubscribe called with plan:', plan);
+const handleSubscribe = async (plan) => {
+  console.log('🚀 handleSubscribe called with plan:', plan);
+  
+  if (!user) { 
+    navigate('/login', { state: { from: '/pricing' } }); 
+    return; 
+  }
+  
+  if (plan.price === 0) return;
+  if (!razorpayLoaded) { 
+    alert('Loading payment gateway...'); 
+    return; 
+  }
+  
+  // Log payment initiation
+  await logPayment('payment_initiated', plan.name, plan.price, 'pending');
+  
+  setProcessingPlan(plan.name);
+  setLoading(true);
+  
+  try {
+    const order = await createRazorpayOrder(plan.price);
+    console.log('✅ Order created:', order);
     
-    if (!user) { 
-      navigate('/login', { state: { from: '/pricing' } }); 
-      return; 
+    // Log order created
+    await logPayment('order_created', plan.name, plan.price, 'pending', null, order.id);
+    
+    // 🔥 FIX: Determine plan type and duration safely
+    let planType = 'monthly';
+    let durationDays = 30;
+    
+    if (plan.id === 'yearly' || plan.name?.toLowerCase().includes('annual') || plan.name?.toLowerCase().includes('yearly')) {
+      planType = 'yearly';
+      durationDays = 365;
+    } else if (plan.id === 'monthly' || plan.name?.toLowerCase().includes('monthly')) {
+      planType = 'monthly';
+      durationDays = 30;
+    } else if (plan.durationDays) {
+      durationDays = plan.durationDays;
+      if (durationDays === 365) planType = 'yearly';
+      else if (durationDays === 30) planType = 'monthly';
+      else if (durationDays === 7) planType = 'weekly';
     }
     
-    if (plan.price === 0) return;
-    if (!razorpayLoaded) { 
-      alert('Loading payment gateway...'); 
-      return; 
-    }
+    console.log('📝 Determined planType:', planType);
+    console.log('📝 Determined durationDays:', durationDays);
     
-    // Log payment initiation
-    await logPayment('payment_initiated', plan.name, plan.price, 'pending');
-    
-    setProcessingPlan(plan.name);
-    setLoading(true);
-    
-    try {
-      const order = await createRazorpayOrder(plan.price);
-      console.log('✅ Order created:', order);
-      
-      // Log order created
-      await logPayment('order_created', plan.name, plan.price, 'pending', null, order.id);
-      
-      const options = {
-        key: 'rzp_live_SiS2QOdZl6zCUx',
-        amount: order.amount,
-        currency: order.currency,
-        name: 'Onlibry',
-        description: `${plan.name} Subscription`,
-        image: 'https://onlibry.in/logo transparent.png',
-        order_id: order.id,
-        handler: async (response) => {
-          console.log('✅ Payment successful!', response);
+    const options = {
+      key: 'rzp_live_SiS2QOdZl6zCUx',
+      amount: order.amount,
+      currency: order.currency,
+      name: 'Onlibry',
+      description: `${plan.name} Subscription`,
+      image: 'https://onlibry.in/logo transparent.png',
+      order_id: order.id,
+      handler: async (response) => {
+        console.log('✅ Payment successful!', response);
+        
+        // Log payment success
+        await logPayment('payment_success', plan.name, plan.price, 'success', response.razorpay_payment_id, response.razorpay_order_id);
+        
+        try {
+          // 🔥 FIX: Pass correct parameters
+          const result = await updateSubscription(user.uid, planType, durationDays);
+          console.log('Subscription update result:', result);
           
-          // Log payment success
-          await logPayment('payment_success', plan.name, plan.price, 'success', response.razorpay_payment_id, response.razorpay_order_id);
-          
-          try {
-            // Update subscription in Firestore
-            const result = await updateSubscription(user.uid, plan.id, plan.durationDays);
-            console.log('Subscription update result:', result);
-            
-            if (result.success) {
-              // Log subscription update success
-              await logPayment('subscription_updated', plan.name, plan.price, 'success', response.razorpay_payment_id);
-              alert(`Successfully subscribed to ${plan.name}! 🎉`);
-              window.location.reload();
-            } else {
-              // Log subscription update failure
-              await logPayment('subscription_update_failed', plan.name, plan.price, 'failed', response.razorpay_payment_id, null, result.error);
-              alert('Payment successful but subscription update failed. Please contact support.');
-            }
-          } catch (err) {
-            console.error('Subscription update error:', err);
-            await logPayment('subscription_update_error', plan.name, plan.price, 'failed', response.razorpay_payment_id, null, err.message);
-            alert('Error updating subscription. Please contact support.');
+          if (result.success) {
+            await logPayment('subscription_updated', plan.name, plan.price, 'success', response.razorpay_payment_id);
+            alert(`Successfully subscribed to ${plan.name}! 🎉`);
+            window.location.reload();
+          } else {
+            await logPayment('subscription_update_failed', plan.name, plan.price, 'failed', response.razorpay_payment_id, null, result.error);
+            alert('Payment successful but subscription update failed. Please contact support.');
           }
-        },
-        modal: {
-          ondismiss: () => {
-            console.log('Payment modal closed by user');
-            logPayment('payment_cancelled', plan.name, plan.price, 'cancelled');
-            setLoading(false);
-            setProcessingPlan(null);
-          }
-        },
-        prefill: { 
-          name: user.displayName || '', 
-          email: user.email || '' 
-        },
-        theme: { color: '#22c55e' }
-      };
-      
-      const rzp = new window.Razorpay(options);
-      rzp.open();
-      
-    } catch (error) {
-      console.error('Payment error:', error);
-      await logPayment('payment_error', plan.name, plan.price, 'failed', null, null, error.message);
-      alert('Payment failed. Please try again. Error: ' + error.message);
-      setLoading(false);
-      setProcessingPlan(null);
-    }
-  };
+        } catch (err) {
+          console.error('Subscription update error:', err);
+          await logPayment('subscription_update_error', plan.name, plan.price, 'failed', response.razorpay_payment_id, null, err.message);
+          alert('Error updating subscription. Please contact support.');
+        }
+      },
+      modal: {
+        ondismiss: () => {
+          console.log('Payment modal closed by user');
+          logPayment('payment_cancelled', plan.name, plan.price, 'cancelled');
+          setLoading(false);
+          setProcessingPlan(null);
+        }
+      },
+      prefill: { 
+        name: user.displayName || '', 
+        email: user.email || '' 
+      },
+      theme: { color: '#22c55e' }
+    };
+    
+    const rzp = new window.Razorpay(options);
+    rzp.open();
+    
+  } catch (error) {
+    console.error('Payment error:', error);
+    await logPayment('payment_error', plan.name, plan.price, 'failed', null, null, error.message);
+    alert('Payment failed. Please try again. Error: ' + error.message);
+    setLoading(false);
+    setProcessingPlan(null);
+  }
+};
 
   const handleCartCheckout = async () => {
     if (!user) { navigate('/login'); return; }

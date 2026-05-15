@@ -144,87 +144,103 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // Update subscription - FIXED VERSION
-  const updateSubscription = async (userId, planType, durationInDays) => {
-    console.log('📝 updateSubscription called with:', { userId, planType, durationInDays });
+  // Update subscription (for admin/payment)
+const updateSubscription = async (userId, planType, durationInDays) => {
+  console.log('📝 updateSubscription called with:', { userId, planType, durationInDays });
+  
+  if (!userId) {
+    console.error('❌ No userId provided');
+    return { success: false, error: 'No userId provided' };
+  }
+  
+  // 🔥 FIX: Ensure planType is a string
+  let finalPlanType = 'monthly'; // default fallback
+  let finalDuration = 30; // default fallback
+  
+  if (planType && typeof planType === 'string' && planType !== 'undefined') {
+    if (planType.toLowerCase().includes('yearly') || planType.toLowerCase().includes('annual')) {
+      finalPlanType = 'yearly';
+      finalDuration = 365;
+    } else if (planType.toLowerCase().includes('monthly')) {
+      finalPlanType = 'monthly';
+      finalDuration = 30;
+    } else if (planType.toLowerCase().includes('weekly')) {
+      finalPlanType = 'weekly';
+      finalDuration = 7;
+    } else {
+      finalPlanType = planType.toLowerCase();
+    }
+  }
+  
+  // Use durationDays if provided and valid
+  if (durationInDays && !isNaN(parseInt(durationInDays))) {
+    finalDuration = parseInt(durationInDays);
+    if (finalDuration === 365) finalPlanType = 'yearly';
+    else if (finalDuration === 30) finalPlanType = 'monthly';
+    else if (finalDuration === 7) finalPlanType = 'weekly';
+  }
+  
+  console.log('📝 Processed plan:', { finalPlanType, finalDuration });
+  
+  // Validate final values
+  if (!finalPlanType || finalPlanType === 'undefined') {
+    console.error('❌ Invalid planType:', finalPlanType);
+    return { success: false, error: 'Invalid plan type' };
+  }
+  
+  if (isNaN(finalDuration) || finalDuration <= 0) {
+    console.error('❌ Invalid duration:', finalDuration);
+    finalDuration = 30;
+  }
+  
+  try {
+    // Calculate end date
+    const now = new Date();
+    const endDate = new Date(now);
+    endDate.setDate(now.getDate() + finalDuration);
     
-    if (!userId) {
-      console.error('❌ No userId provided');
-      return { success: false, error: 'No userId provided' };
+    // Validate dates
+    if (isNaN(now.getTime()) || isNaN(endDate.getTime())) {
+      console.error('❌ Invalid date calculation');
+      return { success: false, error: 'Invalid date calculation' };
     }
     
-    // Handle different plan type formats
-    let finalPlanType = planType;
-    let finalDuration = durationInDays;
+    const endDateISO = endDate.toISOString();
+    console.log('📝 Start date:', now.toISOString());
+    console.log('📝 End date:', endDateISO);
     
-    // If planType is 'pro monthly' or 'pro monthly', extract just 'monthly'
-    if (planType && typeof planType === 'string') {
-      if (planType.toLowerCase().includes('monthly')) {
-        finalPlanType = 'monthly';
-        finalDuration = 30;
-      } else if (planType.toLowerCase().includes('yearly') || planType.toLowerCase().includes('annual')) {
-        finalPlanType = 'yearly';
-        finalDuration = 365;
-      }
-    }
+    const userRef = doc(db, 'users', userId);
     
-    // If duration is not provided, set default
-    if (!finalDuration || isNaN(finalDuration)) {
-      if (finalPlanType === 'monthly') finalDuration = 30;
-      else if (finalPlanType === 'yearly') finalDuration = 365;
-      else finalDuration = 30;
-    }
+    const updateData = {
+      subscription: {
+        type: finalPlanType,
+        startDate: serverTimestamp(),
+        endDate: endDateISO,
+        isActive: true,
+      },
+      purchasedMockTests: 'all',
+      purchasedQuizzes: 'all',
+      lastSubscriptionAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    };
     
-    console.log('📝 Processed plan:', { finalPlanType, finalDuration });
+    console.log('📝 Updating Firestore with:', updateData);
+    await setDoc(userRef, updateData, { merge: true });
+    console.log('✅ Firestore update successful');
     
-    try {
-      // Calculate end date - SAFE METHOD
-      const now = new Date();
-      const endDate = new Date(now);
-      endDate.setDate(now.getDate() + parseInt(finalDuration));
-      
-      // Validate dates
-      if (isNaN(now.getTime()) || isNaN(endDate.getTime())) {
-        console.error('❌ Invalid date calculation');
-        return { success: false, error: 'Invalid date calculation' };
-      }
-      
-      const endDateISO = endDate.toISOString();
-      console.log('📝 Start date:', now.toISOString());
-      console.log('📝 End date:', endDateISO);
-      
-      const userRef = doc(db, 'users', userId);
-      
-      const updateData = {
-        subscription: {
-          type: finalPlanType,
-          startDate: serverTimestamp(),
-          endDate: endDateISO,
-          isActive: true,
-        },
-        purchasedMockTests: 'all',
-        purchasedQuizzes: 'all',
-        lastSubscriptionAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      };
-      
-      console.log('📝 Updating Firestore...');
-      await setDoc(userRef, updateData, { merge: true });
-      console.log('✅ Firestore update successful');
-      
-      // Update local state
-      setIsSubscribed(true);
-      setSubscriptionType(finalPlanType);
-      localStorage.setItem('isSubscribed', 'true');
-      localStorage.setItem('subscriptionType', finalPlanType);
-      
-      return { success: true };
-      
-    } catch (error) {
-      console.error('❌ Error updating subscription:', error);
-      return { success: false, error: error.message };
-    }
-  };
+    // Update local state
+    setIsSubscribed(true);
+    setSubscriptionType(finalPlanType);
+    localStorage.setItem('isSubscribed', 'true');
+    localStorage.setItem('subscriptionType', finalPlanType);
+    
+    return { success: true };
+    
+  } catch (error) {
+    console.error('❌ Error updating subscription:', error);
+    return { success: false, error: error.message };
+  }
+};
 
   // Force refresh subscription status
   const refreshSubscription = async () => {
