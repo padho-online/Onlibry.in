@@ -263,16 +263,19 @@ const handleSingleCheckout = async (item) => {
     return; 
   }
   
-  console.log('🛒 Single checkout for item:', item);
-  console.log('🛒 User ID:', user.uid);
-  console.log('🛒 Item ID:', item.id);
+  console.log('========== SINGLE CHECKOUT START ==========');
+  console.log('Item:', item);
+  console.log('User UID:', user.uid);
+  console.log('User Email:', user.email);
+  console.log('Item ID:', item.id);
+  console.log('Item Name:', item.name);
+  console.log('Item Price:', item.price);
   
-  await logPayment('single_item_checkout', user.uid, user.email, item.name, item.price, 'pending');
   setLoading(true);
   
   try {
     const order = await createRazorpayOrder(item.price);
-    await logPayment('single_item_order_created', user.uid, user.email, item.name, item.price, 'pending', null, order.id);
+    console.log('Order created:', order.id);
     
     const options = {
       key: 'rzp_live_SiS2QOdZl6zCUx',
@@ -283,66 +286,113 @@ const handleSingleCheckout = async (item) => {
       image: 'https://onlibry.in/logo transparent.png',
       order_id: order.id,
       handler: async (response) => {
-        console.log('✅ Payment success!', response);
+        console.log('========== PAYMENT SUCCESSFUL ==========');
+        console.log('Payment Response:', response);
+        console.log('Payment ID:', response.razorpay_payment_id);
+        console.log('Order ID:', response.razorpay_order_id);
         
-        await logPayment('single_item_payment_success', user.uid, user.email, item.name, item.price, 'success', response.razorpay_payment_id, response.razorpay_order_id);
-        
-        // 🔥 CRITICAL FIX: Add purchased file to Firestore - DIRECT APPROACH
+        // 🔥 DIRECT FIREBASE UPDATE WITH FULL DEBUG
         try {
-          // Import Firestore functions
-          const { doc, updateDoc, arrayUnion, serverTimestamp, getDoc } = await import('firebase/firestore');
-          const { db } = await import('../config/firebase');
+          // Import Firebase directly
+          const { getFirestore, doc, updateDoc, arrayUnion, serverTimestamp, getDoc } = await import('firebase/firestore');
+          const { getAuth } = await import('firebase/auth');
+          const { app } = await import('../config/firebase');
+          
+          const db = getFirestore(app);
+          const auth = getAuth(app);
+          const currentUser = auth.currentUser;
+          
+          console.log('Current user from auth:', currentUser?.uid);
+          console.log('Target user ID:', user.uid);
+          
+          if (!currentUser) {
+            console.error('❌ No current user found!');
+            alert('Session expired. Please login again.');
+            navigate('/login');
+            return;
+          }
           
           const userRef = doc(db, 'users', user.uid);
           
-          // First check current purchased files
+          // Check current document first
+          console.log('📡 Fetching current user document...');
           const userDoc = await getDoc(userRef);
-          const currentData = userDoc.data();
-          console.log('📊 Current purchasedFiles:', currentData?.purchasedFiles);
           
-          // Add to purchasedFiles array
-          await updateDoc(userRef, {
+          if (!userDoc.exists()) {
+            console.error('❌ User document does not exist!');
+            alert('User document not found. Please contact support.');
+            return;
+          }
+          
+          const currentData = userDoc.data();
+          console.log('📊 Current user data:', currentData);
+          console.log('📊 Current purchasedFiles:', currentData.purchasedFiles);
+          
+          // Prepare update data
+          const updateData = {
             purchasedFiles: arrayUnion(item.id),
-            lastPurchaseAt: serverTimestamp()
-          });
+            lastPurchaseAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
+          };
+          
+          console.log('📝 Updating with:', updateData);
+          
+          // Perform update
+          await updateDoc(userRef, updateData);
+          console.log('✅ UpdateDoc executed successfully');
           
           // Verify update
           const verifyDoc = await getDoc(userRef);
           const verifiedData = verifyDoc.data();
-          console.log('✅ Verified purchasedFiles:', verifiedData?.purchasedFiles);
+          console.log('✅ Verified purchasedFiles:', verifiedData.purchasedFiles);
           
-          // Also save to localStorage for immediate access
+          // Check if item.id is in the array
+          const isInArray = verifiedData.purchasedFiles?.includes(item.id);
+          console.log('✅ Is item in purchasedFiles?', isInArray);
+          
+          if (!isInArray) {
+            console.error('❌ Item NOT found in purchasedFiles after update!');
+            // Try alternative approach - set entire array
+            const existingFiles = verifiedData.purchasedFiles || [];
+            if (!existingFiles.includes(item.id)) {
+              existingFiles.push(item.id);
+              await updateDoc(userRef, { purchasedFiles: existingFiles });
+              console.log('✅ Alternative update done, new array:', existingFiles);
+            }
+          }
+          
+          // Save to localStorage as backup
           const purchasedHistory = JSON.parse(localStorage.getItem('onlibry_purchased') || '[]');
           if (!purchasedHistory.includes(item.id)) {
             purchasedHistory.push(item.id);
             localStorage.setItem('onlibry_purchased', JSON.stringify(purchasedHistory));
+            console.log('✅ Added to localStorage backup:', purchasedHistory);
           }
-          
-          console.log('✅ File added to purchasedFiles:', item.id);
           
           // Remove from cart
           removeFromCart(item.id);
           
-          alert(`Successfully purchased "${item.name}"! 🎉`);
-          
-          // Force refresh saved files page by clearing cache
-          localStorage.removeItem('onlibry_saved_files_cache');
+          alert(`✅ Successfully purchased "${item.name}"! 🎉`);
           
           // Ask user if want to view now
-          if (window.confirm('Would you like to view the file now?')) {
+          const viewNow = window.confirm('File purchased successfully! Would you like to view it now?');
+          if (viewNow) {
             navigate(`/viewer/${item.id}`);
           } else {
             navigate('/saved-files');
           }
           
         } catch (firestoreError) {
-          console.error('❌ Firestore update error:', firestoreError);
-          alert('Payment successful but file access update failed. Please contact support with your payment ID: ' + response.razorpay_payment_id);
+          console.error('❌❌❌ FIRESTORE ERROR ❌❌❌');
+          console.error('Error details:', firestoreError);
+          console.error('Error message:', firestoreError.message);
+          console.error('Error code:', firestoreError.code);
+          alert(`Payment successful but file access update failed.\n\nError: ${firestoreError.message}\n\nPayment ID: ${response.razorpay_payment_id}\n\nPlease contact support with this payment ID.`);
         }
       },
       modal: {
         ondismiss: () => {
-          logPayment('single_item_payment_cancelled', user.uid, user.email, item.name, item.price, 'cancelled');
+          console.log('Payment modal closed by user');
           setLoading(false);
         }
       },
@@ -358,8 +408,7 @@ const handleSingleCheckout = async (item) => {
     
   } catch (error) {
     console.error('❌ Payment error:', error);
-    await logPayment('single_item_payment_error', user.uid, user.email, item.name, item.price, 'failed', null, null, error.message);
-    alert('Purchase failed. Please try again.');
+    alert('Purchase failed. Please try again. Error: ' + error.message);
   } finally {
     setLoading(false);
   }

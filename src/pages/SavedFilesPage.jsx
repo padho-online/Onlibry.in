@@ -8,7 +8,7 @@ import { unsaveFile } from '../services/fileService';
 import { getAllFilesFromSheet } from '../services/cloudflareFileService';
 import { getAllPapers as getAllMockTests } from '../services/mockTestService';
 import { getAllPapers as getAllQuizzes } from '../services/quizService';
-import { Bookmark, FileText, FileQuestion, HelpCircle, Trash2, Eye, ShoppingBag } from 'lucide-react';
+import { Bookmark, FileText, FileQuestion, HelpCircle, Trash2, Eye, ShoppingBag, RefreshCw } from 'lucide-react';
 
 function SavedFilesPage() {
   const { user, isSubscribed } = useAuth();
@@ -21,15 +21,22 @@ function SavedFilesPage() {
   const [purchasedQuizzes, setPurchasedQuizzes] = useState([]);
   const [loadingPurchased, setLoadingPurchased] = useState(true);
   const [purchasedAccessStatus, setPurchasedAccessStatus] = useState({});
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     if (!user) { 
       navigate('/login'); 
       return; 
     }
-    loadSavedFiles();
-    loadPurchasedItems();
+    loadAllData();
   }, [user]);
+
+  const loadAllData = async () => {
+    await Promise.all([
+      loadSavedFiles(),
+      loadPurchasedItems()
+    ]);
+  };
 
   const loadSavedFiles = async () => {
     setLoadingSaved(true);
@@ -51,58 +58,68 @@ function SavedFilesPage() {
     }
   };
 
-const loadPurchasedItems = async () => {
-  setLoadingPurchased(true);
-  try {
-    const userDoc = await getDoc(doc(db, 'users', user.uid));
-    const userData = userDoc.data();
-    
-    // 🔥 FIX: Get purchased files from Firestore
-    const purchasedFileIds = userData?.purchasedFiles || [];
-    console.log('📊 Purchased file IDs from Firestore:', purchasedFileIds);
-    
-    // Also check localStorage backup
-    const localStoragePurchased = JSON.parse(localStorage.getItem('onlibry_purchased') || '[]');
-    console.log('📊 Purchased from localStorage:', localStoragePurchased);
-    
-    // Merge both sources
-    const allPurchasedIds = [...new Set([...purchasedFileIds, ...localStoragePurchased])];
-    console.log('📊 All purchased IDs (merged):', allPurchasedIds);
-    
-    const mockData = userData?.purchasedMockTests || [];
-    const quizData = userData?.purchasedQuizzes || [];
-    const hasSubscription = isSubscribed;
+  const loadPurchasedItems = async () => {
+    setLoadingPurchased(true);
+    try {
+      const userDoc = await getDoc(doc(db, 'users', user.uid));
+      const userData = userDoc.data();
+      
+      console.log('📊 User data from Firestore:', userData);
+      
+      // 🔥 CRITICAL: Get purchased files from Firestore
+      const purchasedFileIds = userData?.purchasedFiles || [];
+      console.log('📊 Purchased file IDs from Firestore:', purchasedFileIds);
+      
+      const mockData = userData?.purchasedMockTests || [];
+      const quizData = userData?.purchasedQuizzes || [];
+      const hasSubscription = isSubscribed;
 
-    // Load purchased files
-    if (allPurchasedIds.length > 0) {
-      const allFiles = await getAllFilesFromSheet();
-      const files = allPurchasedIds.map(id => allFiles.find(f => f.id === id || f.cloudflareKey === id)).filter(Boolean);
-      console.log('📊 Purchased files found:', files.length);
-      setPurchasedFiles(files);
-      files.forEach(f => setPurchasedAccessStatus(prev => ({ ...prev, [f.id]: true })));
+      // Load purchased files
+      if (purchasedFileIds.length > 0) {
+        const allFiles = await getAllFilesFromSheet();
+        console.log('📊 All files from sheet:', allFiles.length);
+        
+        const files = purchasedFileIds.map(id => {
+          const found = allFiles.find(f => f.id === id || f.cloudflareKey === id);
+          if (!found) console.log('⚠️ File not found for ID:', id);
+          return found;
+        }).filter(Boolean);
+        
+        console.log('📊 Purchased files found:', files.length);
+        setPurchasedFiles(files);
+        files.forEach(f => setPurchasedAccessStatus(prev => ({ ...prev, [f.id]: true })));
+      } else {
+        console.log('📊 No purchased files found in Firestore');
+        setPurchasedFiles([]);
+      }
+      
+      if (mockData === 'all' || hasSubscription) {
+        const allTests = await getAllMockTests();
+        setPurchasedMockTests(allTests);
+      } else if (mockData.length) {
+        const allTests = await getAllMockTests();
+        setPurchasedMockTests(allTests.filter(t => mockData.includes(t.id)));
+      }
+      
+      if (quizData === 'all' || hasSubscription) {
+        const allQuizzes = await getAllQuizzes();
+        setPurchasedQuizzes(allQuizzes);
+      } else if (quizData.length) {
+        const allQuizzes = await getAllQuizzes();
+        setPurchasedQuizzes(allQuizzes.filter(q => quizData.includes(q.id)));
+      }
+    } catch (error) { 
+      console.error('Error loading purchased items:', error); 
+    } finally { 
+      setLoadingPurchased(false); 
     }
-    
-    if (mockData === 'all' || hasSubscription) {
-      const allTests = await getAllMockTests();
-      setPurchasedMockTests(allTests);
-    } else if (mockData.length) {
-      const allTests = await getAllMockTests();
-      setPurchasedMockTests(allTests.filter(t => mockData.includes(t.id)));
-    }
-    
-    if (quizData === 'all' || hasSubscription) {
-      const allQuizzes = await getAllQuizzes();
-      setPurchasedQuizzes(allQuizzes);
-    } else if (quizData.length) {
-      const allQuizzes = await getAllQuizzes();
-      setPurchasedQuizzes(allQuizzes.filter(q => quizData.includes(q.id)));
-    }
-  } catch (error) { 
-    console.error('Error loading purchased items:', error); 
-  } finally { 
-    setLoadingPurchased(false); 
-  }
-};
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await loadAllData();
+    setRefreshing(false);
+  };
 
   const handleView = (item) => {
     if (item.type === 'mocktest') {
@@ -182,8 +199,18 @@ const loadPurchasedItems = async () => {
 
   return (
     <div className="py-3 md:py-6">
-      {/* Header */}
-      <h1 className="text-xl md:text-3xl font-bold text-gray-800 mb-4 md:mb-6">My Library</h1>
+      {/* Header with Refresh Button */}
+      <div className="flex justify-between items-center mb-4 md:mb-6">
+        <h1 className="text-xl md:text-3xl font-bold text-gray-800">My Library</h1>
+        <button 
+          onClick={handleRefresh}
+          disabled={refreshing}
+          className="flex items-center gap-2 px-3 py-2 bg-blue-500 text-white rounded-lg text-sm hover:bg-blue-600 transition disabled:opacity-50"
+        >
+          <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
+          <span className="hidden sm:inline">Refresh</span>
+        </button>
+      </div>
       
       {/* Tab Switcher */}
       <div className="flex gap-4 md:gap-6 mb-4 md:mb-6 border-b border-gray-200">
