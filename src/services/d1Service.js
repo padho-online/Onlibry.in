@@ -61,24 +61,21 @@ export async function checkPurchasedInD1(userId, fileId) {
 // 3. SAVED FILES API
 // ============================================
 
-export async function saveFileToD1(userId, fileId, fileName) {
+// Save file to D1 with action
+export async function saveFileToD1(userId, fileId, fileName, action = 'save') {
   return await callAPI('/api/saved/save', {
     method: 'POST',
+    body: JSON.stringify({ userId, fileId, fileName, action }),
+  });
+}
+
+// Remove saved file (updates action to 'unsave')
+export async function removeSavedFileFromD1(userId, fileId, fileName = '') {
+  return await callAPI('/api/saved/remove', {
+    method: 'DELETE',
     body: JSON.stringify({ userId, fileId, fileName }),
   });
 }
-
-export async function removeSavedFileFromD1(userId, fileId) {
-  return await callAPI('/api/saved/remove', {
-    method: 'DELETE',
-    body: JSON.stringify({ userId, fileId }),
-  });
-}
-
-export async function getUserSavedFromD1(userId) {
-  return await callAPI(`/api/saved/user/${encodeURIComponent(userId)}`);
-}
-
 // ============================================
 // 4. NOTIFICATIONS API (with Categories)
 // ============================================

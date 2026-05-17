@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../config/firebase';
 import { doc, getDoc } from 'firebase/firestore';
-import { unsaveFile } from '../services/fileService';
 import { getAllFilesFromSheet } from '../services/cloudflareFileService';
 import { getAllPapers as getAllMockTests } from '../services/mockTestService';
 import { getAllPapers as getAllQuizzes } from '../services/quizService';
@@ -204,10 +203,22 @@ const loadPurchasedItems = async () => {
     }
   };
 
-  const handleUnsave = async (fileId) => {
-    await unsaveFile(fileId);
-    setSavedFiles(prev => prev.filter(f => f.id !== fileId));
-  };
+  const handleUnsave = async (fileId, fileName) => {
+  try {
+    const { removeSavedFileFromD1 } = await import('../services/d1Service');
+    const result = await removeSavedFileFromD1(user.uid, fileId, fileName);
+    console.log('Unsave result:', result);
+    
+    if (result.success) {
+      setSavedFiles(prev => prev.filter(f => f.id !== fileId));
+      // Optional: Show success toast
+    } else {
+      console.error('Unsave failed:', result.error);
+    }
+  } catch (error) {
+    console.error('Error unsaving file:', error);
+  }
+};
 
   const renderCard = (item, showUnsave = false, isPurch = false) => {
     const isPurchased = isPurch || purchasedAccessStatus[item.id];
@@ -254,13 +265,13 @@ const loadPurchasedItems = async () => {
               <span className="hidden sm:inline">View</span>
             </button>
             {showUnsave && (
-              <button 
-                onClick={(e) => { e.stopPropagation(); handleUnsave(item.id); }} 
-                className="px-3 py-1.5 bg-red-50 hover:bg-red-100 rounded-lg transition"
-                title="Remove from saved"
-              >
-                <Trash2 size={14} className="text-red-500" />
-              </button>
+            <button 
+  onClick={(e) => { e.stopPropagation(); handleUnsave(item.id, item.name); }} 
+  className="px-3 py-1.5 bg-red-50 hover:bg-red-100 rounded-lg transition"
+  title="Remove from saved"
+>
+  <Trash2 size={14} className="text-red-500" />
+</button>
             )}
           </div>
         </div>

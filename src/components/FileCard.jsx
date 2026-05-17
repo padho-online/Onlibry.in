@@ -125,35 +125,40 @@ function FileCard({ file }) {
     setInCart(false);
   };
 
-  // 🔥 SAVE/UNSAVE USING D1
-  const handleSaveToggle = async (e) => {
-    e.stopPropagation();
-    if (!user) {
-      navigate('/login', { state: { from: { pathname: '/files' } } });
-      return;
-    }
-    if (isSaving) return;
-    setIsSaving(true);
-    try {
-      if (isSaved) {
-        // Remove from saved
-        const result = await removeSavedFileFromD1(user.uid, file.id);
-        if (result.success) {
-          setIsSaved(false);
-        }
-      } else {
-        // Add to saved
-        const result = await saveFileToD1(user.uid, file.id, file.name);
-        if (result.success) {
-          setIsSaved(true);
-        }
+ // 🔥 SAVE/UNSAVE USING D1
+const handleSaveToggle = async (e) => {
+  e.stopPropagation();
+  if (!user) {
+    navigate('/login', { state: { from: { pathname: '/files' } } });
+    return;
+  }
+  if (isSaving) return;
+  setIsSaving(true);
+  try {
+    if (isSaved) {
+      // Remove from saved
+      const result = await removeSavedFileFromD1(user.uid, file.id, file.name);
+      console.log('Unsave result:', result);
+      if (result.success) {
+        setIsSaved(false);
+        // Show success message
+        // toast.success('Removed from saved files');
       }
-    } catch (error) {
-      console.error('Save error:', error);
-    } finally {
-      setIsSaving(false);
+    } else {
+      // Add to saved
+      const result = await saveFileToD1(user.uid, file.id, file.name);
+      console.log('Save result:', result);
+      if (result.success) {
+        setIsSaved(true);
+        // toast.success('Added to saved files');
+      }
     }
-  };
+  } catch (error) {
+    console.error('Save error:', error);
+  } finally {
+    setIsSaving(false);
+  }
+};
 
   const getButtons = () => {
     if (!user) {
