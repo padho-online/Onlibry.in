@@ -146,7 +146,7 @@ function PricingPage() {
         currency: order.currency,
         name: 'Onlibry',
         description: `${plan.name} Subscription`,
-        image: 'https://onlibry.in/logo transparent.png',
+        image: '../assets/logo.png',
         order_id: order.id,
         handler: async (response) => {
           console.log('✅ Payment successful!', response);
@@ -216,7 +216,7 @@ function PricingPage() {
         currency: order.currency,
         name: 'Onlibry',
         description: `Purchase ${cartItems.length} item(s)`,
-        image: 'https://onlibry.in/logo transparent.png',
+        image: '../assets/logo.png',
         order_id: order.id,
         handler: async (response) => {
           console.log('========== CART PAYMENT SUCCESSFUL ==========');
@@ -308,7 +308,7 @@ function PricingPage() {
         currency: order.currency,
         name: 'Onlibry',
         description: `Purchase: ${item.name}`,
-        image: 'https://onlibry.in/logo transparent.png',
+        image: '../assets/logo.png',
         order_id: order.id,
         handler: async (response) => {
           console.log('========== PAYMENT SUCCESSFUL ==========');
