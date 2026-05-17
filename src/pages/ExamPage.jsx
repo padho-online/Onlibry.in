@@ -36,19 +36,39 @@ function ExamPage() {
     return decoded;
   };
 
-  const checkPurchasedMockTest = async (userId, testId) => {
-    if (!userId) return false;
-    try {
-      const userDoc = await getDoc(doc(db, 'users', userId));
-      const purchasedMockTests = userDoc.data()?.purchasedMockTests || [];
-      if (purchasedMockTests === 'all') return true;
-      if (Array.isArray(purchasedMockTests) && purchasedMockTests.includes(testId)) return true;
-      return false;
-    } catch (error) {
-      console.error('Error checking purchased mock test:', error);
-      return false;
+ const checkPurchasedMockTest = async (userId, testId) => {
+  if (!userId) return false;
+  console.log('🔍 Checking purchase for mock test:', { userId, testId });
+  
+  try {
+    // ✅ FIRST check D1
+    const { checkPurchasedInD1 } = await import('../services/d1Service');
+    const d1Result = await checkPurchasedInD1(userId, testId);
+    console.log('📦 D1 purchase check result:', d1Result);
+    
+    if (d1Result.success && d1Result.purchased) {
+      console.log('✅ Mock test found in D1 purchases');
+      return true;
     }
-  };
+    
+    // ✅ FALLBACK to Firestore (for old purchases)
+    const userDoc = await getDoc(doc(db, 'users', userId));
+    const purchasedMockTests = userDoc.data()?.purchasedMockTests || [];
+    console.log('📦 Firestore purchasedMockTests:', purchasedMockTests);
+    
+    const isPurchased = purchasedMockTests === 'all' || 
+                        (Array.isArray(purchasedMockTests) && purchasedMockTests.includes(testId));
+    
+    if (isPurchased) {
+      console.log('✅ Mock test found in Firestore purchases');
+    }
+    
+    return isPurchased;
+  } catch (error) {
+    console.error('Error checking purchased mock test:', error);
+    return false;
+  }
+};
 
   const checkAccess = async (decodedName) => {
     setCheckingAccess(true);

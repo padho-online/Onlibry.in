@@ -36,19 +36,39 @@ function QuizExamPage() {
     return decoded;
   };
 
-  const checkPurchasedQuiz = async (userId, quizId) => {
-    if (!userId) return false;
-    try {
-      const userDoc = await getDoc(doc(db, 'users', userId));
-      const purchasedQuizzes = userDoc.data()?.purchasedQuizzes || [];
-      if (purchasedQuizzes === 'all') return true;
-      if (Array.isArray(purchasedQuizzes) && purchasedQuizzes.includes(quizId)) return true;
-      return false;
-    } catch (error) {
-      console.error('Error checking purchased quiz:', error);
-      return false;
+const checkPurchasedQuiz = async (userId, quizId) => {
+  if (!userId) return false;
+  console.log('🔍 Checking purchase for quiz:', { userId, quizId });
+  
+  try {
+    // ✅ FIRST check D1
+    const { checkPurchasedInD1 } = await import('../services/d1Service');
+    const d1Result = await checkPurchasedInD1(userId, quizId);
+    console.log('📦 D1 purchase check result:', d1Result);
+    
+    if (d1Result.success && d1Result.purchased) {
+      console.log('✅ Quiz found in D1 purchases');
+      return true;
     }
-  };
+    
+    // ✅ FALLBACK to Firestore (for old purchases)
+    const userDoc = await getDoc(doc(db, 'users', userId));
+    const purchasedQuizzes = userDoc.data()?.purchasedQuizzes || [];
+    console.log('📦 Firestore purchasedQuizzes:', purchasedQuizzes);
+    
+    const isPurchased = purchasedQuizzes === 'all' || 
+                        (Array.isArray(purchasedQuizzes) && purchasedQuizzes.includes(quizId));
+    
+    if (isPurchased) {
+      console.log('✅ Quiz found in Firestore purchases');
+    }
+    
+    return isPurchased;
+  } catch (error) {
+    console.error('Error checking purchased quiz:', error);
+    return false;
+  }
+};
 
   const checkAccess = async (decodedName) => {
     setCheckingAccess(true);
