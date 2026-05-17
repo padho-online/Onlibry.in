@@ -17,7 +17,6 @@ function AdminDashboard() {
     { id: 'home', name: 'Home Editor', icon: Home, path: '/admin/home' },
     { id: 'logs', name: 'Payments', icon: CreditCard, path: '/admin/logs' },
     { id: 'users', name: 'Users', icon: Users, path: '/admin/users' },
-    { id: 'subscriptions', name: 'Subscriptions', icon: Calendar, path: '/admin/subscriptions' },
     { id: 'plans', name: 'Plans', icon: Tag, path: '/admin/plans' }
   ];
 
