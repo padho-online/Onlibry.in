@@ -25,9 +25,6 @@ export function invalidateQuizCache() {
   questionCache.clear();
 }
 
-// ============================================
-// GET ALL PAPERS FROM D1
-// ============================================
 export async function getAllPapers(forceRefresh = false) {
   if (forceRefresh) invalidateQuizCache();
   
@@ -42,8 +39,9 @@ export async function getAllPapers(forceRefresh = false) {
   
   pendingRequest = (async () => {
     try {
-      console.log('📡 Fetching quizzes from D1...');
-      const result = await getQuizzesFromD1();
+      console.log('📡 Fetching quizzes from D1 via direct fetch...');
+      const response = await fetch('https://onlibry-main-api.mdhabibul12212141.workers.dev/api/quizzes');
+      const result = await response.json();
       
       if (result.success && result.quizzes) {
         const papers = result.quizzes.map(quiz => ({
@@ -61,23 +59,20 @@ export async function getAllPapers(forceRefresh = false) {
           sheetName: quiz.sheet_name || quiz.name,
           instructions: quiz.instructions || '',
           displayPrice: quiz.is_free === 1 ? 'Free' : `₹${quiz.price || 29}`,
-          link: quiz.link || null
+          link: quiz.Link || null
         }));
         
         console.log('✅ Quizzes from D1:', papers.length);
-        console.log('✅ Free:', papers.filter(p => p.isFree).length);
-        console.log('✅ Premium:', papers.filter(p => !p.isFree).length);
         
         cachedPapers = papers;
         lastFetchTime = Date.now();
         return papers;
       }
       
-      console.warn('No quizzes from D1, returning empty array');
       return [];
       
     } catch (error) {
-      console.error("Error fetching quizzes from D1:", error);
+      console.error("Error fetching quizzes:", error);
       return cachedPapers || [];
     } finally {
       pendingRequest = null;
@@ -86,7 +81,6 @@ export async function getAllPapers(forceRefresh = false) {
   
   return pendingRequest;
 }
-
 // ============================================
 // GET QUIZ DATA (QUESTIONS FROM SHEET - SAME AS BEFORE)
 // ============================================

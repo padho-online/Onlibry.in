@@ -310,10 +310,10 @@ export async function logPageViewToD1(data) {
   });
 }
 
-export async function logSearchToD1(userId, searchQuery, resultCount) {
+export async function logSearchToD1(userId, searchQuery, resultCount, pagePath = '') {
   return await callAPI('/api/log/search', {
     method: 'POST',
-    body: JSON.stringify({ userId, searchQuery, resultCount }),
+    body: JSON.stringify({ userId, searchQuery, resultCount, pagePath }),
   });
 }
 

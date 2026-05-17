@@ -450,21 +450,21 @@ export default {
       }
     }
     
-    // POST /api/log/search
-    if (method === 'POST' && url.pathname === '/api/log/search') {
-      try {
-        const body = await request.json();
-        const id = generateId();
-        const now = new Date().toISOString();
-        await db.prepare(`
-          INSERT INTO search_logs (id, user_id, search_query, result_count, searched_at)
-          VALUES (?, ?, ?, ?, ?)
-        `).bind(id, body.userId, body.searchQuery, body.resultCount, now).run();
-        return new Response(JSON.stringify({ success: true }), { headers: CORS_HEADERS });
-      } catch (error) {
-        return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500, headers: CORS_HEADERS });
-      }
-    }
+   // POST /api/log/search
+if (method === 'POST' && url.pathname === '/api/log/search') {
+  try {
+    const body = await request.json();
+    const id = generateId();
+    const now = new Date().toISOString();
+    await db.prepare(`
+      INSERT INTO search_logs (id, user_id, search_query, result_count, page_path, searched_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).bind(id, body.userId, body.searchQuery, body.resultCount, body.pagePath || '', now).run();
+    return new Response(JSON.stringify({ success: true }), { headers: CORS_HEADERS });
+  } catch (error) {
+    return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500, headers: CORS_HEADERS });
+  }
+}
     
     // POST /api/log/fileread
     if (method === 'POST' && url.pathname === '/api/log/fileread') {
@@ -482,21 +482,133 @@ export default {
       }
     }
     
-    // POST /api/log/cart
-    if (method === 'POST' && url.pathname === '/api/log/cart') {
-      try {
-        const body = await request.json();
-        const id = generateId();
-        const now = new Date().toISOString();
-        await db.prepare(`
-          INSERT INTO cart_logs (id, user_id, file_id, file_name, price, action, created_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
-        `).bind(id, body.userId, body.fileId, body.fileName, body.price, body.action, now).run();
-        return new Response(JSON.stringify({ success: true }), { headers: CORS_HEADERS });
-      } catch (error) {
-        return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500, headers: CORS_HEADERS });
+ // ============================================
+// CART APIS (using cart_logs table only)
+// ============================================
+
+// GET /api/cart/:userId - Get user's active cart items
+if (method === 'GET' && url.pathname.startsWith('/api/cart/')) {
+  const userId = url.pathname.split('/api/cart/')[1];
+  if (!userId) {
+    return new Response(JSON.stringify({ success: false, error: 'User ID required' }), { status: 400, headers: CORS_HEADERS });
+  }
+  
+  try {
+    const result = await db.prepare(`
+      SELECT file_id, file_name, price, action, created_at 
+      FROM cart_logs 
+      WHERE user_id = ? AND status = 'active'
+      ORDER BY created_at DESC
+    `).bind(userId).all();
+    
+    const cartMap = new Map();
+    for (const log of result.results) {
+      if (!cartMap.has(log.file_id)) {
+        cartMap.set(log.file_id, {
+          id: log.file_id,
+          name: log.file_name,
+          price: log.price,
+          action: log.action,
+          addedAt: log.created_at
+        });
       }
     }
+    
+    const cart = Array.from(cartMap.values());
+    return new Response(JSON.stringify({ success: true, cart: cart }), { headers: CORS_HEADERS });
+  } catch (error) {
+    return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500, headers: CORS_HEADERS });
+  }
+}
+
+// POST /api/cart/add - Add item to cart (with debug logs)
+if (method === 'POST' && url.pathname === '/api/cart/add') {
+  console.log('🔍 Cart Add Request Received');
+  
+  try {
+    const body = await request.json();
+    console.log('📦 Request Body:', body);
+    
+    const { userId, fileId, fileName, price, action = 'add_to_cart' } = body;
+    
+    if (!userId || !fileId) {
+      console.log('❌ Missing userId or fileId');
+      return new Response(JSON.stringify({ success: false, error: 'userId and fileId required' }), { status: 400, headers: CORS_HEADERS });
+    }
+    
+    const id = generateId();
+    const now = new Date().toISOString();
+    
+    // First, mark any existing active entry for this file as inactive
+    await db.prepare(`
+      UPDATE cart_logs SET status = 'inactive', updated_at = ? 
+      WHERE user_id = ? AND file_id = ? AND status = 'active'
+    `).bind(now, userId, fileId).run();
+    
+    // Insert new active cart item
+    const result = await db.prepare(`
+      INSERT INTO cart_logs (id, user_id, file_id, file_name, price, action, status, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(id, userId, fileId, fileName || '', price || 0, action, 'active', now).run();
+    
+    console.log('✅ Cart item inserted:', result);
+    
+    return new Response(JSON.stringify({ success: true }), { headers: CORS_HEADERS });
+  } catch (error) {
+    console.error('❌ Cart Add Error:', error);
+    return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500, headers: CORS_HEADERS });
+  }
+}
+
+// DELETE /api/cart/remove - Remove item from cart
+if (method === 'DELETE' && url.pathname === '/api/cart/remove') {
+  try {
+    const body = await request.json();
+    const { userId, fileId, fileName, price } = body;
+    
+    if (!userId || !fileId) {
+      return new Response(JSON.stringify({ success: false, error: 'userId and fileId required' }), { status: 400, headers: CORS_HEADERS });
+    }
+    
+    const now = new Date().toISOString();
+    
+    await db.prepare(`
+      UPDATE cart_logs SET status = 'inactive', updated_at = ?
+      WHERE user_id = ? AND file_id = ? AND status = 'active'
+    `).bind(now, userId, fileId).run();
+    
+    await db.prepare(`
+      INSERT INTO cart_logs (id, user_id, file_id, file_name, price, action, status, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(generateId(), userId, fileId, fileName || '', price || 0, 'remove_from_cart', 'inactive', now).run();
+    
+    return new Response(JSON.stringify({ success: true }), { headers: CORS_HEADERS });
+  } catch (error) {
+    return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500, headers: CORS_HEADERS });
+  }
+}
+
+// DELETE /api/cart/clear/:userId - Clear user's entire cart
+if (method === 'DELETE' && url.pathname.startsWith('/api/cart/clear/')) {
+  const userId = url.pathname.split('/api/cart/clear/')[1];
+  
+  if (!userId) {
+    return new Response(JSON.stringify({ success: false, error: 'User ID required' }), { status: 400, headers: CORS_HEADERS });
+  }
+  
+  try {
+    const now = new Date().toISOString();
+    
+    await db.prepare(`
+      UPDATE cart_logs SET status = 'inactive', updated_at = ?
+      WHERE user_id = ? AND status = 'active'
+    `).bind(now, userId).run();
+    
+    return new Response(JSON.stringify({ success: true }), { headers: CORS_HEADERS });
+  } catch (error) {
+    return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500, headers: CORS_HEADERS });
+  }
+}
     
     // POST /api/log/mockresult
     if (method === 'POST' && url.pathname === '/api/log/mockresult') {
@@ -808,52 +920,184 @@ if (method === 'GET' && url.pathname === '/api/admin/payment-logs') {
   }
 }
     
-    // ============================================
-    // ============================================
-    // 10. SYNC FILES FROM SHEET TO D1
-    // ============================================
-    // ============================================
+// ============================================
+// BULK SYNC ENDPOINTS - From Google Sheet to D1
+// ============================================
+
+// POST /api/sync/files - Sync Files from Files sheet
+if (method === 'POST' && url.pathname === '/api/sync/files') {
+  if (!isAdminRequest(request)) {
+    return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), { status: 401, headers: CORS_HEADERS });
+  }
+  
+  try {
+    const body = await request.json();
+    const files = body.files || [];
+    let synced = 0;
+    let updated = 0;
+    const now = new Date().toISOString();
     
-    if (method === 'POST' && url.pathname === '/api/sync/files') {
-      try {
-        const sheetResponse = await fetch(`${SHEET_API_URL}?admin=true&t=${Date.now()}`);
-        const sheetData = await sheetResponse.json();
-        
-        if (!sheetData.success || !sheetData.files) {
-          return new Response(JSON.stringify({ success: false, error: 'Failed to fetch from sheet' }), { headers: CORS_HEADERS });
-        }
-        
-        const files = sheetData.files;
-        let synced = 0;
-        let failed = 0;
-        
-        for (const file of files) {
-          try {
-            const fileId = file.cloudflareKey || file.id;
-            const now = new Date().toISOString();
-            
-            await db.prepare(`
-              INSERT OR REPLACE INTO files (id, name, size, mime_type, price, is_premium, show_on_website, tags, cloudflare_key, created_at, updated_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT created_at FROM files WHERE id = ?), ?), ?)
-            `).bind(
-              fileId, file.name || '', file.size || 0, file.mimeType || 'application/pdf',
-              file.price || 29, file.isPremium ? 1 : 0, file.showOnWebsite ? 1 : 0,
-              file.tagsString || '', file.cloudflareKey || file.id,
-              fileId, now, now
-            ).run();
-            
-            synced++;
-          } catch (err) {
-            failed++;
-          }
-        }
-        
-        return new Response(JSON.stringify({ success: true, synced, failed, total: files.length }), { headers: CORS_HEADERS });
-        
-      } catch (error) {
-        return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500, headers: CORS_HEADERS });
+    for (const file of files) {
+      if (!file.id) continue;
+      
+      // Check if file exists
+      const existing = await db.prepare(`SELECT id FROM files WHERE id = ?`).bind(file.id).first();
+      
+      if (existing) {
+        await db.prepare(`
+          UPDATE files SET 
+            name = ?, size = ?, mime_type = ?, price = ?, 
+            is_premium = ?, show_on_website = ?, tags = ?, 
+            cloudflare_key = ?, updated_at = ?
+          WHERE id = ?
+        `).bind(
+          file.name || '', file.size || 0, file.mimeType || 'application/pdf',
+          file.price || 29, file.isPremium ? 1 : 0, file.showOnWebsite ? 1 : 0,
+          file.tags || '', file.cloudflareKey || file.id, now, file.id
+        ).run();
+        updated++;
+      } else {
+        await db.prepare(`
+          INSERT INTO files (id, name, size, mime_type, price, is_premium, show_on_website, tags, cloudflare_key, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+          file.id, file.name || '', file.size || 0, file.mimeType || 'application/pdf',
+          file.price || 29, file.isPremium ? 1 : 0, file.showOnWebsite ? 1 : 0,
+          file.tags || '', file.cloudflareKey || file.id, now, now
+        ).run();
+        synced++;
       }
     }
+    
+    return new Response(JSON.stringify({ 
+      success: true, 
+      synced: synced, 
+      updated: updated,
+      total: files.length 
+    }), { headers: CORS_HEADERS });
+    
+  } catch (error) {
+    return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500, headers: CORS_HEADERS });
+  }
+}
+
+// POST /api/sync/mock-tests - Sync Mock Tests Config from Config sheet
+if (method === 'POST' && url.pathname === '/api/sync/mock-tests') {
+  if (!isAdminRequest(request)) {
+    return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), { status: 401, headers: CORS_HEADERS });
+  }
+  
+  try {
+    const body = await request.json();
+    const tests = body.tests || [];
+    let synced = 0;
+    let updated = 0;
+    const now = new Date().toISOString();
+    
+    for (const test of tests) {
+      if (!test.id) continue;
+      
+      const existing = await db.prepare(`SELECT id FROM mock_tests_config WHERE id = ?`).bind(test.id).first();
+      
+      if (existing) {
+        await db.prepare(`
+          UPDATE mock_tests_config SET 
+            name = ?, display_name = ?, category = ?, sub_category = ?,
+            duration = ?, positive_mark = ?, negative_mark = ?, 
+            is_free = ?, price = ?, instructions = ?, updated_at = ?
+          WHERE id = ?
+        `).bind(
+          test.name, test.display_name, test.category, test.sub_category,
+          test.duration, test.positive_mark, test.negative_mark,
+          test.is_free ? 1 : 0, test.price || 0, test.instructions || '',
+          now, test.id
+        ).run();
+        updated++;
+      } else {
+        await db.prepare(`
+          INSERT INTO mock_tests_config (id, name, display_name, category, sub_category, 
+            duration, positive_mark, negative_mark, is_free, price, instructions, is_active, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+          test.id, test.name, test.display_name, test.category, test.sub_category,
+          test.duration, test.positive_mark, test.negative_mark,
+          test.is_free ? 1 : 0, test.price || 0, test.instructions || '',
+          1, now, now
+        ).run();
+        synced++;
+      }
+    }
+    
+    return new Response(JSON.stringify({ 
+      success: true, 
+      synced: synced, 
+      updated: updated,
+      total: tests.length 
+    }), { headers: CORS_HEADERS });
+    
+  } catch (error) {
+    return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500, headers: CORS_HEADERS });
+  }
+}
+
+// POST /api/sync/quizzes - Sync Quizzes Config from Config sheet
+if (method === 'POST' && url.pathname === '/api/sync/quizzes') {
+  if (!isAdminRequest(request)) {
+    return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), { status: 401, headers: CORS_HEADERS });
+  }
+  
+  try {
+    const body = await request.json();
+    const quizzes = body.quizzes || [];
+    let synced = 0;
+    let updated = 0;
+    const now = new Date().toISOString();
+    
+    for (const quiz of quizzes) {
+      if (!quiz.id) continue;
+      
+      const existing = await db.prepare(`SELECT id FROM quizzes_config WHERE id = ?`).bind(quiz.id).first();
+      
+      if (existing) {
+        await db.prepare(`
+          UPDATE quizzes_config SET 
+            name = ?, display_name = ?, category = ?,
+            duration = ?, positive_mark = ?, negative_mark = ?, 
+            is_free = ?, price = ?, instructions = ?, updated_at = ?
+          WHERE id = ?
+        `).bind(
+          quiz.name, quiz.display_name, quiz.category,
+          quiz.duration, quiz.positive_mark, quiz.negative_mark,
+          quiz.is_free ? 1 : 0, quiz.price || 0, quiz.instructions || '',
+          now, quiz.id
+        ).run();
+        updated++;
+      } else {
+        await db.prepare(`
+          INSERT INTO quizzes_config (id, name, display_name, category, 
+            duration, positive_mark, negative_mark, is_free, price, instructions, is_active, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+          quiz.id, quiz.name, quiz.display_name, quiz.category,
+          quiz.duration, quiz.positive_mark, quiz.negative_mark,
+          quiz.is_free ? 1 : 0, quiz.price || 0, quiz.instructions || '',
+          1, now, now
+        ).run();
+        synced++;
+      }
+    }
+    
+    return new Response(JSON.stringify({ 
+      success: true, 
+      synced: synced, 
+      updated: updated,
+      total: quizzes.length 
+    }), { headers: CORS_HEADERS });
+    
+  } catch (error) {
+    return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500, headers: CORS_HEADERS });
+  }
+}
     
     // 404
     return new Response(JSON.stringify({ error: 'Not found' }), { status: 404, headers: CORS_HEADERS });

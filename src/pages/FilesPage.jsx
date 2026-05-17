@@ -1,11 +1,15 @@
-// src/pages/FilesPage.jsx - D1 Database Version
-import React, { useState, useEffect, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+// src/pages/FilesPage.jsx - D1 Database Version with Search Logs
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useSearchParams, useLocation } from 'react-router-dom';
 import FileCard from '../components/FileCard';
 import { getFilesFromD1 } from '../services/d1Service';
+import { logSearchToD1 } from '../services/d1Service';
+import { useAuth } from '../contexts/AuthContext';
 import { Search, X, ChevronLeft, ChevronRight } from 'lucide-react';
 
 function FilesPage() {
+  const { user } = useAuth();
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -17,6 +21,9 @@ function FilesPage() {
     limit: 20,
     totalPages: 1
   });
+  
+  const debounceTimerRef = useRef(null);
+  const lastLoggedQueryRef = useRef('');
 
   const loadFiles = useCallback(async () => {
     setLoading(true);
@@ -25,7 +32,6 @@ function FilesPage() {
       const result = await getFilesFromD1(pagination.page, pagination.limit, searchQuery);
       
       if (result.success) {
-        // Sort: free files first, then premium
         const sortedFiles = (result.files || []).sort((a, b) => {
           if (a.is_premium === b.is_premium) return 0;
           return a.is_premium ? 1 : -1;
@@ -36,6 +42,26 @@ function FilesPage() {
           ...prev,
           totalPages: result.pagination?.totalPages || 1
         }));
+        
+        if (searchQuery.trim() && user && result.pagination?.total !== undefined) {
+          if (debounceTimerRef.current) {
+            clearTimeout(debounceTimerRef.current);
+          }
+          
+          debounceTimerRef.current = setTimeout(async () => {
+            const currentQuery = searchQuery.trim();
+            if (lastLoggedQueryRef.current !== currentQuery) {
+              lastLoggedQueryRef.current = currentQuery;
+              await logSearchToD1(
+                user.uid,
+                currentQuery,
+                result.pagination?.total || 0,
+                location.pathname
+              );
+              console.log(`🔍 Search logged: "${currentQuery}" on ${location.pathname} -> ${result.pagination?.total || 0} results`);
+            }
+          }, 800);
+        }
       } else {
         setError(result.error || 'Failed to load files');
       }
@@ -45,7 +71,7 @@ function FilesPage() {
     } finally {
       setLoading(false);
     }
-  }, [pagination.page, pagination.limit, searchQuery]);
+  }, [pagination.page, pagination.limit, searchQuery, user, location.pathname]);
 
   const handleSearch = async (e) => {
     e.preventDefault();
@@ -62,6 +88,7 @@ function FilesPage() {
     setSearchQuery('');
     setSearchParams({});
     setPagination(prev => ({ ...prev, page: 1 }));
+    lastLoggedQueryRef.current = '';
   };
 
   const handlePageChange = (newPage) => {
@@ -74,21 +101,28 @@ function FilesPage() {
     loadFiles();
   }, [pagination.page, searchQuery]);
 
-  // Update search query when URL param changes
   useEffect(() => {
     const urlSearch = searchParams.get('search') || '';
     if (urlSearch !== searchQuery) {
       setSearchQuery(urlSearch);
       setPagination(prev => ({ ...prev, page: 1 }));
+      lastLoggedQueryRef.current = '';
     }
   }, [searchParams]);
+
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, []);
 
   return (
     <div className="py-3 md:py-6">
       <h1 className="text-xl md:text-3xl font-bold text-gray-800 mb-1 md:mb-2">Resources</h1>
       <p className="text-xs md:text-sm text-gray-500 mb-4 md:mb-6">Books, PYQs, notes & more</p>
 
-      {/* Search Bar */}
       <form onSubmit={handleSearch} className="flex gap-2 mb-4 md:mb-6">
         <div className="flex-1 relative">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -110,28 +144,24 @@ function FilesPage() {
         )}
       </form>
 
-      {/* Error Message */}
       {error && (
         <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg text-sm">
           {error}
         </div>
       )}
 
-      {/* Results Count */}
       {!loading && !error && (
         <p className="text-xs text-gray-500 mb-3">
           {totalCount} file{totalCount !== 1 ? 's' : ''}
         </p>
       )}
 
-      {/* Loading State */}
       {loading ? (
         <div className="flex justify-center py-12">
           <div className="w-8 h-8 border-3 border-green-500 border-t-transparent rounded-full animate-spin"></div>
         </div>
       ) : files.length > 0 ? (
         <>
-          {/* Files Grid */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-3 md:gap-4">
             {files.map(file => (
               <FileCard 
@@ -151,7 +181,6 @@ function FilesPage() {
             ))}
           </div>
 
-          {/* Pagination */}
           {pagination.totalPages > 1 && (
             <div className="flex justify-center items-center gap-2 mt-8">
               <button
@@ -165,11 +194,9 @@ function FilesPage() {
               >
                 <ChevronLeft size={14} /> Prev
               </button>
-              
               <span className="px-4 py-2 text-sm text-gray-600">
                 Page {pagination.page} of {pagination.totalPages}
               </span>
-              
               <button
                 onClick={() => handlePageChange(pagination.page + 1)}
                 disabled={pagination.page === pagination.totalPages}

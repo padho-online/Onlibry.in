@@ -507,7 +507,7 @@ const handleSingleCheckout = async (item) => {
                     <div>
                       <h3 className="font-medium text-sm">{item.name}</h3>
                       <p className="text-[10px] text-gray-400">
-                        {item.type === 'file' ? '📄 File' : item.type === 'mocktest' ? '📝 Mock Test' : '❓ Quiz'}
+                        {item.type === 'file' ? '📄 File' : item.type === 'mocktest' ? '📝 Mock Test' : ''}
                       </p>
                     </div>
                     <div className="text-right">

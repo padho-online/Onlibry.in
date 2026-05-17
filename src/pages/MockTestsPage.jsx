@@ -1,15 +1,17 @@
-// src/pages/MockTestsPage.jsx - Mobile optimized with tooltip
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+// src/pages/MockTestsPage.jsx - with Search Logs + Debounce + Page Path
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { getAllPapers, getAllCategories, getSubCategoriesForCategory } from '../services/mockTestService';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
+import { logSearchToD1 } from '../services/d1Service';
 import { db } from '../config/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { Search, ChevronDown, ShoppingCart, Trash2, Play, Lock } from 'lucide-react';
 
 function MockTestsPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, isSubscribed } = useAuth();
   const { addToCart, isInCart, removeFromCart } = useCart();
   const [papers, setPapers] = useState([]);
@@ -24,6 +26,10 @@ function MockTestsPage() {
   const [purchasedStatus, setPurchasedStatus] = useState({});
   const [showFilters, setShowFilters] = useState(false);
   const [showTooltipId, setShowTooltipId] = useState(null);
+  
+  // Debounce timer ref
+  const debounceTimerRef = useRef(null);
+  const lastLoggedQueryRef = useRef('');
 
   const checkPurchasedMockTest = async (userId, testId) => {
     if (!userId) return false;
@@ -75,7 +81,30 @@ function MockTestsPage() {
     }
     filtered.sort((a, b) => a.isFree === b.isFree ? 0 : a.isFree ? -1 : 1);
     setFilteredPapers(filtered);
-  }, [selectedCategory, selectedSubCategory, searchQuery, papers]);
+    
+    // 🔥 Log search to D1 with debounce and page path
+    if (searchQuery.trim() && user) {
+      // Clear previous timer
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+      
+      // Set new timer
+      debounceTimerRef.current = setTimeout(async () => {
+        const currentQuery = searchQuery.trim();
+        if (lastLoggedQueryRef.current !== currentQuery) {
+          lastLoggedQueryRef.current = currentQuery;
+          await logSearchToD1(
+            user.uid,
+            currentQuery,
+            filtered.length,
+            location.pathname
+          );
+          console.log(`🔍 Search logged: "${currentQuery}" on ${location.pathname} -> ${filtered.length} results`);
+        }
+      }, 800);
+    }
+  }, [selectedCategory, selectedSubCategory, searchQuery, papers, user, location.pathname]);
 
   useEffect(() => {
     if (selectedCategory !== 'all') {
@@ -85,6 +114,15 @@ function MockTestsPage() {
       setSubCategories([]);
     }
   }, [selectedCategory]);
+
+  // Cleanup debounce on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, []);
 
   const handleTestAction = (paper) => {
     const hasAccess = paper.isFree || isSubscribed || purchasedStatus[paper.id];
@@ -113,7 +151,6 @@ function MockTestsPage() {
     navigate('/pricing', { state: { activeTab: 'cart' } });
   };
 
-  // Get short name for display
   const getShortName = (name, maxLength = 35) => {
     if (!name) return '';
     if (name.length <= maxLength) return name;
@@ -175,7 +212,6 @@ function MockTestsPage() {
               onTouchStart={() => isLongName && setShowTooltipId(paper.id)}
               onTouchEnd={() => setTimeout(() => setShowTooltipId(null), 2000)}
             >
-              {/* Tooltip for long name */}
               {showTooltip && isLongName && (
                 <div className="absolute -top-10 left-0 z-20 bg-gray-900 text-white text-xs rounded-lg px-3 py-1.5 whitespace-nowrap shadow-lg max-w-[250px] overflow-x-auto">
                   {paper.displayName}

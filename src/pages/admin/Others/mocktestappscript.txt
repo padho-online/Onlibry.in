@@ -1,0 +1,589 @@
+/**
+ * MOCK EXAM SYSTEM - COMPLETE BACKEND v3.2
+ * Fixed notes handling and data validation
+ */
+
+// Main entry point with dual parameter support
+function doGet(e) {
+  const startTime = new Date();
+  const requestId = Utilities.getUuid();
+  
+  try {
+    // Parse parameters with fallbacks
+    const action = e.parameter.action || 'getExamData';
+    const examName = e.parameter.sheet || e.parameter.examName; // Accept both parameter names
+    
+    // Log request details
+    console.log(`[${requestId}] Request received`, {
+      action: action,
+      examName: examName,
+      parameters: e.parameters,
+      timestamp: new Date().toISOString()
+    });
+    
+    // Validate request
+    if ((action === 'getExamData' || action === 'getExamConfig') && !examName) {
+      throw new Error('Exam name not specified. Please provide either "sheet" or "examName" parameter', {
+        code: 'MISSING_PARAMETER'
+      });
+    }
+    
+    // Process request
+    let response;
+    switch(action) {
+      case 'getAllExams':
+        response = getAllExams();
+        break;
+      case 'getExamConfig':
+        response = getExamConfig(examName);
+        break;
+      case 'getExamData':
+        response = getExamData(examName);
+        break;
+      case 'debugSpreadsheet':
+        response = debugSpreadsheetStructure();
+        break;
+      case 'testExamNotes':
+        response = testExamNotes(examName);
+        break;
+      default:
+        response = getHomePageData();
+    }
+    
+    // Log successful processing
+    console.log(`[${requestId}] Request processed successfully in ${new Date() - startTime}ms`);
+    
+    return createJsonResponse({
+      status: 'success',
+      ...response,
+      requestId: requestId,
+      processedIn: `${new Date() - startTime}ms`
+    });
+    
+  } catch (error) {
+    // Log error details
+    console.error(`[${requestId}] Error processing request`, {
+      error: error.message,
+      stack: error.stack,
+      parameters: e.parameters,
+      processingTime: `${new Date() - startTime}ms`
+    });
+    
+    return createJsonResponse({
+      status: 'error',
+      message: error.message,
+      code: error.code || 'SERVER_ERROR',
+      requestId: requestId
+    }, error.statusCode || 400);
+  }
+}
+
+// Helper functions ==============================================
+
+function safeString(value, defaultValue = '') {
+  if (value === null || value === undefined || value === '') {
+    return defaultValue;
+  }
+  return String(value).trim();
+}
+
+function safeNumber(value, defaultValue = 0) {
+  if (value === null || value === undefined || value === '') {
+    return defaultValue;
+  }
+  const num = Number(value);
+  return isNaN(num) ? defaultValue : num;
+}
+
+function getSpreadsheet() {
+  const spreadsheetId = '1niOyH2K0Vp8I8LkMuLVppmh9rwwj1MrwgIf4nRNffdA';
+  try {
+    const ss = SpreadsheetApp.openById(spreadsheetId);
+    if (!ss) throw new Error('Spreadsheet not found');
+    return ss;
+  } catch (e) {
+    throw new Error('Failed to access spreadsheet. Please check spreadsheet ID and permissions.', {
+      code: 'SPREADSHEET_ACCESS_ERROR'
+    });
+  }
+}
+
+function createJsonResponse(data, statusCode = 200) {
+  const output = ContentService.createTextOutput(JSON.stringify(data));
+  output.setMimeType(ContentService.MimeType.JSON);
+  return output;
+}
+
+// Data fetching functions =======================================
+
+function getAllExams() {
+  const cache = CacheService.getScriptCache();
+  const cacheKey = 'all_exams_v3';
+  const cached = cache.get(cacheKey);
+  
+  if (cached) {
+    return {
+      exams: JSON.parse(cached),
+      source: 'cache'
+    };
+  }
+  
+  const ss = getSpreadsheet();
+  const configSheet = ss.getSheetByName('Config');
+  if (!configSheet) throw new Error('Config sheet not found');
+  
+  const data = configSheet.getDataRange().getDisplayValues();
+  const headers = data[0].map(h => safeString(h));
+  const exams = [];
+  
+  for (let i = 1; i < data.length; i++) {
+    const exam = {};
+    headers.forEach((header, j) => {
+      // Safe handling of cell values
+      exam[header] = safeString(data[i][j]);
+    });
+    
+    // Basic validation with safe string conversion
+    const examName = safeString(exam.ExamName);
+    const duration = safeNumber(exam.Duration, 150);
+    const positiveMark = safeNumber(exam.PositiveMark, 1);
+    const negativeMark = safeNumber(exam.NegativeMark, 0);
+    
+    if (examName && duration > 0) {
+      exams.push({
+        ExamName: examName,
+        Duration: duration,
+        PositiveMark: positiveMark,
+        NegativeMark: negativeMark,
+        // Include other fields as strings
+        ...exam,
+        // Override with cleaned values
+        Duration: duration,
+        PositiveMark: positiveMark,
+        NegativeMark: negativeMark
+      });
+    }
+  }
+  
+  if (exams.length === 0) {
+    throw new Error('No valid exams found in Config sheet');
+  }
+  
+  cache.put(cacheKey, JSON.stringify(exams), 300); // Cache for 5 minutes
+  
+  return {
+    exams: exams,
+    source: 'fresh',
+    count: exams.length
+  };
+}
+
+function getExamConfig(examName) {
+  const cacheKey = `exam_config_v3_${examName}`;
+  const cache = CacheService.getScriptCache();
+  const cached = cache.get(cacheKey);
+  
+  if (cached) {
+    return {
+      config: JSON.parse(cached),
+      source: 'cache'
+    };
+  }
+  
+  const ss = getSpreadsheet();
+  const configSheet = ss.getSheetByName('Config');
+  if (!configSheet) throw new Error('Config sheet not found');
+  
+  const data = configSheet.getDataRange().getDisplayValues();
+  const headers = data[0].map(h => safeString(h));
+  
+  // FIX: Properly find ExamName column index
+  const examNameColIndex = headers.findIndex(header => 
+    header.toLowerCase().trim() === 'examname'
+  );
+  
+  if (examNameColIndex === -1) {
+    throw new Error('Config sheet missing "ExamName" column');
+  }
+  
+  for (let i = 1; i < data.length; i++) {
+    const rowExamName = safeString(data[i][examNameColIndex]);
+
+    if (rowExamName === examName) {
+      const config = {};
+      headers.forEach((header, j) => {
+        config[header] = safeString(data[i][j]);
+      });
+      
+      // Ensure numeric fields are properly converted
+      config.Duration = safeNumber(config.Duration, 150);
+      config.PositiveMark = safeNumber(config.PositiveMark, 1);
+      config.NegativeMark = safeNumber(config.NegativeMark, 0);
+      
+      // Validate essential config
+      if (!config.Duration || !config.PositiveMark) {
+        throw new Error(`Invalid config for exam: ${examName}`);
+      }
+      
+      cache.put(cacheKey, JSON.stringify(config), 600); // Cache for 10 minutes
+      
+      return {
+        config: config,
+        source: 'fresh'
+      };
+    }
+  }
+  
+  throw new Error(`Config not found for exam: ${examName}`, {
+    code: 'EXAM_NOT_FOUND'
+  });
+}
+
+function getExamData(examName) {
+  const cacheKey = `exam_data_v3_${examName}`;
+  const cache = CacheService.getScriptCache();
+  const cached = cache.get(cacheKey);
+  
+  if (cached) {
+    return {
+      ...JSON.parse(cached),
+      source: 'cache'
+    };
+  }
+  
+  // Get config with error handling
+  let examConfig;
+  try {
+    const configResponse = getExamConfig(examName);
+    examConfig = configResponse.config;
+  } catch (configError) {
+    console.warn(`Config error for ${examName}:`, configError.message);
+    examConfig = { Duration: 150, PositiveMark: 1, NegativeMark: 0.25 };
+  }
+  
+  // Get questions
+  const ss = getSpreadsheet();
+  const questionSheet = ss.getSheetByName(examName);
+  if (!questionSheet) {
+    throw new Error(`Question sheet "${examName}" not found. Please check the sheet name.`, {
+      code: 'SHEET_NOT_FOUND'
+    });
+  }
+  
+  const questionData = questionSheet.getDataRange().getDisplayValues();
+  const questionHeaders = questionData[0].map(h => safeString(h));
+  const questions = [];
+  
+  console.log('Sheet headers for', examName, ':', questionHeaders);
+  
+  // Find column indices with better error handling
+  const findColumnIndex = (possibleNames) => {
+    for (const name of possibleNames) {
+      const index = questionHeaders.findIndex(h => 
+        h.toLowerCase().trim() === name.toLowerCase().trim()
+      );
+      if (index !== -1) return index;
+    }
+    return -1;
+  };
+  
+  const columnIndices = {
+    question: findColumnIndex(['Question', 'question', 'QUESTION']),
+    optionA: findColumnIndex(['Option A', 'option a', 'OPTION A', 'A']),
+    optionB: findColumnIndex(['Option B', 'option b', 'OPTION B', 'B']),
+    optionC: findColumnIndex(['Option C', 'option c', 'OPTION C', 'C']),
+    optionD: findColumnIndex(['Option D', 'option d', 'OPTION D', 'D']),
+    correct: findColumnIndex(['Correct', 'correct', 'CORRECT', 'Answer']),
+    image: findColumnIndex(['Image', 'image', 'IMAGE']),
+    notes: findColumnIndex(['Notes', 'notes', 'NOTES', 'Explanation', 'explanation'])
+  };
+  
+  console.log('Column indices for', examName, ':', columnIndices);
+  
+  // Validate required columns
+  if (columnIndices.question === -1 || columnIndices.correct === -1) {
+    throw new Error('Missing required columns in question sheet');
+  }
+  
+  // Process questions
+  for (let i = 1; i < questionData.length; i++) {
+    const row = questionData[i];
+    const questionText = safeString(row[columnIndices.question]);
+    
+    if (!questionText) continue;
+    
+    try {
+      // Handle notes
+      let notesContent = null;
+      if (columnIndices.notes !== -1 && row[columnIndices.notes]) {
+        const rawNotes = safeString(row[columnIndices.notes]);
+        if (rawNotes && rawNotes.toLowerCase() !== 'null' && rawNotes.trim() !== '') {
+          notesContent = rawNotes;
+          console.log(`Found notes for question ${i}:`, notesContent.substring(0, 50) + '...');
+        }
+      }
+      
+      const question = {
+        id: `q${i}`,
+        text: questionText,
+        options: {
+          A: columnIndices.optionA !== -1 ? safeString(row[columnIndices.optionA]) : '',
+          B: columnIndices.optionB !== -1 ? safeString(row[columnIndices.optionB]) : '',
+          C: columnIndices.optionC !== -1 ? safeString(row[columnIndices.optionC]) : '',
+          D: columnIndices.optionD !== -1 ? safeString(row[columnIndices.optionD]) : ''
+        },
+        correct: safeString(row[columnIndices.correct], 'A').toUpperCase().charAt(0),
+        image: columnIndices.image !== -1 ? safeString(row[columnIndices.image]) || null : null,
+        notes: notesContent
+      };
+      
+      // Validate correct answer
+      if (!['A','B','C','D'].includes(question.correct)) {
+        console.warn(`Invalid correct answer for question ${i}: ${question.correct}, defaulting to A`);
+        question.correct = 'A';
+      }
+      
+      questions.push(question);
+      
+    } catch (qError) {
+      console.warn(`Error processing question ${i}:`, qError);
+    }
+  }
+  
+  if (questions.length === 0) {
+    throw new Error('No valid questions found in this exam');
+  }
+  
+  const responseData = {
+    examName: examName,
+    config: examConfig,
+    questions: questions,
+    totalQuestions: questions.length,
+    questionsWithNotes: questions.filter(q => q.notes).length,
+    lastUpdated: new Date().toISOString()
+  };
+  
+  cache.put(cacheKey, JSON.stringify(responseData), 600);
+  
+  return {
+    ...responseData,
+    source: 'fresh'
+  };
+}
+
+// Debug function to check spreadsheet structure
+function debugSpreadsheetStructure() {
+  try {
+    const ss = getSpreadsheet();
+    const sheets = ss.getSheets();
+    
+    const result = {
+      totalSheets: sheets.length,
+      sheets: []
+    };
+    
+    sheets.forEach(sheet => {
+      const sheetName = sheet.getName();
+      const sheetInfo = {
+        name: sheetName,
+        rowCount: sheet.getLastRow(),
+        columnCount: sheet.getLastColumn()
+      };
+      
+      const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+      sheetInfo.headers = headers.map(h => safeString(h));
+      
+      // Check for notes column
+      const hasNotes = headers.some(header => 
+        header && header.toString().toLowerCase().includes('notes')
+      );
+      sheetInfo.hasNotesColumn = hasNotes;
+      
+      if (hasNotes && sheetName !== 'Config') {
+        const notesIndex = headers.findIndex(h => 
+          h && h.toString().toLowerCase().includes('notes')
+        );
+        sheetInfo.notesColumnIndex = notesIndex;
+        
+        // Get sample notes data
+        const data = sheet.getDataRange().getValues();
+        const sampleNotes = [];
+        
+        for (let i = 1; i < Math.min(6, data.length); i++) {
+          if (data[i][notesIndex]) {
+            sampleNotes.push({
+              row: i + 1,
+              notes: safeString(data[i][notesIndex]).substring(0, 100) + 
+                     (safeString(data[i][notesIndex]).length > 100 ? '...' : '')
+            });
+          }
+        }
+        
+        sheetInfo.sampleNotes = sampleNotes;
+      }
+      
+      result.sheets.push(sheetInfo);
+    });
+    
+    console.log('Spreadsheet debug completed:', result);
+    return result;
+    
+  } catch (e) {
+    console.error('Debug failed:', e);
+    return { error: 'Debug failed: ' + e.message };
+  }
+}
+
+// Test specific exam for notes
+function testExamNotes(examName) {
+  try {
+    console.log(`=== TESTING NOTES FOR: ${examName} ===`);
+    
+    const result = getExamData(examName);
+    const notesInfo = {
+      examName: examName,
+      totalQuestions: result.questions.length,
+      questionsWithNotes: result.questions.filter(q => q.notes).length,
+      questions: []
+    };
+    
+    result.questions.forEach((q, i) => {
+      const questionInfo = {
+        number: i + 1,
+        hasNotes: !!q.notes,
+        notesPreview: q.notes ? q.notes.substring(0, 100) + (q.notes.length > 100 ? '...' : '') : null
+      };
+      
+      notesInfo.questions.push(questionInfo);
+      
+      if (q.notes) {
+        console.log(`Question ${i + 1} notes:`, q.notes.substring(0, 100) + (q.notes.length > 100 ? '...' : ''));
+      }
+    });
+    
+    if (notesInfo.questionsWithNotes === 0) {
+      console.log('No notes found in any questions.');
+    }
+    
+    return notesInfo;
+    
+  } catch (e) {
+    console.error('Test failed:', e);
+    return { error: e.message };
+  }
+}
+
+function getHomePageData() {
+  return {
+    message: 'Mock Exam System API',
+    version: '3.2',
+    endpoints: {
+      getAllExams: '?action=getAllExams',
+      getExamConfig: '?action=getExamConfig&examName=EXAM_NAME',
+      getExamData: '?action=getExamData&examName=EXAM_NAME',
+      getExamDataAlt: '?action=getExamData&sheet=EXAM_NAME',
+      debugSpreadsheet: '?action=debugSpreadsheet',
+      testExamNotes: '?action=testExamNotes&examName=EXAM_NAME'
+    },
+    timestamp: new Date().toISOString()
+  };
+}
+
+// Test functions ==============================================
+
+function testFullSystem() {
+  console.log('=== STARTING SYSTEM TEST ===');
+  
+  try {
+    // Test config sheet access
+    console.log('Testing Config sheet access...');
+    const exams = getAllExams();
+    console.log(`Found ${exams.count} exams in Config sheet`);
+    
+    // Test each exam
+    exams.exams.forEach(exam => {
+      console.log(`\nTesting exam: ${exam.ExamName}`);
+      
+      try {
+        // Test config
+        const config = getExamConfig(exam.ExamName);
+        console.log('Config:', config.config);
+        
+        // Test questions
+        const examData = getExamData(exam.ExamName);
+        console.log(`Loaded ${examData.questions.length} valid questions`);
+        console.log(`Questions with notes: ${examData.questions.filter(q => q.notes).length}`);
+        
+        // Sample first question
+        if (examData.questions.length > 0) {
+          const firstQuestion = examData.questions[0];
+          console.log('Sample question:', {
+            id: firstQuestion.id,
+            text: firstQuestion.text.substring(0, 50) + '...',
+            options: firstQuestion.options,
+            correct: firstQuestion.correct,
+            hasNotes: !!firstQuestion.notes
+          });
+        }
+        
+      } catch (examError) {
+        console.error(`Error testing exam ${exam.ExamName}:`, examError.message);
+      }
+    });
+    
+    console.log('\n=== SYSTEM TEST COMPLETED ===');
+    
+  } catch (e) {
+    console.error('SYSTEM TEST FAILED:', e);
+  }
+}
+
+// Manual check function
+function manualCheck(examName) {
+  try {
+    const ss = getSpreadsheet();
+    const sheet = ss.getSheetByName(examName);
+    
+    if (!sheet) {
+      return { error: `Sheet "${examName}" not found` };
+    }
+    
+    const data = sheet.getDataRange().getValues();
+    const headers = data[0].map(h => safeString(h));
+    
+    const result = {
+      examName: examName,
+      totalRows: data.length,
+      headers: headers
+    };
+    
+    // Find notes column
+    const notesCol = headers.findIndex(h => h && h.toString().toLowerCase().includes('notes'));
+    result.notesColumnIndex = notesCol;
+    
+    if (notesCol !== -1) {
+      result.notesColumnName = headers[notesCol];
+      
+      const sampleNotes = [];
+      for (let i = 1; i < Math.min(10, data.length); i++) {
+        if (data[i][notesCol]) {
+          sampleNotes.push({
+            row: i + 1,
+            notes: safeString(data[i][notesCol]).substring(0, 100) + 
+                   (safeString(data[i][notesCol]).length > 100 ? '...' : '')
+          });
+        }
+      }
+      
+      result.sampleNotes = sampleNotes;
+      result.notesFound = sampleNotes.length;
+    }
+    
+    console.log('Manual check result:', result);
+    return result;
+    
+  } catch (e) {
+    console.error('Manual check failed:', e);
+    return { error: e.message };
+  }
+}

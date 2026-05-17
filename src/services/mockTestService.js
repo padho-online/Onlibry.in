@@ -25,9 +25,6 @@ export function invalidateMockTestCache() {
   questionCache.clear();
 }
 
-// ============================================
-// GET ALL PAPERS FROM D1
-// ============================================
 export async function getAllPapers(forceRefresh = false) {
   if (forceRefresh) invalidateMockTestCache();
   
@@ -42,8 +39,9 @@ export async function getAllPapers(forceRefresh = false) {
   
   pendingRequest = (async () => {
     try {
-      console.log('📡 Fetching mock tests from D1...');
-      const result = await getMockTestsFromD1();
+      console.log('📡 Fetching mock tests from D1 via direct fetch...');
+      const response = await fetch('https://onlibry-main-api.mdhabibul12212141.workers.dev/api/mock-tests');
+      const result = await response.json();
       
       if (result.success && result.tests) {
         const papers = result.tests.map(test => ({
@@ -61,23 +59,20 @@ export async function getAllPapers(forceRefresh = false) {
           sheetName: test.sheet_name || test.name,
           instructions: test.instructions || '',
           displayPrice: test.is_free === 1 ? 'Free' : `₹${test.price || 49}`,
-          link: test.link || null
+          link: test.Link || null
         }));
         
         console.log('✅ Mock tests from D1:', papers.length);
-        console.log('✅ Free:', papers.filter(p => p.isFree).length);
-        console.log('✅ Premium:', papers.filter(p => !p.isFree).length);
         
         cachedPapers = papers;
         lastFetchTime = Date.now();
         return papers;
       }
       
-      console.warn('No tests from D1, returning empty array');
       return [];
       
     } catch (error) {
-      console.error("Error fetching mock tests from D1:", error);
+      console.error("Error fetching mock tests:", error);
       return cachedPapers || [];
     } finally {
       pendingRequest = null;
