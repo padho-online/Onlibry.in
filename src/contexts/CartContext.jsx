@@ -62,8 +62,14 @@ export function CartProvider({ children }) {
   }, [cartItems]);
 
   const addToCart = async (item) => {
-    // Determine item type
-    const itemType = item.type || 'file';
+  console.log('🛒 ========== ADD TO CART ==========');
+  console.log('🛒 Item received:', item);
+  console.log('🛒 Item ID:', item?.id);
+  console.log('🛒 Item Type:', item?.type);
+  console.log('🛒 Item Name:', item?.name);
+  console.log('🛒 =================================');
+  
+  const itemType = item.type || 'file';
     
     console.log(`🛒 Adding to cart: ${item.name} (${itemType})`);
     

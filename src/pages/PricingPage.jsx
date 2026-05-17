@@ -3,11 +3,11 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { loadRazorpayScript, createRazorpayOrder, logPaymentEvent } from "../services/razorpay";
+import { loadRazorpayScript, createRazorpayOrder } from "../services/razorpay";
 import { db } from '../config/firebase';
 import { doc, getDoc } from 'firebase/firestore';
-import { CreditCard, ShoppingCart, Trash2, Zap, Check, Crown, Calendar, Lock } from 'lucide-react';
-import { logPaymentToD1 } from '../services/d1Service';
+import { CreditCard, ShoppingCart, Trash2, Check, Crown } from 'lucide-react';
+import { logPaymentToD1, savePurchaseToD1 } from '../services/d1Service';
 
 function PricingPage() {
   const { user, isSubscribed, subscriptionType, updateSubscription } = useAuth();
@@ -34,32 +34,32 @@ function PricingPage() {
     loadPlans();
   }, []);
 
-const loadPlans = async () => {
-  setPlansLoading(true);
-  try {
-    const plansDoc = await getDoc(doc(db, 'config', 'plans'));
-    if (plansDoc.exists()) {
-      const plansData = plansDoc.data();
-      const plansArray = Object.values(plansData)
-        .filter(plan => plan.enabled !== false)
-        .map(plan => ({
-          ...plan,
-          id: plan.id || (plan.name?.toLowerCase().replace(/\s+/g, '_')), // 🔥 Ensure id exists
-          priceDisplay: plan.price === 0 ? 'Free' : `₹${plan.price}`,
-          buttonClass: getButtonClass(plan.id),
-          isPopular: plan.id === 'monthly' || plan.id === 'yearly'
-        }))
-        .sort((a, b) => a.price - b.price);
-      setPlans(plansArray);
-    } else {
+  const loadPlans = async () => {
+    setPlansLoading(true);
+    try {
+      const plansDoc = await getDoc(doc(db, 'config', 'plans'));
+      if (plansDoc.exists()) {
+        const plansData = plansDoc.data();
+        const plansArray = Object.values(plansData)
+          .filter(plan => plan.enabled !== false)
+          .map(plan => ({
+            ...plan,
+            id: plan.id || (plan.name?.toLowerCase().replace(/\s+/g, '_')),
+            priceDisplay: plan.price === 0 ? 'Free' : `₹${plan.price}`,
+            buttonClass: getButtonClass(plan.id),
+            isPopular: plan.id === 'monthly' || plan.id === 'yearly'
+          }))
+          .sort((a, b) => a.price - b.price);
+        setPlans(plansArray);
+      } else {
+        setPlans(defaultPlans);
+      }
+    } catch (error) {
+      console.error('Error loading plans:', error);
       setPlans(defaultPlans);
     }
-  } catch (error) {
-    console.error('Error loading plans:', error);
-    setPlans(defaultPlans);
-  }
-  setPlansLoading(false);
-};
+    setPlansLoading(false);
+  };
 
   const getButtonClass = (planId) => {
     if (planId === 'free') return 'bg-gray-500';
@@ -78,152 +78,112 @@ const loadPlans = async () => {
     return period || `${durationDays} days`;
   };
 
-  // Log payment to Google Sheet
-  const logPayment = async (event, plan, amount, status, paymentId = null, orderId = null, error = null) => {
+  const handleSubscribe = async (plan) => {
+    console.log('🚀 handleSubscribe called with plan:', plan);
+    
+    if (!user) { 
+      navigate('/login', { state: { from: '/pricing' } }); 
+      return; 
+    }
+    
+    if (plan.price === 0) return;
+    if (!razorpayLoaded) { 
+      alert('Loading payment gateway...'); 
+      return; 
+    }
+    
+    setProcessingPlan(plan.name);
+    setLoading(true);
+    
     try {
-      const SHEET_API_URL = import.meta.env.VITE_SHEET_API_URL;
-      if (SHEET_API_URL) {
-        await fetch(SHEET_API_URL, {
-          method: 'POST',
-          mode: 'no-cors',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'paymentLog',
-            event: event,
-            userId: user?.uid || 'guest',
-            userEmail: user?.email || 'guest',
-            plan: plan,
-            amount: amount,
-            status: status,
-            paymentId: paymentId,
-            orderId: orderId,
-            error: error,
-            timestamp: new Date().toISOString()
-          })
-        });
+      const order = await createRazorpayOrder(plan.price);
+      console.log('✅ Order created:', order);
+      
+      let planType = 'monthly';
+      let durationDays = 30;
+      
+      if (plan.id === 'yearly' || plan.name?.toLowerCase().includes('annual') || plan.name?.toLowerCase().includes('yearly')) {
+        planType = 'yearly';
+        durationDays = 365;
+      } else if (plan.id === 'monthly' || plan.name?.toLowerCase().includes('monthly')) {
+        planType = 'monthly';
+        durationDays = 30;
+      } else if (plan.durationDays) {
+        durationDays = plan.durationDays;
+        if (durationDays === 365) planType = 'yearly';
+        else if (durationDays === 30) planType = 'monthly';
+        else if (durationDays === 7) planType = 'weekly';
       }
-      console.log(`✅ Payment logged: ${event} - ${status}`);
-    } catch (err) {
-      console.error('Payment logging failed:', err);
+      
+      const options = {
+        key: 'rzp_live_SiS2QOdZl6zCUx',
+        amount: order.amount,
+        currency: order.currency,
+        name: 'Onlibry',
+        description: `${plan.name} Subscription`,
+        image: 'https://onlibry.in/logo transparent.png',
+        order_id: order.id,
+        handler: async (response) => {
+          console.log('✅ Payment successful!', response);
+          
+          try {
+            const result = await updateSubscription(user.uid, planType, durationDays);
+            console.log('Subscription update result:', result);
+            
+            if (result.success) {
+              await logPaymentToD1({
+                userId: user.uid,
+                userEmail: user.email,
+                event: 'subscription_success',
+                plan: plan.name,
+                amount: plan.price,
+                status: 'success',
+                paymentId: response.razorpay_payment_id,
+                orderId: response.razorpay_order_id
+              });
+              alert(`Successfully subscribed to ${plan.name}! 🎉`);
+              window.location.reload();
+            } else {
+              alert('Payment successful but subscription update failed. Please contact support.');
+            }
+          } catch (err) {
+            console.error('Subscription update error:', err);
+            alert('Error updating subscription. Please contact support.');
+          }
+        },
+        modal: {
+          ondismiss: () => {
+            console.log('Payment modal closed by user');
+            setLoading(false);
+            setProcessingPlan(null);
+          }
+        },
+        prefill: { 
+          name: user.displayName || '', 
+          email: user.email || '' 
+        },
+        theme: { color: '#22c55e' }
+      };
+      
+      const rzp = new window.Razorpay(options);
+      rzp.open();
+      
+    } catch (error) {
+      console.error('Payment error:', error);
+      alert('Payment failed. Please try again. Error: ' + error.message);
+      setLoading(false);
+      setProcessingPlan(null);
     }
   };
-const handleSubscribe = async (plan) => {
-  console.log('🚀 handleSubscribe called with plan:', plan);
-  
-  if (!user) { 
-    navigate('/login', { state: { from: '/pricing' } }); 
-    return; 
-  }
-  
-  if (plan.price === 0) return;
-  if (!razorpayLoaded) { 
-    alert('Loading payment gateway...'); 
-    return; 
-  }
-  
-  // Log payment initiation
-  await logPayment('payment_initiated', plan.name, plan.price, 'pending');
-  
-  setProcessingPlan(plan.name);
-  setLoading(true);
-  
-  try {
-    const order = await createRazorpayOrder(plan.price);
-    console.log('✅ Order created:', order);
-    
-    // Log order created
-    await logPayment('order_created', plan.name, plan.price, 'pending', null, order.id);
-    
-    // 🔥 FIX: Determine plan type and duration safely
-    let planType = 'monthly';
-    let durationDays = 30;
-    
-    if (plan.id === 'yearly' || plan.name?.toLowerCase().includes('annual') || plan.name?.toLowerCase().includes('yearly')) {
-      planType = 'yearly';
-      durationDays = 365;
-    } else if (plan.id === 'monthly' || plan.name?.toLowerCase().includes('monthly')) {
-      planType = 'monthly';
-      durationDays = 30;
-    } else if (plan.durationDays) {
-      durationDays = plan.durationDays;
-      if (durationDays === 365) planType = 'yearly';
-      else if (durationDays === 30) planType = 'monthly';
-      else if (durationDays === 7) planType = 'weekly';
-    }
-    
-    console.log('📝 Determined planType:', planType);
-    console.log('📝 Determined durationDays:', durationDays);
-    
-    const options = {
-      key: 'rzp_live_SiS2QOdZl6zCUx',
-      amount: order.amount,
-      currency: order.currency,
-      name: 'Onlibry',
-      description: `${plan.name} Subscription`,
-      image: 'https://onlibry.in/logo transparent.png',
-      order_id: order.id,
-      handler: async (response) => {
-        console.log('✅ Payment successful!', response);
-        
-        // Log payment success
-        await logPayment('payment_success', plan.name, plan.price, 'success', response.razorpay_payment_id, response.razorpay_order_id);
-        
-        try {
-          // 🔥 FIX: Pass correct parameters
-          const result = await updateSubscription(user.uid, planType, durationDays);
-          console.log('Subscription update result:', result);
-          
-          if (result.success) {
-            await logPayment('subscription_updated', plan.name, plan.price, 'success', response.razorpay_payment_id);
-            alert(`Successfully subscribed to ${plan.name}! 🎉`);
-            window.location.reload();
-          } else {
-            await logPayment('subscription_update_failed', plan.name, plan.price, 'failed', response.razorpay_payment_id, null, result.error);
-            alert('Payment successful but subscription update failed. Please contact support.');
-          }
-        } catch (err) {
-          console.error('Subscription update error:', err);
-          await logPayment('subscription_update_error', plan.name, plan.price, 'failed', response.razorpay_payment_id, null, err.message);
-          alert('Error updating subscription. Please contact support.');
-        }
-      },
-      modal: {
-        ondismiss: () => {
-          console.log('Payment modal closed by user');
-          logPayment('payment_cancelled', plan.name, plan.price, 'cancelled');
-          setLoading(false);
-          setProcessingPlan(null);
-        }
-      },
-      prefill: { 
-        name: user.displayName || '', 
-        email: user.email || '' 
-      },
-      theme: { color: '#22c55e' }
-    };
-    
-    const rzp = new window.Razorpay(options);
-    rzp.open();
-    
-  } catch (error) {
-    console.error('Payment error:', error);
-    await logPayment('payment_error', plan.name, plan.price, 'failed', null, null, error.message);
-    alert('Payment failed. Please try again. Error: ' + error.message);
-    setLoading(false);
-    setProcessingPlan(null);
-  }
-};
 
   const handleCartCheckout = async () => {
     if (!user) { navigate('/login'); return; }
     if (cartItems.length === 0) { alert('Cart is empty'); return; }
     
-    await logPayment('cart_checkout_initiated', 'Cart Purchase', cartTotal, 'pending');
     setLoading(true);
     
     try {
       const order = await createRazorpayOrder(cartTotal);
-      await logPayment('cart_order_created', 'Cart Purchase', cartTotal, 'pending', null, order.id);
       
       const options = {
         key: 'rzp_live_SiS2QOdZl6zCUx',
@@ -234,14 +194,46 @@ const handleSubscribe = async (plan) => {
         image: 'https://onlibry.in/logo transparent.png',
         order_id: order.id,
         handler: async (response) => {
-          await logPayment('cart_payment_success', 'Cart Purchase', cartTotal, 'success', response.razorpay_payment_id, response.razorpay_order_id);
-          alert(`Successfully purchased ${cartItems.length} item(s)! 🎉`);
+          console.log('========== CART PAYMENT SUCCESSFUL ==========');
+          
+          // Process each item in cart
+          let successCount = 0;
+          for (const item of cartItems) {
+            const finalItemType = item.type || 'file';
+            
+            // Save to D1
+            await savePurchaseToD1({
+              userId: user.uid,
+              fileId: item.id,
+              itemType: finalItemType,
+              itemName: item.name,
+              price: item.price,
+              paymentId: response.razorpay_payment_id,
+              orderId: response.razorpay_order_id
+            });
+            
+            // Log to payment_logs
+            await logPaymentToD1({
+              userId: user.uid,
+              userEmail: user.email,
+              event: 'cart_purchase_success',
+              plan: item.name,
+              amount: item.price,
+              status: 'success',
+              paymentId: response.razorpay_payment_id,
+              orderId: response.razorpay_order_id
+            });
+            
+            successCount++;
+          }
+          
+          alert(`Successfully purchased ${successCount} item(s)! 🎉`);
           clearCart();
           navigate('/saved-files');
         },
         modal: {
           ondismiss: () => {
-            logPayment('cart_payment_cancelled', 'Cart Purchase', cartTotal, 'cancelled');
+            console.log('Payment modal closed');
             setLoading(false);
           }
         },
@@ -251,130 +243,141 @@ const handleSubscribe = async (plan) => {
       const rzp = new window.Razorpay(options);
       rzp.open();
     } catch (error) {
-      await logPayment('cart_payment_error', 'Cart Purchase', cartTotal, 'failed', null, null, error.message);
+      console.error('Checkout error:', error);
       alert('Checkout failed. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-const handleSingleCheckout = async (item) => {
-  if (!user) { 
-    navigate('/login'); 
-    return; 
-  }
-  
-  console.log('========== SINGLE CHECKOUT START ==========');
-  console.log('Item:', item);
-  console.log('Item Type:', item.type);
-  
-  setLoading(true);
-  
-  try {
-    const order = await createRazorpayOrder(item.price);
+  const handleSingleCheckout = async (item) => {
+    console.log('========== SINGLE CHECKOUT START ==========');
+    console.log('📦 Item:', item);
+    console.log('📦 Item ID:', item?.id);
+    console.log('📦 Item Type:', item?.type);
+    console.log('📦 Item Name:', item?.name);
+    console.log('📦 Item Price:', item?.price);
+    console.log('==========================================');
     
-    const options = {
-      key: 'rzp_live_SiS2QOdZl6zCUx',
-      amount: order.amount,
-      currency: order.currency,
-      name: 'Onlibry',
-      description: `Purchase: ${item.name}`,
-      image: '/logo.png',
-      order_id: order.id,
-      handler: async (response) => {
-        console.log('========== PAYMENT SUCCESSFUL ==========');
-        
-        // 🔥 Determine the correct item type
-        let finalItemType = item.type || 'file';
-        let firestoreField = 'purchasedFiles';
-        
-        if (finalItemType === 'mocktest') {
-          firestoreField = 'purchasedMockTests';
-        } else if (finalItemType === 'quiz') {
-          firestoreField = 'purchasedQuizzes';
-        }
-        
-        console.log(`📦 Item Type: ${finalItemType}, Firestore Field: ${firestoreField}`);
-        
-        // 1. Save to D1 Database
-        try {
-          const { savePurchaseToD1 } = await import('../services/d1Service');
-          const d1Result = await savePurchaseToD1({
-            userId: user.uid,
-            fileId: item.id,
-            itemType: finalItemType,
-            itemName: item.name,
-            price: item.price,
-            paymentId: response.razorpay_payment_id,
-            orderId: response.razorpay_order_id
-          });
-          console.log('✅ D1 Save Result:', d1Result);
-        } catch (d1Error) {
-          console.error('❌ D1 error:', d1Error);
-        }
-        
-        // 2. Log payment to D1
-        // 2. Log payment to D1
-try {
-  const { logPaymentToD1 } = await import('../services/d1Service');
-  await logPaymentToD1({
-    userId: user.uid,
-    userEmail: user.email,
-    event: 'single_purchase_success',
-    plan: item.name,
-    amount: item.price,
-    status: 'success',
-    paymentId: response.razorpay_payment_id,
-    orderId: response.razorpay_order_id
-  });
-  console.log('✅ Payment logged to D1');
-} catch (logError) {
-  console.error('❌ Payment log error:', logError);
-}
-        
-        // 3. Save to Firestore
-        try {
-          const { doc, updateDoc, arrayUnion, serverTimestamp } = await import('firebase/firestore');
-          const { db } = await import('../config/firebase');
+    if (!user) { 
+      navigate('/login'); 
+      return; 
+    }
+    
+    // Validate item has id
+    if (!item.id) {
+      console.error('❌ Item ID is missing! Cannot proceed with purchase.');
+      alert('Error: Item ID is missing. Please try adding to cart again.');
+      setLoading(false);
+      return;
+    }
+    
+    setLoading(true);
+    
+    try {
+      const order = await createRazorpayOrder(item.price);
+      
+      const options = {
+        key: 'rzp_live_SiS2QOdZl6zCUx',
+        amount: order.amount,
+        currency: order.currency,
+        name: 'Onlibry',
+        description: `Purchase: ${item.name}`,
+        image: 'https://onlibry.in/logo transparent.png',
+        order_id: order.id,
+        handler: async (response) => {
+          console.log('========== PAYMENT SUCCESSFUL ==========');
+          console.log('Payment ID:', response.razorpay_payment_id);
           
-          const userRef = doc(db, 'users', user.uid);
-          await updateDoc(userRef, {
-            [firestoreField]: arrayUnion(item.id),
-            lastPurchaseAt: serverTimestamp()
-          });
-          console.log(`✅ Firestore updated: ${firestoreField}`);
-        } catch (firestoreError) {
-          console.error('❌ Firestore error:', firestoreError);
-        }
-        
-        // 4. Remove from cart
-        removeFromCart(item.id);
-        
-        alert(`Successfully purchased "${item.name}"! 🎉`);
-        window.location.href = '/saved-files';
-      },
-      modal: {
-        ondismiss: () => {
-          console.log('Payment modal closed');
-          setLoading(false);
-        }
-      },
-      prefill: { 
-        name: user.displayName || '', 
-        email: user.email || '' 
-      },
-      theme: { color: '#22c55e' }
-    };
-    
-    const rzp = new window.Razorpay(options);
-    rzp.open();
-    
-  } catch (error) {
-    console.error('❌ Payment error:', error);
-    alert('Purchase failed. Please try again.');
-    setLoading(false);
-  }
-};
+          // 🔥 Determine the correct item type
+          let finalItemType = item.type || 'file';
+          let firestoreField = 'purchasedFiles';
+          
+          if (finalItemType === 'mocktest') {
+            firestoreField = 'purchasedMockTests';
+          } else if (finalItemType === 'quiz') {
+            firestoreField = 'purchasedQuizzes';
+          }
+          
+          console.log(`📦 Item Type: ${finalItemType}, Firestore Field: ${firestoreField}`);
+          console.log(`📦 File ID being saved: ${item.id}`);
+          
+          // 1. Save to D1 Database (Primary)
+          try {
+            const d1Result = await savePurchaseToD1({
+              userId: user.uid,
+              fileId: item.id,
+              itemType: finalItemType,
+              itemName: item.name,
+              price: item.price,
+              paymentId: response.razorpay_payment_id,
+              orderId: response.razorpay_order_id
+            });
+            console.log('✅ D1 Save Result:', d1Result);
+          } catch (d1Error) {
+            console.error('❌ D1 error:', d1Error);
+          }
+          
+          // 2. Log payment to D1
+          try {
+            await logPaymentToD1({
+              userId: user.uid,
+              userEmail: user.email,
+              event: 'single_purchase_success',
+              plan: item.name,
+              amount: item.price,
+              status: 'success',
+              paymentId: response.razorpay_payment_id,
+              orderId: response.razorpay_order_id
+            });
+            console.log('✅ Payment logged to D1');
+          } catch (logError) {
+            console.error('❌ Payment log error:', logError);
+          }
+          
+          // 3. Save to Firestore (Backup)
+          try {
+            const { doc, updateDoc, arrayUnion, serverTimestamp } = await import('firebase/firestore');
+            const { db } = await import('../config/firebase');
+            
+            const userRef = doc(db, 'users', user.uid);
+            await updateDoc(userRef, {
+              [firestoreField]: arrayUnion(item.id),
+              lastPurchaseAt: serverTimestamp()
+            });
+            console.log(`✅ Firestore updated: ${firestoreField}`);
+          } catch (firestoreError) {
+            console.error('❌ Firestore error:', firestoreError);
+          }
+          
+          // 4. Remove from cart
+          removeFromCart(item.id);
+          
+          alert(`Successfully purchased "${item.name}"! 🎉`);
+          window.location.href = '/saved-files';
+        },
+        modal: {
+          ondismiss: () => {
+            console.log('Payment modal closed');
+            setLoading(false);
+          }
+        },
+        prefill: { 
+          name: user.displayName || '', 
+          email: user.email || '' 
+        },
+        theme: { color: '#22c55e' }
+      };
+      
+      const rzp = new window.Razorpay(options);
+      rzp.open();
+      
+    } catch (error) {
+      console.error('❌ Payment error:', error);
+      alert('Purchase failed. Please try again.');
+      setLoading(false);
+    }
+  };
 
   // Check if user is on current plan
   const isCurrentPlan = (plan) => {
@@ -497,7 +500,7 @@ try {
                     <div>
                       <h3 className="font-medium text-sm">{item.name}</h3>
                       <p className="text-[10px] text-gray-400">
-                        {item.type === 'file' ? '📄 File' : item.type === 'mocktest' ? '📝 Mock Test' : ''}
+                        {item.type === 'file' ? '📄 File' : item.type === 'mocktest' ? '📝 Mock Test' : item.type === 'quiz' ? '❓ Quiz' : ''}
                       </p>
                     </div>
                     <div className="text-right">
