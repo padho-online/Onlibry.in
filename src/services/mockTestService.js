@@ -1,13 +1,16 @@
-// src/services/mockTestService.js
-// UPDATED - With premium access based on Instructions column
+// src/services/mockTestService.js - D1 for list, Sheet for questions
+import { getMockTestsFromD1 } from './d1Service';
 
+// Google Sheet API for questions (keep existing)
 const MOCK_TEST_API_URL = 'https://script.google.com/macros/s/AKfycby8lS5Mmxh8oDkXvgMSBp1iLyMAG1RUI0l_t_JfMxD6yAyMmHZ5do01KeRXAHcLl4s/exec';
 
-// Cache
+// Cache for questions (to reduce API calls)
+let questionCache = new Map();
 let cachedPapers = null;
 let lastFetchTime = null;
 let pendingRequest = null;
-const CACHE_DURATION = 10 * 60 * 1000;
+const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
+const QUESTION_CACHE_DURATION = 60 * 60 * 1000; // 1 hour
 
 function isCacheValid() {
   if (!cachedPapers || !lastFetchTime) return false;
@@ -19,16 +22,17 @@ export function invalidateMockTestCache() {
   cachedPapers = null;
   lastFetchTime = null;
   pendingRequest = null;
+  questionCache.clear();
 }
 
 // ============================================
-// MAIN FUNCTION - Get all papers
+// GET ALL PAPERS FROM D1
 // ============================================
 export async function getAllPapers(forceRefresh = false) {
   if (forceRefresh) invalidateMockTestCache();
   
   if (isCacheValid() && cachedPapers) {
-    console.log('📦 Using cached papers');
+    console.log('📦 Using cached papers from D1');
     return cachedPapers;
   }
   
@@ -38,82 +42,42 @@ export async function getAllPapers(forceRefresh = false) {
   
   pendingRequest = (async () => {
     try {
-      console.log('📡 Fetching exams from Google Sheet...');
-      const response = await fetch(`${MOCK_TEST_API_URL}?action=getAllExams`);
-      const data = await response.json();
+      console.log('📡 Fetching mock tests from D1...');
+      const result = await getMockTestsFromD1();
       
-      if (data.status !== 'success') {
-        throw new Error(data.message || 'Failed to load exams');
+      if (result.success && result.tests) {
+        const papers = result.tests.map(test => ({
+          id: test.id,
+          originalName: test.name,
+          displayName: test.display_name || test.name,
+          category: test.category || 'General',
+          subCategory: test.sub_category || '',
+          duration: test.duration || 90,
+          positiveMark: test.positive_mark || 1,
+          negativeMark: test.negative_mark || 0,
+          isFree: test.is_free === 1,
+          price: test.price || 49,
+          totalQuestions: test.total_questions || 0,
+          sheetName: test.sheet_name || test.name,
+          instructions: test.instructions || '',
+          displayPrice: test.is_free === 1 ? 'Free' : `₹${test.price || 49}`,
+          link: test.link || null
+        }));
+        
+        console.log('✅ Mock tests from D1:', papers.length);
+        console.log('✅ Free:', papers.filter(p => p.isFree).length);
+        console.log('✅ Premium:', papers.filter(p => !p.isFree).length);
+        
+        cachedPapers = papers;
+        lastFetchTime = Date.now();
+        return papers;
       }
       
-      const rawExams = data.exams || [];
-      console.log('✅ Raw exams count:', rawExams.length);
-      
-      // Process papers
-      const papers = rawExams.map(exam => {
-        const examName = exam.ExamName || exam.examName || exam.name || '';
-        const duration = parseInt(exam.Duration || exam.duration || '90');
-        const positiveMark = parseFloat(exam.PositiveMark || exam.positiveMark || '1');
-        const negativeMark = parseFloat(exam.NegativeMark || exam.negativeMark || '0');
-        const instructions = exam.Instructions || exam.instructions || '';
-        
-        if (!examName) return null;
-        
-        // 🔥 NEW: Parse price from Instructions column
-        let price = null;
-        let isFree = true;
-        let displayPrice = 'Free';
-        
-        // Check for price pattern like "₹99" or "99" or "Rs. 99"
-        const priceMatch = instructions.match(/₹?\s*(\d+)/);
-        if (priceMatch && !instructions.toLowerCase().includes('free')) {
-          price = parseInt(priceMatch[1]);
-          isFree = false;
-          displayPrice = `₹${price}`;
-        }
-        
-        // Parse CPGET|Biotechnology or ICET|2024
-        const parts = examName.split('|').map(p => p.trim());
-        const category = parts[0];
-        const subCategory = parts[1] || null;
-        const extra = parts[2] || null;
-        
-        let displayName = '';
-        if (subCategory) {
-          displayName = `${category} - ${subCategory}`;
-          if (extra) displayName += ` (${extra})`;
-        } else {
-          displayName = category;
-        }
-        
-        return {
-          id: examName.toLowerCase().replace(/\|/g, '-').replace(/\s+/g, '-'),
-          originalName: examName,
-          displayName: displayName,
-          category: category,
-          subCategory: subCategory,
-          extra: extra,
-          duration: duration,
-          positiveMark: positiveMark,
-          negativeMark: negativeMark,
-          instructions: instructions,
-          price: price,
-          isFree: isFree,
-          displayPrice: displayPrice,
-          link: exam.Link || exam.link || null
-        };
-      }).filter(p => p !== null);
-      
-      console.log('✅ Processed papers:', papers.length);
-      console.log('✅ Free papers:', papers.filter(p => p.isFree).length);
-      console.log('✅ Premium papers:', papers.filter(p => !p.isFree).length);
-      
-      cachedPapers = papers;
-      lastFetchTime = Date.now();
-      return papers;
+      console.warn('No tests from D1, returning empty array');
+      return [];
       
     } catch (error) {
-      console.error("Error fetching exams:", error);
+      console.error("Error fetching mock tests from D1:", error);
       return cachedPapers || [];
     } finally {
       pendingRequest = null;
@@ -124,28 +88,36 @@ export async function getAllPapers(forceRefresh = false) {
 }
 
 // ============================================
-// Get exam data (questions)
+// GET EXAM DATA (QUESTIONS FROM SHEET - SAME AS BEFORE)
 // ============================================
 export async function getExamData(examName, forceRefresh = false) {
   try {
-    console.log(`📡 Fetching exam data for: ${examName}`);
+    // Check question cache first
+    if (!forceRefresh && questionCache.has(examName)) {
+      console.log(`📦 Using cached questions for: ${examName}`);
+      return questionCache.get(examName);
+    }
+    
+    console.log(`📡 Fetching questions from sheet for: ${examName}`);
     const url = `${MOCK_TEST_API_URL}?action=getExamData&examName=${encodeURIComponent(examName)}`;
-    console.log(`📡 URL: ${url}`);
     
     const response = await fetch(url);
     const data = await response.json();
-    
-    console.log(`📡 Response status:`, data.status);
-    console.log(`📡 Questions count:`, data.questions?.length || 0);
     
     if (data.status !== 'success') {
       throw new Error(data.message || 'Failed to load exam data');
     }
     
-    return {
+    const examData = {
       questions: data.questions || [],
       config: data.config || { Duration: 90, PositiveMark: 1, NegativeMark: 0 }
     };
+    
+    // Cache questions for 1 hour
+    questionCache.set(examName, examData);
+    setTimeout(() => questionCache.delete(examName), QUESTION_CACHE_DURATION);
+    
+    return examData;
   } catch (error) {
     console.error("Error fetching exam data:", error);
     return { questions: [], config: { Duration: 90, PositiveMark: 1, NegativeMark: 0 } };
@@ -153,7 +125,7 @@ export async function getExamData(examName, forceRefresh = false) {
 }
 
 // ============================================
-// Get all categories
+// GET ALL CATEGORIES (from D1 data)
 // ============================================
 export async function getAllCategories() {
   const papers = await getAllPapers();
@@ -162,7 +134,7 @@ export async function getAllCategories() {
 }
 
 // ============================================
-// Get sub-categories for a category
+// GET SUB-CATEGORIES (from D1 data)
 // ============================================
 export async function getSubCategoriesForCategory(categoryName) {
   const papers = await getAllPapers();
@@ -174,7 +146,7 @@ export async function getSubCategoriesForCategory(categoryName) {
 }
 
 // ============================================
-// Legacy exports
+// LEGACY EXPORTS (for compatibility)
 // ============================================
 export async function processExamPapersWithCache() {
   return await getAllPapers();
@@ -195,4 +167,26 @@ export async function refreshMockTests() {
 
 export async function logExamResult(resultData, testType = 'mock') {
   console.log('Result logged:', resultData);
+  // Also log to D1 if needed
+  try {
+    const { logMockResultToD1 } = await import('./d1Service');
+    const { getAuth } = await import('firebase/auth');
+    const { auth } = await import('../config/firebase');
+    
+    const user = getAuth().currentUser;
+    if (user && resultData) {
+      await logMockResultToD1(
+        user.uid,
+        resultData.testName || 'Unknown',
+        resultData.totalQuestions || 0,
+        resultData.correct || 0,
+        resultData.incorrect || 0,
+        resultData.unanswered || 0,
+        resultData.score || 0,
+        resultData.timeTaken || 0
+      );
+    }
+  } catch (e) {
+    console.error('Error logging to D1:', e);
+  }
 }

@@ -32,17 +32,35 @@ function FileViewer() {
 
   const actualFileId = fileId || searchParams.get('fileId');
 
-  const checkPurchasedFile = async (userId, fileIdentifier) => {
-    if (!userId) return false;
-    try {
-      const userDoc = await getDoc(doc(db, 'users', userId));
-      const purchasedFiles = userDoc.data()?.purchasedFiles || [];
-      return purchasedFiles.includes(fileIdentifier);
-    } catch (error) {
-      console.error('Error checking purchased file:', error);
-      return false;
+  // 🔥 CHECK PURCHASED FROM D1 (Primary) + Firestore (Backup)
+const checkPurchasedFile = async (userId, fileIdentifier) => {
+  if (!userId) return false;
+  
+  try {
+    // First check D1
+    const { checkPurchasedInD1 } = await import('../services/d1Service');
+    const d1Result = await checkPurchasedInD1(userId, fileIdentifier);
+    
+    if (d1Result.success && d1Result.purchased) {
+      console.log('✅ File found in D1 purchases');
+      return true;
     }
-  };
+    
+    // Fallback to Firestore
+    const userDoc = await getDoc(doc(db, 'users', userId));
+    const purchasedFiles = userDoc.data()?.purchasedFiles || [];
+    const isPurchased = purchasedFiles.includes(fileIdentifier);
+    
+    if (isPurchased) {
+      console.log('✅ File found in Firestore purchases');
+    }
+    
+    return isPurchased;
+  } catch (error) {
+    console.error('Error checking purchased file:', error);
+    return false;
+  }
+};
 
   useEffect(() => {
     if (actualFileId) {

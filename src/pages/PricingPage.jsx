@@ -7,7 +7,7 @@ import { loadRazorpayScript, createRazorpayOrder, logPaymentEvent } from "../ser
 import { db } from '../config/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { CreditCard, ShoppingCart, Trash2, Zap, Check, Crown, Calendar, Lock } from 'lucide-react';
-import { savePurchaseToD1 } from '../services/purchaseD1Service';
+import { logPaymentToD1 } from '../services/d1Service';
 
 function PricingPage() {
   const { user, isSubscribed, subscriptionType, updateSubscription } = useAuth();
@@ -275,6 +275,17 @@ const handleSingleCheckout = async (item) => {
     const order = await createRazorpayOrder(item.price);
     console.log('Order created:', order.id);
     
+    // Log to D1
+    await logPaymentToD1({
+      userId: user.uid,
+      userEmail: user.email,
+      event: 'single_checkout_initiated',
+      plan: item.name,
+      amount: item.price,
+      status: 'pending',
+      orderId: order.id
+    });
+    
     const options = {
       key: 'rzp_live_SiS2QOdZl6zCUx',
       amount: order.amount,
@@ -288,24 +299,9 @@ const handleSingleCheckout = async (item) => {
         console.log('Payment ID:', response.razorpay_payment_id);
         console.log('Order ID:', response.razorpay_order_id);
         
-        // 1. Save to Firestore
+        // 🔥 1. Save to D1 Database (Primary)
         try {
-          const { doc, updateDoc, arrayUnion, serverTimestamp } = await import('firebase/firestore');
-          const { db } = await import('../config/firebase');
-          
-          const userRef = doc(db, 'users', user.uid);
-          await updateDoc(userRef, {
-            purchasedFiles: arrayUnion(item.id),
-            lastPurchaseAt: serverTimestamp()
-          });
-          console.log('✅ Firestore updated');
-        } catch (firestoreError) {
-          console.error('❌ Firestore error:', firestoreError);
-        }
-        
-        // 2. Save to D1 Database
-        try {
-          const { savePurchaseToD1 } = await import('../services/purchaseD1Service');
+          const { savePurchaseToD1 } = await import('../services/d1Service');
           const d1Result = await savePurchaseToD1({
             userId: user.uid,
             fileId: item.id,
@@ -320,12 +316,42 @@ const handleSingleCheckout = async (item) => {
           console.error('❌ D1 error:', d1Error);
         }
         
-        // 3. Remove from cart
+        // 🔥 2. Save to Firestore (Backup - only purchasedFiles array)
+        try {
+          const { doc, updateDoc, arrayUnion, serverTimestamp } = await import('firebase/firestore');
+          const { db } = await import('../config/firebase');
+          
+          const userRef = doc(db, 'users', user.uid);
+          await updateDoc(userRef, {
+            purchasedFiles: arrayUnion(item.id),
+            lastPurchaseAt: serverTimestamp()
+          });
+          console.log('✅ Firestore updated with purchasedFiles');
+        } catch (firestoreError) {
+          console.error('❌ Firestore error:', firestoreError);
+        }
+        
+        // 🔥 3. Log payment success to D1
+        await logPaymentToD1({
+          userId: user.uid,
+          userEmail: user.email,
+          event: 'payment_success',
+          plan: item.name,
+          amount: item.price,
+          status: 'success',
+          paymentId: response.razorpay_payment_id,
+          orderId: response.razorpay_order_id
+        });
+        
+        // 🔥 4. Remove from cart
         removeFromCart(item.id);
         
         alert(`Successfully purchased "${item.name}"! 🎉`);
         
-        // 4. Redirect to saved files
+        // 🔥 5. Clear any cached purchase status from localStorage
+        localStorage.removeItem(`purchased_${item.id}`);
+        
+        // 🔥 6. Redirect to saved files
         window.location.href = '/saved-files';
       },
       modal: {
@@ -346,8 +372,16 @@ const handleSingleCheckout = async (item) => {
     
   } catch (error) {
     console.error('❌ Payment error:', error);
+    await logPaymentToD1({
+      userId: user.uid,
+      userEmail: user.email,
+      event: 'payment_error',
+      plan: item.name,
+      amount: item.price,
+      status: 'failed',
+      error: error.message
+    });
     alert('Purchase failed. Please try again.');
-  } finally {
     setLoading(false);
   }
 };

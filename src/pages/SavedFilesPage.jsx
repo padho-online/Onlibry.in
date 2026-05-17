@@ -61,24 +61,24 @@ function SavedFilesPage() {
 const loadPurchasedItems = async () => {
   setLoadingPurchased(true);
   try {
-    // 🔥 Get purchases from D1 database
-    const { getUserPurchasesFromD1 } = await import('../services/purchaseD1Service');
+    // 🔥 PRIMARY: Get purchases from D1 database
+    const { getUserPurchasesFromD1 } = await import('../services/d1Service');
     const d1Purchases = await getUserPurchasesFromD1(user.uid);
     console.log('📊 D1 Purchases:', d1Purchases);
     
     // Get file IDs from D1 purchases
-    const purchasedFileIds = d1Purchases
+    const purchasedFileIds = (d1Purchases.success ? d1Purchases.purchases : [])
       .filter(p => p.item_type === 'file')
       .map(p => p.file_id);
     console.log('📊 Purchased file IDs from D1:', purchasedFileIds);
     
-    // Also get from Firestore as backup
+    // 🔥 SECONDARY: Also get from Firestore as backup
     const userDoc = await getDoc(doc(db, 'users', user.uid));
     const userData = userDoc.data();
     const firestorePurchasedIds = userData?.purchasedFiles || [];
     console.log('📊 Firestore purchased IDs:', firestorePurchasedIds);
     
-    // Merge both sources
+    // Merge both sources (D1 primary, Firestore backup)
     const allPurchasedIds = [...new Set([...purchasedFileIds, ...firestorePurchasedIds])];
     console.log('📊 All purchased IDs (merged):', allPurchasedIds);
     
@@ -86,18 +86,27 @@ const loadPurchasedItems = async () => {
     const quizData = userData?.purchasedQuizzes || [];
     const hasSubscription = isSubscribed;
 
-    // Load purchased files
+    // Load purchased files from sheet/D1 files table
     if (allPurchasedIds.length > 0) {
-      const allFiles = await getAllFilesFromSheet();
-      console.log('📊 Total files in sheet:', allFiles.length);
+      const { getFilesFromD1 } = await import('../services/d1Service');
       
-      const files = allPurchasedIds.map(id => {
-        const found = allFiles.find(f => f.id === id || f.cloudflareKey === id);
-        if (!found) {
-          console.log('⚠️ File not found for ID:', id);
+      // Fetch files one by one from D1
+      const files = [];
+      for (const id of allPurchasedIds) {
+        const result = await getFilesFromD1(1, 1, '');
+        if (result.success && result.files) {
+          const found = result.files.find(f => f.id === id);
+          if (found) {
+            files.push({
+              id: found.id,
+              name: found.name,
+              type: 'file',
+              cloudflareKey: found.cloudflare_key,
+              price: found.price
+            });
+          }
         }
-        return found;
-      }).filter(Boolean);
+      }
       
       console.log('📊 Purchased files found:', files.length);
       setPurchasedFiles(files);
@@ -128,7 +137,6 @@ const loadPurchasedItems = async () => {
     setLoadingPurchased(false); 
   }
 };
-
 
   const handleRefresh = async () => {
     setRefreshing(true);

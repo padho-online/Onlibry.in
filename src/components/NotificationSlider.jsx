@@ -1,6 +1,6 @@
-// src/components/NotificationSlider.jsx
+// src/components/NotificationSlider.jsx - D1 Database Version
 import React, { useState, useEffect } from 'react';
-import { getSliderCards } from '../services/sliderService';
+import { getSliderCardsFromD1 } from '../services/d1Service';
 
 function NotificationSlider() {
   const [slides, setSlides] = useState([]);
@@ -22,7 +22,7 @@ function NotificationSlider() {
 
   const loadSlides = async () => {
     setLoading(true);
-    const data = await getSliderCards();
+    const data = await getSliderCardsFromD1();
     setSlides(data);
     setLoading(false);
   };
@@ -90,7 +90,7 @@ function NotificationSlider() {
         </div>
       </div>
 
-      {/* Navigation Arrows - Always visible on mobile, visible on hover on desktop */}
+      {/* Navigation Arrows */}
       {slides.length > 1 && (
         <>
           <button 

@@ -1,0 +1,294 @@
+// ============================================
+// Onlibry API Worker - Complete with File Sync
+// ============================================
+
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, X-Admin-Key',
+  'Content-Type': 'application/json'
+};
+
+const ADMIN_SECRET_KEY = "HabibulAdmin@2025";
+const SHEET_API_URL = 'https://script.google.com/macros/s/AKfycbyHujfaaRZTsH6FBKplt4EdpURVrLPC-Efrd1gaQ-NqGQydfhMloAGsnHAaKSdgj0w/exec';
+
+function generateId() {
+  return Date.now().toString(36) + Math.random().toString(36).substring(2, 8);
+}
+
+function isAdminRequest(request) {
+  const adminKey = request.headers.get('X-Admin-Key');
+  return adminKey === ADMIN_SECRET_KEY;
+}
+
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
+    const method = request.method;
+    
+    if (method === 'OPTIONS') {
+      return new Response(null, { status: 204, headers: CORS_HEADERS });
+    }
+    
+    // ============================================
+    // PUBLIC APIs
+    // ============================================
+    
+    // GET /api/quick-access
+    if (method === 'GET' && url.pathname === '/api/quick-access') {
+      try {
+        const result = await env.onlibry_notifications.prepare(
+          `SELECT id, label, icon, path, "order" FROM quick_access_buttons WHERE is_active = 1 ORDER BY "order" ASC`
+        ).all();
+        return new Response(JSON.stringify({ success: true, data: result.results }), { headers: CORS_HEADERS });
+      } catch (error) {
+        return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500, headers: CORS_HEADERS });
+      }
+    }
+    
+    // GET /api/categories
+    if (method === 'GET' && url.pathname === '/api/categories') {
+      try {
+        const result = await env.onlibry_notifications.prepare(
+          `SELECT id, name, slug, color, icon, "order" FROM categories WHERE is_active = 1 ORDER BY "order" ASC`
+        ).all();
+        return new Response(JSON.stringify({ success: true, data: result.results }), { headers: CORS_HEADERS });
+      } catch (error) {
+        return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500, headers: CORS_HEADERS });
+      }
+    }
+    
+    // GET /api/notifications
+    if (method === 'GET' && url.pathname === '/api/notifications') {
+      try {
+        const limit = parseInt(url.searchParams.get('limit') || '5');
+        const result = await env.onlibry_notifications.prepare(
+          `SELECT n.id, n.title, n.content, n.link, n.is_pinned, n.published_at, n.views,
+           c.id as category_id, c.name as category_name, c.color as category_color, c.icon as category_icon
+           FROM notifications n JOIN categories c ON n.category_id = c.id
+           WHERE n.status = 'published' ORDER BY n.is_pinned DESC, n.published_at DESC LIMIT ?`
+        ).bind(limit).all();
+        return new Response(JSON.stringify({ success: true, data: result.results }), { headers: CORS_HEADERS });
+      } catch (error) {
+        return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500, headers: CORS_HEADERS });
+      }
+    }
+    
+    // GET /api/slider-cards
+    if (method === 'GET' && url.pathname === '/api/slider-cards') {
+      try {
+        const result = await env.onlibry_notifications.prepare(
+          `SELECT id, title, description, image_url, link, button_text FROM slider_cards WHERE is_active = 1 ORDER BY "order" ASC`
+        ).all();
+        return new Response(JSON.stringify({ success: true, data: result.results }), { headers: CORS_HEADERS });
+      } catch (error) {
+        return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500, headers: CORS_HEADERS });
+      }
+    }
+    
+    // ============================================
+    // 🔥 FILE SYNC APIs
+    // ============================================
+    
+    // POST /api/files/sync - Sync files from sheet to D1
+    if (method === 'POST' && url.pathname === '/api/files/sync') {
+      try {
+        const sheetResponse = await fetch(`${SHEET_API_URL}?admin=true&t=${Date.now()}`);
+        const sheetData = await sheetResponse.json();
+        
+        if (!sheetData.success || !sheetData.files) {
+          return new Response(JSON.stringify({ success: false, error: 'Failed to fetch from sheet' }), { 
+            headers: CORS_HEADERS 
+          });
+        }
+        
+        const files = sheetData.files;
+        let synced = 0;
+        let failed = 0;
+        
+        for (const file of files) {
+          try {
+            const fileId = file.cloudflareKey || file.id;
+            
+            await env.onlibry_notifications.prepare(`
+              INSERT OR REPLACE INTO files (id, name, size, mime_type, price, is_premium, show_on_website, tags, cloudflare_key, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).bind(
+              fileId,
+              file.name || '',
+              file.size || 0,
+              file.mimeType || 'application/pdf',
+              file.price || 29,
+              file.isPremium ? 1 : 0,
+              file.showOnWebsite ? 1 : 0,
+              file.tagsString || '',
+              file.cloudflareKey || file.id,
+              file.createdAt || new Date().toISOString(),
+              new Date().toISOString()
+            ).run();
+            
+            synced++;
+          } catch (err) {
+            console.error('Failed to sync file:', file.id, err);
+            failed++;
+          }
+        }
+        
+        return new Response(JSON.stringify({ 
+          success: true, 
+          synced: synced, 
+          failed: failed,
+          total: files.length 
+        }), { headers: CORS_HEADERS });
+        
+      } catch (error) {
+        console.error('Sync error:', error);
+        return new Response(JSON.stringify({ success: false, error: error.message }), { 
+          status: 500, 
+          headers: CORS_HEADERS 
+        });
+      }
+    }
+    
+    // GET /api/files - Get all files from D1
+    if (method === 'GET' && url.pathname === '/api/files') {
+      try {
+        const result = await env.onlibry_notifications.prepare(`
+          SELECT * FROM files WHERE show_on_website = 1 ORDER BY name ASC
+        `).all();
+        
+        return new Response(JSON.stringify({ success: true, files: result.results }), { headers: CORS_HEADERS });
+        
+      } catch (error) {
+        return new Response(JSON.stringify({ success: false, error: error.message }), { 
+          status: 500, 
+          headers: CORS_HEADERS 
+        });
+      }
+    }
+    
+    // GET /api/files/:id - Get single file by ID
+    if (method === 'GET' && url.pathname.startsWith('/api/files/') && !url.pathname.includes('/sync')) {
+      const fileId = url.pathname.split('/api/files/')[1];
+      
+      try {
+        const result = await env.onlibry_notifications.prepare(`
+          SELECT * FROM files WHERE id = ? OR cloudflare_key = ?
+        `).bind(fileId, fileId).first();
+        
+        if (!result) {
+          return new Response(JSON.stringify({ success: false, error: 'File not found' }), { 
+            status: 404, 
+            headers: CORS_HEADERS 
+          });
+        }
+        
+        return new Response(JSON.stringify({ success: true, file: result }), { headers: CORS_HEADERS });
+        
+      } catch (error) {
+        return new Response(JSON.stringify({ success: false, error: error.message }), { 
+          status: 500, 
+          headers: CORS_HEADERS 
+        });
+      }
+    }
+    
+    // ============================================
+    // 🔥 PURCHASE APIs
+    // ============================================
+    
+    // POST /api/purchase/save
+    if (method === 'POST' && url.pathname === '/api/purchase/save') {
+      try {
+        const body = await request.json();
+        const { userId, fileId, itemType, itemName, price, paymentId, orderId } = body;
+        
+        if (!userId || !fileId) {
+          return new Response(JSON.stringify({ success: false, error: 'userId and fileId required' }), { 
+            status: 400, headers: CORS_HEADERS 
+          });
+        }
+        
+        const id = generateId();
+        const now = new Date().toISOString();
+        
+        await env.onlibry_notifications.prepare(`
+          INSERT INTO user_purchases (id, user_id, file_id, item_type, item_name, price, payment_id, order_id, purchased_at, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(id, userId, fileId, itemType || 'file', itemName || '', price || 0, paymentId || null, orderId || null, now, now).run();
+        
+        return new Response(JSON.stringify({ success: true, purchaseId: id }), { headers: CORS_HEADERS });
+        
+      } catch (error) {
+        console.error('Save purchase error:', error);
+        return new Response(JSON.stringify({ success: false, error: error.message }), { 
+          status: 500, headers: CORS_HEADERS 
+        });
+      }
+    }
+    
+    // GET /api/purchase/user/:userId
+    if (method === 'GET' && url.pathname.startsWith('/api/purchase/user/')) {
+      const userId = url.pathname.split('/api/purchase/user/')[1];
+      
+      try {
+        const result = await env.onlibry_notifications.prepare(`
+          SELECT * FROM user_purchases WHERE user_id = ? ORDER BY purchased_at DESC
+        `).bind(userId).all();
+        
+        return new Response(JSON.stringify({ success: true, purchases: result.results }), { headers: CORS_HEADERS });
+        
+      } catch (error) {
+        return new Response(JSON.stringify({ success: false, error: error.message }), { 
+          status: 500, headers: CORS_HEADERS 
+        });
+      }
+    }
+    
+    // GET /api/purchase/check
+    if (method === 'GET' && url.pathname === '/api/purchase/check') {
+      const userId = url.searchParams.get('userId');
+      const fileId = url.searchParams.get('fileId');
+      
+      if (!userId || !fileId) {
+        return new Response(JSON.stringify({ success: false, error: 'userId and fileId required' }), { 
+          status: 400, headers: CORS_HEADERS 
+        });
+      }
+      
+      try {
+        const result = await env.onlibry_notifications.prepare(`
+          SELECT * FROM user_purchases WHERE user_id = ? AND file_id = ?
+        `).bind(userId, fileId).first();
+        
+        return new Response(JSON.stringify({ success: true, purchased: !!result }), { headers: CORS_HEADERS });
+        
+      } catch (error) {
+        return new Response(JSON.stringify({ success: false, error: error.message }), { 
+          status: 500, headers: CORS_HEADERS 
+        });
+      }
+    }
+    
+    // ============================================
+    // ADMIN APIs
+    // ============================================
+    
+    if (!isAdminRequest(request)) {
+      return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), { status: 401, headers: CORS_HEADERS });
+    }
+    
+    // GET /api/admin/quick-access/all
+    if (method === 'GET' && url.pathname === '/api/admin/quick-access/all') {
+      try {
+        const result = await env.onlibry_notifications.prepare(`SELECT * FROM quick_access_buttons ORDER BY "order" ASC`).all();
+        return new Response(JSON.stringify({ success: true, data: result.results }), { headers: CORS_HEADERS });
+      } catch (error) {
+        return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500, headers: CORS_HEADERS });
+      }
+    }
+    
+    // 404
+    return new Response(JSON.stringify({ error: 'Not found' }), { status: 404, headers: CORS_HEADERS });
+  }
+};

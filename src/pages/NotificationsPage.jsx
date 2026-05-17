@@ -1,11 +1,10 @@
-// src/pages/NotificationsPage.jsx
+// src/pages/NotificationsPage.jsx - D1 Database Version
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { getAllNotifications } from '../services/notificationService';
-import { getAllCategories } from '../services/categoryService';
+import { getNotificationsFromD1, getCategoriesFromD1 } from '../services/d1Service';
 import NotificationCard from '../components/NotificationCard';
 import { getIconComponent } from '../components/IconPicker';
-import * as Icons from 'lucide-react';
+import { LayoutGrid, ChevronLeft, ChevronRight } from 'lucide-react';
 
 // Get category color class
 const getCategoryColorClass = (color) => {
@@ -51,15 +50,15 @@ function NotificationsPage() {
   }, [pagination.page, activeCategory]);
 
   const loadCategories = async () => {
-    const data = await getAllCategories();
+    const data = await getCategoriesFromD1();
     setCategories(data);
   };
 
   const loadNotifications = async () => {
     setLoading(true);
-    const result = await getAllNotifications(pagination.page, pagination.limit, activeCategory);
-    setNotifications(result.notifications);
-    setPagination(result.pagination);
+    const result = await getNotificationsFromD1(pagination.page, pagination.limit, activeCategory);
+    setNotifications(result.notifications || []);
+    setPagination(result.pagination || { page: 1, limit: 10, total: 0, totalPages: 0 });
     setLoading(false);
   };
 
@@ -71,6 +70,7 @@ function NotificationsPage() {
   const handlePageChange = (newPage) => {
     if (newPage < 1 || newPage > pagination.totalPages) return;
     setSearchParams({ category: activeCategory, page: newPage.toString() });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   return (
@@ -78,12 +78,11 @@ function NotificationsPage() {
       {/* Header */}
       <div className="text-center mb-6">
         <h1 className="text-2xl md:text-3xl font-bold text-gray-800 mb-2">
-          Notifications📢
+          Notifications 📢
         </h1>
-    
       </div>
 
-      {/* Category Tabs - Scrollable Horizontal */}
+      {/* Category Tabs */}
       <div className="mb-6">
         <div className="overflow-x-auto scrollbar-thin pb-2">
           <div className="flex gap-2 min-w-max">
@@ -95,12 +94,12 @@ function NotificationsPage() {
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
-              <Icons.LayoutGrid size={14} />
+              <LayoutGrid size={14} />
               All
             </button>
             
             {categories.map((category) => {
-              const IconComponent = getIconComponent(category.icon, Icons.Bell);
+              const IconComponent = getIconComponent(category.icon);
               const isActive = activeCategory === category.slug;
               return (
                 <button
@@ -112,7 +111,7 @@ function NotificationsPage() {
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
                 >
-                  <IconComponent size={14} />
+                  {IconComponent && <IconComponent size={14} />}
                   {category.name}
                 </button>
               );
@@ -145,7 +144,7 @@ function NotificationsPage() {
         </div>
       ) : notifications.length === 0 ? (
         <div className="text-center py-12 bg-gray-50 rounded-xl">
-          <Icons.BellOff size={48} className="mx-auto text-gray-300 mb-3" />
+          <LayoutGrid size={48} className="mx-auto text-gray-300 mb-3" />
           <p className="text-gray-500 text-lg">No notifications found</p>
           <p className="text-sm text-gray-400 mt-1">
             {activeCategory !== 'all' ? 'Try changing the category filter' : 'Check back later for updates'}
@@ -179,7 +178,7 @@ function NotificationsPage() {
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
-            <Icons.ChevronLeft size={14} />
+            <ChevronLeft size={14} />
             Previous
           </button>
           
@@ -197,7 +196,7 @@ function NotificationsPage() {
             }`}
           >
             Next
-            <Icons.ChevronRight size={14} />
+            <ChevronRight size={14} />
           </button>
         </div>
       )}

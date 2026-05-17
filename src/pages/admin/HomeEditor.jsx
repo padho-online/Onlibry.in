@@ -1,38 +1,35 @@
-// src/pages/admin/HomeEditor.jsx
+// src/pages/admin/HomeEditor.jsx - D1 Database Version
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { 
-  getQuickAccessButtons, 
-  updateQuickAccessButton,
-  addQuickAccessButton,
-  deleteQuickAccessButton,
-  reorderQuickAccessButtons
-} from '../../services/quickAccessService';
-import { 
-  getAllCategories,
-  addCategory,
-  updateCategory,
-  deleteCategory
-} from '../../services/categoryService';
-import {
-  getAllNotificationsAdmin,
-  createNotification,
-  updateNotification,
-  deleteNotification
-} from '../../services/notificationService';
-import {
-  getSliderCards,
-  updateSliderCard,
-  addSliderCard,
-  deleteSliderCard,
-  reorderSliderCards
-} from '../../services/sliderService';
+  getAllQuickAccessAdminFromD1,
+  addQuickAccessButtonToD1,
+  updateQuickAccessButtonInD1,
+  deleteQuickAccessButtonFromD1,
+  reorderQuickAccessButtonsInD1,
+  getAllCategoriesAdminFromD1,
+  addCategoryToD1,
+  updateCategoryInD1,
+  deleteCategoryFromD1,
+  getAllNotificationsAdminFromD1,
+  createNotificationInD1,
+  updateNotificationInD1,
+  deleteNotificationFromD1,
+  getAllSliderCardsAdminFromD1,
+  addSliderCardToD1,
+  updateSliderCardInD1,
+  deleteSliderCardFromD1,
+  reorderSliderCardsInD1
+} from '../../services/d1Service';
 import * as Icons from 'lucide-react';
 import IconPicker, { AVAILABLE_ICONS, CATEGORY_ICONS, getIconComponent } from '../../components/IconPicker';
 
 // Cloudinary configuration
 const CLOUDINARY_CLOUD_NAME = 'djnwoi3hk';
 const CLOUDINARY_UPLOAD_PRESET = 'onlibry_blog';
+
+// Get admin key from env
+const ADMIN_KEY = import.meta.env.VITE_NOTIFICATION_ADMIN_KEY || 'HabibulAdmin@2025';
 
 function HomeEditor() {
   const { user } = useAuth();
@@ -134,22 +131,22 @@ function HomeEditor() {
   };
 
   const loadButtons = async () => {
-    const data = await getQuickAccessButtons(true);
+    const data = await getAllQuickAccessAdminFromD1(ADMIN_KEY);
     setButtons(data);
   };
 
   const loadCategories = async () => {
-    const data = await getAllCategories(true);
+    const data = await getAllCategoriesAdminFromD1(ADMIN_KEY);
     setCategories(data);
   };
 
   const loadNotifications = async () => {
-    const data = await getAllNotificationsAdmin();
+    const data = await getAllNotificationsAdminFromD1(ADMIN_KEY);
     setNotifications(data);
   };
 
   const loadSliderCards = async () => {
-    const data = await getSliderCards(true);
+    const data = await getAllSliderCardsAdminFromD1(ADMIN_KEY);
     setSliderCards(data);
   };
 
@@ -159,9 +156,9 @@ function HomeEditor() {
   
   const handleSaveButton = async () => {
     if (editingButton) {
-      await updateQuickAccessButton(editingButton.id, buttonForm);
+      await updateQuickAccessButtonInD1(editingButton.id, buttonForm, ADMIN_KEY);
     } else {
-      await addQuickAccessButton(buttonForm);
+      await addQuickAccessButtonToD1(buttonForm, ADMIN_KEY);
     }
     setEditingButton(null);
     setButtonForm({ label: '', icon: 'Folder', path: '', order: 0 });
@@ -170,7 +167,7 @@ function HomeEditor() {
 
   const handleDeleteButton = async (id) => {
     if (window.confirm('Delete this button?')) {
-      await deleteQuickAccessButton(id);
+      await deleteQuickAccessButtonFromD1(id, ADMIN_KEY);
       await loadButtons();
     }
   };
@@ -194,16 +191,14 @@ function HomeEditor() {
     newButtons[index] = newButtons[index - 1];
     newButtons[index - 1] = temp;
     
-    // Update order numbers
     const updatedButtons = newButtons.map((btn, idx) => ({ ...btn, order: idx + 1 }));
     setButtons(updatedButtons);
     
     setReordering(true);
-    await reorderQuickAccessButtons(updatedButtons);
+    await reorderQuickAccessButtonsInD1(updatedButtons, ADMIN_KEY);
     setReordering(false);
   };
 
-  // Move button down (increase order)
   const moveButtonDown = async (index) => {
     if (index === buttons.length - 1) return;
     
@@ -212,12 +207,11 @@ function HomeEditor() {
     newButtons[index] = newButtons[index + 1];
     newButtons[index + 1] = temp;
     
-    // Update order numbers
     const updatedButtons = newButtons.map((btn, idx) => ({ ...btn, order: idx + 1 }));
     setButtons(updatedButtons);
     
     setReordering(true);
-    await reorderQuickAccessButtons(updatedButtons);
+    await reorderQuickAccessButtonsInD1(updatedButtons, ADMIN_KEY);
     setReordering(false);
   };
 
@@ -227,9 +221,9 @@ function HomeEditor() {
   
   const handleSaveCategory = async () => {
     if (editingCategory) {
-      await updateCategory(editingCategory.id, categoryForm);
+      await updateCategoryInD1(editingCategory.id, categoryForm, ADMIN_KEY);
     } else {
-      await addCategory(categoryForm);
+      await addCategoryToD1(categoryForm, ADMIN_KEY);
     }
     setEditingCategory(null);
     setCategoryForm({ name: '', slug: '', color: 'gray', icon: 'Bell', order: 0 });
@@ -238,7 +232,7 @@ function HomeEditor() {
 
   const handleDeleteCategory = async (id) => {
     if (window.confirm('Delete this category? All notifications in this category will be affected.')) {
-      await deleteCategory(id);
+      await deleteCategoryFromD1(id, ADMIN_KEY);
       await loadCategories();
     }
   };
@@ -260,9 +254,9 @@ function HomeEditor() {
   
   const handleSaveNotification = async () => {
     if (editingNotification) {
-      await updateNotification(editingNotification.id, notificationForm);
+      await updateNotificationInD1(editingNotification.id, notificationForm, ADMIN_KEY);
     } else {
-      await createNotification(notificationForm);
+      await createNotificationInD1(notificationForm, ADMIN_KEY);
     }
     setEditingNotification(null);
     setShowNotifModal(false);
@@ -272,7 +266,7 @@ function HomeEditor() {
 
   const handleDeleteNotification = async (id) => {
     if (window.confirm('Delete this notification?')) {
-      await deleteNotification(id);
+      await deleteNotificationFromD1(id, ADMIN_KEY);
       await loadNotifications();
     }
   };
@@ -297,9 +291,9 @@ function HomeEditor() {
   
   const handleSaveCard = async () => {
     if (editingCard) {
-      await updateSliderCard(editingCard.id, cardForm);
+      await updateSliderCardInD1(editingCard.id, cardForm, ADMIN_KEY);
     } else {
-      await addSliderCard(cardForm);
+      await addSliderCardToD1(cardForm, ADMIN_KEY);
     }
     setEditingCard(null);
     setShowCardModal(false);
@@ -309,7 +303,7 @@ function HomeEditor() {
 
   const handleDeleteCard = async (id) => {
     if (window.confirm('Delete this slider card?')) {
-      await deleteSliderCard(id);
+      await deleteSliderCardFromD1(id, ADMIN_KEY);
       await loadSliderCards();
     }
   };
@@ -338,7 +332,7 @@ function HomeEditor() {
     
     const updatedCards = newCards.map((card, idx) => ({ ...card, order: idx + 1 }));
     setSliderCards(updatedCards);
-    await reorderSliderCards(updatedCards);
+    await reorderSliderCardsInD1(updatedCards, ADMIN_KEY);
   };
 
   // Color options for categories
@@ -366,7 +360,7 @@ function HomeEditor() {
       {/* Hidden file input for image upload */}
       <input type="file" ref={fileInputRef} accept="image/*" style={{ display: 'none' }} onChange={handleImageUpload} />
 
-           {/* Tabs - Horizontal Scrollable for Mobile */}
+      {/* Tabs - Horizontal Scrollable for Mobile */}
       <div className="flex gap-2 mb-6 border-b border-gray-200 pb-3 overflow-x-auto scrollbar-thin">
         <button onClick={() => setActiveTab('buttons')} className={`px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap ${activeTab === 'buttons' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
           🔘 Quick Access Buttons
@@ -406,7 +400,6 @@ function HomeEditor() {
                 className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
               />
               
-              {/* Icon Picker - Using Reusable Component */}
               <IconPicker
                 value={buttonForm.icon}
                 onChange={(iconName) => setButtonForm({ ...buttonForm, icon: iconName })}
@@ -476,10 +469,10 @@ function HomeEditor() {
                             </button>
                           </div>
                         </div>
-                       </td>
+                      </td>
                       <td className="p-3">
                         {IconComponent ? <IconComponent size={20} className="text-green-600" /> : <Icons.Folder size={20} className="text-green-600" />}
-                       </td>
+                      </td>
                       <td className="p-3 font-medium">{btn.label}</td>
                       <td className="p-3 text-gray-500">{btn.path}</td>
                       <td className="p-3">
@@ -535,7 +528,6 @@ function HomeEditor() {
                 ))}
               </select>
               
-              {/* Category Icon Picker */}
               <IconPicker
                 value={categoryForm.icon}
                 onChange={(iconName) => setCategoryForm({ ...categoryForm, icon: iconName })}
@@ -577,7 +569,7 @@ function HomeEditor() {
                     <tr key={cat.id} className="border-b border-gray-200 hover:bg-gray-50">
                       <td className="p-3">
                         {IconComponent ? <IconComponent size={18} className={`text-${cat.color}-600`} /> : <Icons.Bell size={18} className={`text-${cat.color}-600`} />}
-                       </td>
+                      </td>
                       <td className="p-3 font-medium">{cat.name}</td>
                       <td className="p-3 text-gray-500">{cat.slug}</td>
                       <td className="p-3">

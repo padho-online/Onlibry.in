@@ -1,8 +1,9 @@
 // src/pages/NotificationDetailPage.jsx
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getNotificationById } from '../services/notificationService';
+import { getNotificationByIdFromD1 } from '../services/d1Service';
 import { getCategoryColorClass } from '../services/categoryService';
+
 
 function NotificationDetailPage() {
   const { id } = useParams();
@@ -16,17 +17,17 @@ function NotificationDetailPage() {
   }, [id]);
 
   const loadNotification = async () => {
-    setLoading(true);
-    setError(null);
-    const data = await getNotificationById(id);
-    
-    if (data) {
-      setNotification(data);
-    } else {
-      setError('Notification not found');
-    }
-    setLoading(false);
-  };
+  setLoading(true);
+  setError(null);
+  const data = await getNotificationByIdFromD1(id);
+  
+  if (data) {
+    setNotification(data);
+  } else {
+    setError('Notification not found');
+  }
+  setLoading(false);
+};
 
   const formatDate = (dateString) => {
     if (!dateString) return '';

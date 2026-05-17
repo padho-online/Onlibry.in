@@ -1,12 +1,10 @@
-// src/components/FileCard.jsx - Mobile optimized
+// src/components/FileCard.jsx - D1 Database Version
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
-import { saveFile, unsaveFile, isFileSaved, canAccessFile } from '../services/fileService';
-import { db } from '../config/firebase';
-import { doc, getDoc } from 'firebase/firestore';
-import { BookOpenText, ShoppingCart, Trash2, Star, Bookmark, Lock, Unlock } from 'lucide-react';
+import { saveFileToD1, removeSavedFileFromD1, getUserSavedFromD1, checkPurchasedInD1 } from '../services/d1Service';
+import { BookOpenText, ShoppingCart, Trash2, Star, Bookmark, Lock } from 'lucide-react';
 
 const WORKER_URL = import.meta.env.VITE_CLOUDFLARE_WORKER_URL;
 
@@ -21,13 +19,29 @@ function FileCard({ file }) {
   const [isPurchased, setIsPurchased] = useState(false);
   const [checkingPurchase, setCheckingPurchase] = useState(true);
 
+  // 🔥 CHECK PURCHASED FROM D1
   const checkPurchasedFile = async (userId, fileId) => {
     if (!userId) return false;
     try {
-      const userDoc = await getDoc(doc(db, 'users', userId));
-      const purchasedFiles = userDoc.data()?.purchasedFiles || [];
-      return purchasedFiles.includes(fileId);
+      const result = await checkPurchasedInD1(userId, fileId);
+      return result.success ? result.purchased : false;
     } catch (error) {
+      console.error('Error checking purchased file from D1:', error);
+      return false;
+    }
+  };
+
+  // 🔥 CHECK SAVED FROM D1
+  const checkSavedFile = async (userId, fileId) => {
+    if (!userId) return false;
+    try {
+      const result = await getUserSavedFromD1(userId);
+      if (result.success && result.saved) {
+        return result.saved.some(s => s.file_id === fileId);
+      }
+      return false;
+    } catch (error) {
+      console.error('Error checking saved file from D1:', error);
       return false;
     }
   };
@@ -36,10 +50,15 @@ function FileCard({ file }) {
     const checkStatus = async () => {
       if (user) {
         try {
-          const saved = await isFileSaved(file.id);
+          // Check if file is saved
+          const saved = await checkSavedFile(user.uid, file.id);
           setIsSaved(saved);
-          const purchased = await checkPurchasedFile(user.uid, file.id);
-          setIsPurchased(purchased);
+          
+          // Check if file is purchased (only for premium files)
+          if (file.isPremium) {
+            const purchased = await checkPurchasedFile(user.uid, file.id);
+            setIsPurchased(purchased);
+          }
         } catch (error) {
           console.error('Error checking status:', error);
         } finally {
@@ -51,7 +70,7 @@ function FileCard({ file }) {
       setInCart(isInCart(file.id));
     };
     checkStatus();
-  }, [file.id, user]);
+  }, [file.id, file.isPremium, user]);
 
   const handleView = () => {
     if (!user) {
@@ -106,6 +125,7 @@ function FileCard({ file }) {
     setInCart(false);
   };
 
+  // 🔥 SAVE/UNSAVE USING D1
   const handleSaveToggle = async (e) => {
     e.stopPropagation();
     if (!user) {
@@ -116,11 +136,17 @@ function FileCard({ file }) {
     setIsSaving(true);
     try {
       if (isSaved) {
-        await unsaveFile(file.id);
-        setIsSaved(false);
+        // Remove from saved
+        const result = await removeSavedFileFromD1(user.uid, file.id);
+        if (result.success) {
+          setIsSaved(false);
+        }
       } else {
-        await saveFile(file.id);
-        setIsSaved(true);
+        // Add to saved
+        const result = await saveFileToD1(user.uid, file.id, file.name);
+        if (result.success) {
+          setIsSaved(true);
+        }
       }
     } catch (error) {
       console.error('Save error:', error);
@@ -158,7 +184,7 @@ function FileCard({ file }) {
       <div className="flex flex-wrap gap-1 mb-2">
         {tags.slice(0, 2).map((tag, idx) => (
           <span key={idx} className="px-1.5 py-0.5 text-[9px] bg-gray-100 text-gray-500 rounded-full truncate max-w-[80px]">
-            {tag}
+            {tag.trim()}
           </span>
         ))}
       </div>
@@ -177,7 +203,9 @@ function FileCard({ file }) {
     <div className="bg-white rounded-xl shadow-md hover:shadow-lg transition border border-gray-200">
       <div className="p-3">
         <div className="flex justify-between items-start mb-1">
-          <h3 className="text-sm font-semibold text-gray-800 line-clamp-2 flex-1">{file.name}</h3>
+          <h3 className="text-sm font-semibold text-gray-800 line-clamp-2 flex-1" title={file.name}>
+            {file.name}
+          </h3>
           <span className={`ml-1 px-1.5 py-0.5 text-[9px] font-semibold rounded-full whitespace-nowrap ${file.isPremium ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700'}`}>
             {file.isPremium ? `₹${file.price || 29}` : 'Free'}
           </span>
@@ -202,7 +230,11 @@ function FileCard({ file }) {
             disabled={isSaving}
             className={`px-2 py-1.5 rounded-lg transition flex items-center justify-center ${isSaved ? 'bg-yellow-500 text-white' : 'bg-gray-100 text-gray-600'}`}
           >
-            {isSaving ? <div className="w-3 h-3 border-2 border-gray-500 border-t-transparent rounded-full animate-spin"></div> : (isSaved ? <Star size={14} fill="currentColor" /> : <Bookmark size={14} />)}
+            {isSaving ? (
+              <div className="w-3 h-3 border-2 border-gray-500 border-t-transparent rounded-full animate-spin"></div>
+            ) : (
+              isSaved ? <Star size={14} fill="currentColor" /> : <Bookmark size={14} />
+            )}
           </button>
         </div>
       </div>

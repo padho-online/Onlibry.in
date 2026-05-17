@@ -1,7 +1,7 @@
-// src/components/QuickAccessButtons.jsx
+// src/components/QuickAccessButtons.jsx - D1 Database Version
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { getQuickAccessButtons } from '../services/quickAccessService';
+import { getQuickAccessFromD1 } from '../services/d1Service';
 import { getIconComponent } from './IconPicker';
 
 function QuickAccessButtons() {
@@ -14,15 +14,15 @@ function QuickAccessButtons() {
 
   const loadButtons = async () => {
     setLoading(true);
-    const data = await getQuickAccessButtons();
+    const data = await getQuickAccessFromD1();
     setButtons(data);
     setLoading(false);
   };
 
   if (loading) {
     return (
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 mb-6">
-        {[1, 2, 3, 4, 5].map((i) => (
+      <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-3 gap-3 mb-8">
+        {[1, 2, 3, 4, 5, 6].map((i) => (
           <div key={i} className="bg-gray-200 rounded-xl p-4 animate-pulse h-20"></div>
         ))}
       </div>

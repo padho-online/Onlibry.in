@@ -1,7 +1,7 @@
-// src/components/NotificationSection.jsx
+// src/components/NotificationSection.jsx - D1 Database Version
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { getLatestNotifications } from '../services/notificationService';
+import { getLatestNotificationsFromD1 } from '../services/d1Service';
 import NotificationCard from './NotificationCard';
 
 function NotificationSection() {
@@ -14,7 +14,7 @@ function NotificationSection() {
 
   const loadNotifications = async () => {
     setLoading(true);
-    const data = await getLatestNotifications(5);
+    const data = await getLatestNotificationsFromD1(5);
     setNotifications(data);
     setLoading(false);
   };

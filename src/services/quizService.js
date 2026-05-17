@@ -1,13 +1,16 @@
-// src/services/quizService.js
-// UPDATED - With premium access based on Instructions column
+// src/services/quizService.js - D1 for list, Sheet for questions
+import { getQuizzesFromD1 } from './d1Service';
 
+// Google Sheet API for questions (keep existing)
 const QUIZ_API_URL = 'https://script.google.com/macros/s/AKfycbw_EQodhlBjNO4sEdCftz-n7WYtIvLbbJsKxVMEkp-g7EtyqJszETsSiKjSQisel8DC4A/exec';
 
-// Cache
+// Cache for questions (to reduce API calls)
+let questionCache = new Map();
 let cachedPapers = null;
 let lastFetchTime = null;
 let pendingRequest = null;
-const CACHE_DURATION = 10 * 60 * 1000;
+const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
+const QUESTION_CACHE_DURATION = 60 * 60 * 1000; // 1 hour
 
 function isCacheValid() {
   if (!cachedPapers || !lastFetchTime) return false;
@@ -19,16 +22,17 @@ export function invalidateQuizCache() {
   cachedPapers = null;
   lastFetchTime = null;
   pendingRequest = null;
+  questionCache.clear();
 }
 
 // ============================================
-// MAIN FUNCTION - Get all quiz papers
+// GET ALL PAPERS FROM D1
 // ============================================
 export async function getAllPapers(forceRefresh = false) {
   if (forceRefresh) invalidateQuizCache();
   
   if (isCacheValid() && cachedPapers) {
-    console.log('📦 Using cached quiz papers');
+    console.log('📦 Using cached quiz papers from D1');
     return cachedPapers;
   }
   
@@ -38,82 +42,42 @@ export async function getAllPapers(forceRefresh = false) {
   
   pendingRequest = (async () => {
     try {
-      console.log('📡 Fetching quizzes from Google Sheet...');
-      const response = await fetch(`${QUIZ_API_URL}?action=getAllExams`);
-      const data = await response.json();
+      console.log('📡 Fetching quizzes from D1...');
+      const result = await getQuizzesFromD1();
       
-      if (data.status !== 'success') {
-        throw new Error(data.message || 'Failed to load quizzes');
+      if (result.success && result.quizzes) {
+        const papers = result.quizzes.map(quiz => ({
+          id: quiz.id,
+          originalName: quiz.name,
+          displayName: quiz.display_name || quiz.name,
+          category: quiz.category || 'General',
+          subCategory: quiz.sub_category || '',
+          duration: quiz.duration || 30,
+          positiveMark: quiz.positive_mark || 1,
+          negativeMark: quiz.negative_mark || 0,
+          isFree: quiz.is_free === 1,
+          price: quiz.price || 29,
+          totalQuestions: quiz.total_questions || 0,
+          sheetName: quiz.sheet_name || quiz.name,
+          instructions: quiz.instructions || '',
+          displayPrice: quiz.is_free === 1 ? 'Free' : `₹${quiz.price || 29}`,
+          link: quiz.link || null
+        }));
+        
+        console.log('✅ Quizzes from D1:', papers.length);
+        console.log('✅ Free:', papers.filter(p => p.isFree).length);
+        console.log('✅ Premium:', papers.filter(p => !p.isFree).length);
+        
+        cachedPapers = papers;
+        lastFetchTime = Date.now();
+        return papers;
       }
       
-      const rawExams = data.exams || [];
-      console.log('✅ Raw quizzes count:', rawExams.length);
-      
-      // Process papers
-      const papers = rawExams.map(exam => {
-        const examName = exam.ExamName || exam.examName || exam.name || '';
-        const duration = parseInt(exam.Duration || exam.duration || '30');
-        const positiveMark = parseFloat(exam.PositiveMark || exam.positiveMark || '1');
-        const negativeMark = parseFloat(exam.NegativeMark || exam.negativeMark || '0');
-        const instructions = exam.Instructions || exam.instructions || '';
-        
-        if (!examName) return null;
-        
-        // 🔥 NEW: Parse price from Instructions column
-        let price = null;
-        let isFree = true;
-        let displayPrice = 'Free';
-        
-        // Check for price pattern like "₹99" or "99" or "Rs. 99"
-        const priceMatch = instructions.match(/₹?\s*(\d+)/);
-        if (priceMatch && !instructions.toLowerCase().includes('free')) {
-          price = parseInt(priceMatch[1]);
-          isFree = false;
-          displayPrice = `₹${price}`;
-        }
-        
-        // Parse like "QUIZ BATTLE|Saturday|13/9/2025|English"
-        const parts = examName.split('|').map(p => p.trim());
-        const category = parts[0];      // QUIZ BATTLE
-        const subCategory = parts[1] || null;  // Saturday
-        const extra = parts[2] || null;  // 13/9/2025
-        const extra2 = parts[3] || null; // English
-        
-        // Simple display - just join all non-empty parts with " - "
-        const allParts = [category, subCategory, extra, extra2].filter(p => p && p.trim());
-        let displayName = allParts.join(' - ');
-        if (!displayName) displayName = category;
-        
-        return {
-          id: examName.toLowerCase().replace(/\|/g, '-').replace(/\s+/g, '-'),
-          originalName: examName,
-          displayName: displayName,
-          category: category,
-          subCategory: subCategory,
-          extra: extra,
-          extra2: extra2,
-          duration: duration,
-          positiveMark: positiveMark,
-          negativeMark: negativeMark,
-          instructions: instructions,
-          price: price,
-          isFree: isFree,
-          displayPrice: displayPrice,
-          link: exam.Link || exam.link || null
-        };
-      }).filter(p => p !== null);
-      
-      console.log('✅ Processed quiz papers:', papers.length);
-      console.log('✅ Free quizzes:', papers.filter(p => p.isFree).length);
-      console.log('✅ Premium quizzes:', papers.filter(p => !p.isFree).length);
-      console.log('✅ Quiz categories:', [...new Set(papers.map(p => p.category))]);
-      
-      cachedPapers = papers;
-      lastFetchTime = Date.now();
-      return papers;
+      console.warn('No quizzes from D1, returning empty array');
+      return [];
       
     } catch (error) {
-      console.error("Error fetching quizzes:", error);
+      console.error("Error fetching quizzes from D1:", error);
       return cachedPapers || [];
     } finally {
       pendingRequest = null;
@@ -124,28 +88,36 @@ export async function getAllPapers(forceRefresh = false) {
 }
 
 // ============================================
-// Get quiz data (questions)
+// GET QUIZ DATA (QUESTIONS FROM SHEET - SAME AS BEFORE)
 // ============================================
 export async function getQuizData(quizName, forceRefresh = false) {
   try {
-    console.log(`📡 Fetching quiz data for: ${quizName}`);
+    // Check question cache first
+    if (!forceRefresh && questionCache.has(quizName)) {
+      console.log(`📦 Using cached questions for quiz: ${quizName}`);
+      return questionCache.get(quizName);
+    }
+    
+    console.log(`📡 Fetching questions from sheet for quiz: ${quizName}`);
     const url = `${QUIZ_API_URL}?action=getExamData&examName=${encodeURIComponent(quizName)}`;
-    console.log(`📡 URL: ${url}`);
     
     const response = await fetch(url);
     const data = await response.json();
-    
-    console.log(`📡 Response status:`, data.status);
-    console.log(`📡 Questions count:`, data.questions?.length || 0);
     
     if (data.status !== 'success') {
       throw new Error(data.message || 'Failed to load quiz data');
     }
     
-    return {
+    const quizData = {
       questions: data.questions || [],
       config: data.config || { Duration: 30, PositiveMark: 1, NegativeMark: 0 }
     };
+    
+    // Cache questions for 1 hour
+    questionCache.set(quizName, quizData);
+    setTimeout(() => questionCache.delete(quizName), QUESTION_CACHE_DURATION);
+    
+    return quizData;
   } catch (error) {
     console.error("Error fetching quiz data:", error);
     return { questions: [], config: { Duration: 30, PositiveMark: 1, NegativeMark: 0 } };
@@ -153,7 +125,7 @@ export async function getQuizData(quizName, forceRefresh = false) {
 }
 
 // ============================================
-// Get all categories
+// GET ALL CATEGORIES (from D1 data)
 // ============================================
 export async function getAllCategories() {
   const papers = await getAllPapers();
@@ -162,7 +134,7 @@ export async function getAllCategories() {
 }
 
 // ============================================
-// Get sub-categories for a category
+// GET SUB-CATEGORIES (from D1 data)
 // ============================================
 export async function getSubCategoriesForCategory(categoryName) {
   const papers = await getAllPapers();
@@ -174,23 +146,21 @@ export async function getSubCategoriesForCategory(categoryName) {
 }
 
 // ============================================
-// Check if user can access quiz
+// CHECK ACCESS (from D1 data)
 // ============================================
 export async function canAccessQuiz(quizName, userIsSubscribed = false) {
   const papers = await getAllPapers();
   const quiz = papers.find(p => p.originalName === quizName);
-  
   if (!quiz) return false;
   if (quiz.isFree) return true;
   return userIsSubscribed;
 }
 
 // ============================================
-// Legacy exports for compatibility
+// LEGACY EXPORTS (for compatibility)
 // ============================================
 export async function getAllQuizzes(forceRefresh = false) {
-  const papers = await getAllPapers(forceRefresh);
-  return papers;
+  return await getAllPapers(forceRefresh);
 }
 
 export async function processQuizPapersWithCache() {
@@ -212,4 +182,26 @@ export async function refreshQuizzes() {
 
 export async function logQuizResult(resultData) {
   console.log('Quiz result logged:', resultData);
+  // Also log to D1 if needed
+  try {
+    const { logQuizResultToD1 } = await import('./d1Service');
+    const { getAuth } = await import('firebase/auth');
+    const { auth } = await import('../config/firebase');
+    
+    const user = getAuth().currentUser;
+    if (user && resultData) {
+      await logQuizResultToD1(
+        user.uid,
+        resultData.quizName || 'Unknown',
+        resultData.totalQuestions || 0,
+        resultData.correct || 0,
+        resultData.incorrect || 0,
+        resultData.unanswered || 0,
+        resultData.score || 0,
+        resultData.timeTaken || 0
+      );
+    }
+  } catch (e) {
+    console.error('Error logging to D1:', e);
+  }
 }
