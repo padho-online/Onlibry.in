@@ -72,7 +72,7 @@ export const openRazorpayModal = async (options) => {
       currency: order.currency,
       name: 'Onlibry',
       description: `${planName} Subscription`,
-      image: 'https://onlibry.in/logo transparent.png',
+      image: '/logo.png',
       order_id: order.id,
       handler: async (response) => {
         // Payment successful
@@ -138,7 +138,7 @@ export const openFilePurchaseModal = async (options) => {
       currency: order.currency,
       name: 'Onlibry',
       description: `Purchase: ${fileName}`,
-      image: 'https://onlibry.in/logo transparent.png',
+      image: '/logo.png',
       order_id: order.id,
       handler: async (response) => {
         const purchaseData = {
