@@ -111,28 +111,34 @@ export default {
     // ============================================
     
     // POST /api/purchase/save
-    if (method === 'POST' && url.pathname === '/api/purchase/save') {
-      try {
-        const body = await request.json();
-        const { userId, fileId, itemType, itemName, price, paymentId, orderId } = body;
-        
-        if (!userId || !fileId) {
-          return new Response(JSON.stringify({ success: false, error: 'userId and fileId required' }), { status: 400, headers: CORS_HEADERS });
-        }
-        
-        const id = generateId();
-        const now = new Date().toISOString();
-        
-        await db.prepare(`
-          INSERT INTO user_purchases (id, user_id, file_id, item_type, item_name, price, payment_id, order_id, purchased_at, created_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).bind(id, userId, fileId, itemType || 'file', itemName || '', price || 0, paymentId || null, orderId || null, now, now).run();
-        
-        return new Response(JSON.stringify({ success: true, purchaseId: id }), { headers: CORS_HEADERS });
-      } catch (error) {
-        return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500, headers: CORS_HEADERS });
-      }
+if (method === 'POST' && url.pathname === '/api/purchase/save') {
+  try {
+    const body = await request.json();
+    const { userId, fileId, itemType, itemName, price, paymentId, orderId } = body;
+    
+    if (!userId || !fileId) {
+      return new Response(JSON.stringify({ success: false, error: 'userId and fileId required' }), { status: 400, headers: CORS_HEADERS });
     }
+    
+    const id = generateId();
+    const now = new Date().toISOString();
+    
+    // 🔥 Ensure item_type is saved correctly
+    const finalItemType = itemType || 'file';
+    
+    await db.prepare(`
+      INSERT INTO user_purchases (id, user_id, file_id, item_type, item_name, price, payment_id, order_id, purchased_at, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(id, userId, fileId, finalItemType, itemName || '', price || 0, paymentId || null, orderId || null, now, now).run();
+    
+    console.log(`✅ Purchase saved: ${fileId} (${finalItemType}) for user ${userId}`);
+    
+    return new Response(JSON.stringify({ success: true, purchaseId: id }), { headers: CORS_HEADERS });
+  } catch (error) {
+    console.error('❌ Purchase save error:', error);
+    return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500, headers: CORS_HEADERS });
+  }
+}
     
     // GET /api/purchase/user/:userId
     if (method === 'GET' && url.pathname.startsWith('/api/purchase/user/')) {
@@ -145,20 +151,21 @@ export default {
       }
     }
     
-    // GET /api/purchase/check
-    if (method === 'GET' && url.pathname === '/api/purchase/check') {
-      const userId = url.searchParams.get('userId');
-      const fileId = url.searchParams.get('fileId');
-      if (!userId || !fileId) {
-        return new Response(JSON.stringify({ success: false, error: 'userId and fileId required' }), { status: 400, headers: CORS_HEADERS });
-      }
-      try {
-        const result = await db.prepare(`SELECT * FROM user_purchases WHERE user_id = ? AND file_id = ?`).bind(userId, fileId).first();
-        return new Response(JSON.stringify({ success: true, purchased: !!result }), { headers: CORS_HEADERS });
-      } catch (error) {
-        return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500, headers: CORS_HEADERS });
-      }
-    }
+   // GET /api/purchase/check
+if (method === 'GET' && url.pathname === '/api/purchase/check') {
+  const userId = url.searchParams.get('userId');
+  const fileId = url.searchParams.get('fileId');
+  if (!userId || !fileId) {
+    return new Response(JSON.stringify({ success: false, error: 'userId and fileId required' }), { status: 400, headers: CORS_HEADERS });
+  }
+  try {
+    const result = await db.prepare(`SELECT * FROM user_purchases WHERE user_id = ? AND file_id = ?`).bind(userId, fileId).first();
+    console.log(`🔍 Purchase check: userId=${userId}, fileId=${fileId}, found=${!!result}`);
+    return new Response(JSON.stringify({ success: true, purchased: !!result }), { headers: CORS_HEADERS });
+  } catch (error) {
+    return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500, headers: CORS_HEADERS });
+  }
+}
     
     // ============================================
     // ============================================
@@ -201,16 +208,26 @@ export default {
       }
     }
     
-    // GET /api/saved/user/:userId
-    if (method === 'GET' && url.pathname.startsWith('/api/saved/user/')) {
-      const userId = url.pathname.split('/api/saved/user/')[1];
-      try {
-        const result = await db.prepare(`SELECT * FROM user_saved WHERE user_id = ? ORDER BY saved_at DESC`).bind(userId).all();
-        return new Response(JSON.stringify({ success: true, saved: result.results }), { headers: CORS_HEADERS });
-      } catch (error) {
-        return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500, headers: CORS_HEADERS });
-      }
-    }
+  // GET /api/saved/user/:userId - Get user's saved files
+if (method === 'GET' && url.pathname.startsWith('/api/saved/user/')) {
+  const userId = url.pathname.split('/api/saved/user/')[1];
+  try {
+    const result = await db.prepare(`
+      SELECT s.file_id, s.saved_at, f.name as file_name, f.price, f.is_premium, f.cloudflare_key
+      FROM user_saved s
+      LEFT JOIN files f ON s.file_id = f.id OR s.file_id = f.cloudflare_key
+      WHERE s.user_id = ? 
+      ORDER BY s.saved_at DESC
+    `).bind(userId).all();
+    
+    return new Response(JSON.stringify({ 
+      success: true, 
+      saved: result.results 
+    }), { headers: CORS_HEADERS });
+  } catch (error) {
+    return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500, headers: CORS_HEADERS });
+  }
+}
     
     // ============================================
     // ============================================
@@ -418,21 +435,44 @@ export default {
     // ============================================
     // ============================================
     
-    // POST /api/log/payment
-    if (method === 'POST' && url.pathname === '/api/log/payment') {
-      try {
-        const body = await request.json();
-        const id = generateId();
-        const now = new Date().toISOString();
-        await db.prepare(`
-          INSERT INTO payment_logs (id, user_id, user_email, event, plan, amount, status, payment_id, order_id, error, timestamp)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).bind(id, body.userId, body.userEmail, body.event, body.plan, body.amount, body.status, body.paymentId, body.orderId, body.error, now).run();
-        return new Response(JSON.stringify({ success: true }), { headers: CORS_HEADERS });
-      } catch (error) {
-        return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500, headers: CORS_HEADERS });
-      }
-    }
+   // POST /api/log/payment
+if (method === 'POST' && url.pathname === '/api/log/payment') {
+  try {
+    const body = await request.json();
+    const id = generateId();
+    const now = new Date().toISOString();
+    
+    console.log('💰 Payment log received:', {
+      event: body.event,
+      userId: body.userId,
+      amount: body.amount,
+      status: body.status
+    });
+    
+    await db.prepare(`
+      INSERT INTO payment_logs (id, user_id, user_email, event, plan, amount, status, payment_id, order_id, error, timestamp)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      id, 
+      body.userId || 'guest', 
+      body.userEmail || 'guest', 
+      body.event || 'unknown',
+      body.plan || '',
+      body.amount || 0,
+      body.status || 'pending',
+      body.paymentId || null,
+      body.orderId || null,
+      body.error || null,
+      now
+    ).run();
+    
+    console.log('✅ Payment log saved to D1');
+    return new Response(JSON.stringify({ success: true }), { headers: CORS_HEADERS });
+  } catch (error) {
+    console.error('❌ Payment log error:', error);
+    return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500, headers: CORS_HEADERS });
+  }
+}
     
     // POST /api/log/pageview
     if (method === 'POST' && url.pathname === '/api/log/pageview') {

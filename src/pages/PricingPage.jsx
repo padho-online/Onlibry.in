@@ -314,22 +314,23 @@ const handleSingleCheckout = async (item) => {
         }
         
         // 2. Log payment to D1
-        try {
-          const { logPaymentToD1 } = await import('../services/d1Service');
-          await logPaymentToD1({
-            userId: user.uid,
-            userEmail: user.email,
-            event: 'single_purchase_success',
-            plan: item.name,
-            amount: item.price,
-            status: 'success',
-            paymentId: response.razorpay_payment_id,
-            orderId: response.razorpay_order_id
-          });
-          console.log('✅ Payment logged to D1');
-        } catch (logError) {
-          console.error('❌ Payment log error:', logError);
-        }
+        // 2. Log payment to D1
+try {
+  const { logPaymentToD1 } = await import('../services/d1Service');
+  await logPaymentToD1({
+    userId: user.uid,
+    userEmail: user.email,
+    event: 'single_purchase_success',
+    plan: item.name,
+    amount: item.price,
+    status: 'success',
+    paymentId: response.razorpay_payment_id,
+    orderId: response.razorpay_order_id
+  });
+  console.log('✅ Payment logged to D1');
+} catch (logError) {
+  console.error('❌ Payment log error:', logError);
+}
         
         // 3. Save to Firestore
         try {

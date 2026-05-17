@@ -32,7 +32,7 @@ function FileViewer() {
 
   const actualFileId = fileId || searchParams.get('fileId');
 
-  // 🔥 CHECK PURCHASED FROM D1 (Primary) + Firestore (Backup)
+// 🔥 CHECK PURCHASED FROM D1 (Primary) + Firestore (Backup)
 const checkPurchasedFile = async (userId, fileIdentifier) => {
   if (!userId) return false;
   
@@ -41,6 +41,8 @@ const checkPurchasedFile = async (userId, fileIdentifier) => {
     const { checkPurchasedInD1 } = await import('../services/d1Service');
     const d1Result = await checkPurchasedInD1(userId, fileIdentifier);
     
+    console.log(`🔍 D1 Purchase check for ${fileIdentifier}:`, d1Result);
+    
     if (d1Result.success && d1Result.purchased) {
       console.log('✅ File found in D1 purchases');
       return true;
@@ -48,8 +50,18 @@ const checkPurchasedFile = async (userId, fileIdentifier) => {
     
     // Fallback to Firestore
     const userDoc = await getDoc(doc(db, 'users', userId));
-    const purchasedFiles = userDoc.data()?.purchasedFiles || [];
-    const isPurchased = purchasedFiles.includes(fileIdentifier);
+    const userData = userDoc.data();
+    
+    // Check in all purchase arrays
+    const purchasedFiles = userData?.purchasedFiles || [];
+    const purchasedMockTests = userData?.purchasedMockTests || [];
+    const purchasedQuizzes = userData?.purchasedQuizzes || [];
+    
+    const isPurchased = purchasedFiles.includes(fileIdentifier) ||
+                        purchasedMockTests.includes(fileIdentifier) ||
+                        purchasedQuizzes.includes(fileIdentifier) ||
+                        purchasedMockTests === 'all' ||
+                        purchasedQuizzes === 'all';
     
     if (isPurchased) {
       console.log('✅ File found in Firestore purchases');
@@ -103,23 +115,23 @@ const checkPurchasedFile = async (userId, fileIdentifier) => {
         return;
       }
       
-      // 🔥 FULL ACCESS MODE: Check permissions
-      // Case 1: Free file
-      if (!fileData.isPremium) {
-        hasAccess = true;
-      }
-      // Case 2: Premium user
-      else if (isSubscribed) {
-        hasAccess = true;
-      }
-      // Case 3: Check if user purchased this file
-      else if (user) {
-        const purchased = await checkPurchasedFile(user.uid, actualFileId);
-        setIsPurchased(purchased);
-        hasAccess = purchased;
-      }
-      
-      setCanView(hasAccess);
+     // 🔥 FULL ACCESS MODE: Check permissions
+// Case 1: Free file
+if (!fileData.isPremium) {
+  hasAccess = true;
+}
+// Case 2: Premium user (subscribed)
+else if (isSubscribed) {
+  hasAccess = true;
+}
+// Case 3: Check if user purchased this item (file, mocktest, or quiz)
+else if (user) {
+  const purchased = await checkPurchasedFile(user.uid, actualFileId);
+  setIsPurchased(purchased);
+  hasAccess = purchased;
+}
+
+setCanView(hasAccess);
       setCheckingAccess(false);
       
       if (hasAccess) {
