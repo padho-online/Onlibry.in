@@ -49,8 +49,65 @@ function UsersManagement() {
   const handleRefresh = () => {
     loadUsers();
   };
+// Add these functions after handleRefresh (around line 70-80)
 
-  // Stats
+const toggleAdminStatus = async (userId, currentStatus) => {
+  if (!window.confirm(`Are you sure you want to ${currentStatus ? 'remove admin from' : 'make admin'} this user?`)) return;
+  
+  try {
+    const ADMIN_KEY = import.meta.env.VITE_NOTIFICATION_ADMIN_KEY || 'HabibulAdmin@2025';
+    
+    const response = await fetch(`${import.meta.env.VITE_D1_API_URL}/api/admin/users/${userId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Admin-Key': ADMIN_KEY
+      },
+      body: JSON.stringify({ is_admin: currentStatus ? 0 : 1 })
+    });
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      alert(`User ${currentStatus ? 'demoted from' : 'promoted to'} admin successfully!`);
+      loadUsers(); // Refresh list
+    } else {
+      alert('Failed to update admin status: ' + result.error);
+    }
+  } catch (error) {
+    console.error('Error updating admin status:', error);
+    alert('Error updating admin status');
+  }
+};
+
+const toggleBanStatus = async (userId, currentStatus) => {
+  if (!window.confirm(`Are you sure you want to ${currentStatus ? 'unban' : 'ban'} this user?`)) return;
+  
+  try {
+    const ADMIN_KEY = import.meta.env.VITE_NOTIFICATION_ADMIN_KEY || 'HabibulAdmin@2025';
+    
+    const response = await fetch(`${import.meta.env.VITE_D1_API_URL}/api/admin/users/${userId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Admin-Key': ADMIN_KEY
+      },
+      body: JSON.stringify({ is_banned: currentStatus ? 0 : 1 })
+    });
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      alert(`User ${currentStatus ? 'unbanned' : 'banned'} successfully!`);
+      loadUsers(); // Refresh list
+    } else {
+      alert('Failed to update ban status: ' + result.error);
+    }
+  } catch (error) {
+    console.error('Error updating ban status:', error);
+    alert('Error updating ban status');
+  }
+};
   const stats = {
     total: users.length,
     admins: users.filter(u => u.is_admin === 1).length,
@@ -158,13 +215,30 @@ function UsersManagement() {
                   </span>
                 </td>
                 <td className="py-3 px-2">
-                  <button
-                    onClick={() => setSelectedUser(user)}
-                    className="text-blue-600 hover:text-blue-800 text-sm"
-                  >
-                    View
-                  </button>
-                </td>
+  <div className="flex gap-2">
+    <button
+      onClick={() => setSelectedUser(user)}
+      className="text-blue-600 hover:text-blue-800 text-sm"
+      title="View Details"
+    >
+      👁️
+    </button>
+    <button
+      onClick={() => toggleAdminStatus(user.id, user.is_admin === 1)}
+      className={`text-sm ${user.is_admin === 1 ? 'text-red-600 hover:text-red-800' : 'text-green-600 hover:text-green-800'}`}
+      title={user.is_admin === 1 ? 'Remove Admin' : 'Make Admin'}
+    >
+      {user.is_admin === 1 ? '👑❌' : '👑'}
+    </button>
+    <button
+      onClick={() => toggleBanStatus(user.id, user.is_banned === 1)}
+      className={`text-sm ${user.is_banned === 1 ? 'text-green-600 hover:text-green-800' : 'text-red-600 hover:text-red-800'}`}
+      title={user.is_banned === 1 ? 'Unban User' : 'Ban User'}
+    >
+      {user.is_banned === 1 ? '🔓' : '🔒'}
+    </button>
+  </div>
+</td>
               </tr>
             ))}
           </tbody>
@@ -172,7 +246,7 @@ function UsersManagement() {
 
         {users.length === 0 && (
           <div className="text-center py-12 text-gray-500">
-            No users found
+            No users found. Run sync first.
           </div>
         )}
       </div>

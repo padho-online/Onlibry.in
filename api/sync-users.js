@@ -1,81 +1,41 @@
-// api/sync-users.js
-// Automatic Firebase Users Sync to D1
-// Run this every hour using Vercel Cron Jobs or external scheduler
+// api/sync-users.js - Using Firestore SDK (No Admin SDK required)
+// This fetches users from Firestore and syncs to D1
 
-import { db as adminDb } from '../lib/firebase-admin.js';
+import { initializeApp } from 'firebase/app';
+import { getFirestore, collection, getDocs } from 'firebase/firestore';
+
+// Firebase config (same as frontend)
+const firebaseConfig = {
+  apiKey: process.env.VITE_FIREBASE_API_KEY,
+  authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.VITE_FIREBASE_APP_ID
+};
 
 const D1_API_URL = 'https://onlibry-main-api.mdhabibul12212141.workers.dev';
 const ADMIN_KEY = process.env.VITE_NOTIFICATION_ADMIN_KEY || 'HabibulAdmin@2025';
 
-// Helper function to call D1 API
-async function callD1API(endpoint, options = {}) {
-  const response = await fetch(`${D1_API_URL}${endpoint}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Admin-Key': ADMIN_KEY,
-      ...options.headers,
-    },
-  });
-  return await response.json();
-}
+// Initialize Firebase (for client-side SDK)
+let firebaseApp = null;
+let db = null;
 
-// Get user subscription from Firestore
-async function getUserSubscription(uid) {
-  try {
-    const userDoc = await adminDb.firestore().collection('users').doc(uid).get();
-    if (userDoc.exists) {
-      const data = userDoc.data();
-      const subscription = data.subscription || {};
-      return {
-        type: subscription.type || 'free',
-        endDate: subscription.endDate || null,
-        isActive: subscription.isActive || false
-      };
-    }
-  } catch (error) {
-    console.error(`Error fetching subscription for ${uid}:`, error);
+function initFirebase() {
+  if (!firebaseApp) {
+    firebaseApp = initializeApp(firebaseConfig);
+    db = getFirestore(firebaseApp);
   }
-  return { type: 'free', endDate: null, isActive: false };
+  return { db };
 }
 
-// Get user admin status from Firestore
-async function getUserAdminStatus(uid) {
-  try {
-    const userDoc = await adminDb.firestore().collection('users').doc(uid).get();
-    if (userDoc.exists) {
-      return userDoc.data().isAdmin === true;
-    }
-  } catch (error) {
-    console.error(`Error fetching admin status for ${uid}:`, error);
-  }
-  return false;
-}
-
-// Get user ban status from Firestore
-async function getUserBanStatus(uid) {
-  try {
-    const userDoc = await adminDb.firestore().collection('users').doc(uid).get();
-    if (userDoc.exists) {
-      return userDoc.data().isBanned === true;
-    }
-  } catch (error) {
-    console.error(`Error fetching ban status for ${uid}:`, error);
-  }
-  return false;
-}
-
-// Main sync handler
 export default async function handler(req, res) {
-  // Allow GET for testing and health check
+  // Allow GET for health check
   if (req.method === 'GET') {
     return res.status(200).json({ 
       status: 'ok', 
-      message: 'Sync users API is working. Use POST to sync users.',
-      endpoints: {
-        sync: 'POST /api/sync-users',
-        health: 'GET /api/sync-users'
-      }
+      message: 'Sync users API is working. Use POST to sync users from Firestore.',
+      timestamp: new Date().toISOString()
     });
   }
   
@@ -90,62 +50,104 @@ export default async function handler(req, res) {
   }
   
   try {
-    console.log('🔄 Starting users sync from Firebase to D1...');
+    console.log('🔄 Starting users sync from Firestore to D1...');
     
-    // Fetch all users from Firebase Auth
-    const listUsersResult = await adminDb.auth().listUsers(1000);
+    // Initialize Firebase
+    const { db } = initFirebase();
+    
+    // Fetch all users from Firestore
+    const usersCollection = collection(db, 'users');
+    const usersSnapshot = await getDocs(usersCollection);
+    
     const users = [];
     
-    for (const user of listUsersResult.users) {
-      // Get additional data from Firestore
-      const [subscription, isAdmin, isBanned] = await Promise.all([
-        getUserSubscription(user.uid),
-        getUserAdminStatus(user.uid),
-        getUserBanStatus(user.uid)
-      ]);
+    usersSnapshot.forEach((doc) => {
+      const data = doc.data();
+      
+      // Handle Firestore timestamps
+      let createdAt = null;
+      if (data.createdAt) {
+        if (data.createdAt.toDate) {
+          createdAt = data.createdAt.toDate().toISOString();
+        } else if (typeof data.createdAt === 'string') {
+          createdAt = data.createdAt;
+        } else if (data.createdAt.seconds) {
+          createdAt = new Date(data.createdAt.seconds * 1000).toISOString();
+        }
+      }
+      
+      // Handle subscription end date
+      let subscriptionEnd = null;
+      if (data.subscription?.endDate) {
+        if (data.subscription.endDate.toDate) {
+          subscriptionEnd = data.subscription.endDate.toDate().toISOString();
+        } else if (typeof data.subscription.endDate === 'string') {
+          subscriptionEnd = data.subscription.endDate;
+        } else if (data.subscription.endDate.seconds) {
+          subscriptionEnd = new Date(data.subscription.endDate.seconds * 1000).toISOString();
+        }
+      }
       
       users.push({
-        id: user.uid,
-        email: user.email || '',
-        display_name: user.displayName || user.email?.split('@')[0] || '',
-        photo_url: user.photoURL || '',
-        created_at: user.metadata.creationTime,
-        is_admin: isAdmin,
-        is_banned: isBanned,
-        subscription_type: subscription.isActive ? subscription.type : 'free',
-        subscription_end: subscription.isActive ? subscription.endDate : null
+        id: doc.id,
+        email: data.email || '',
+        display_name: data.displayName || data.email?.split('@')[0] || '',
+        photo_url: data.photoURL || '',
+        created_at: createdAt || new Date().toISOString(),
+        is_admin: data.isAdmin === true ? 1 : 0,
+        is_banned: data.isBanned === true ? 1 : 0,
+        subscription_type: data.subscription?.isActive ? (data.subscription?.type || 'monthly') : 'free',
+        subscription_end: data.subscription?.isActive ? subscriptionEnd : null
+      });
+    });
+    
+    console.log(`📊 Found ${users.length} users in Firestore`);
+    
+    if (users.length === 0) {
+      return res.status(200).json({
+        success: true,
+        message: 'No users found in Firestore',
+        users: [],
+        synced: 0,
+        updated: 0
       });
     }
     
-    console.log(`📊 Found ${users.length} users to sync`);
-    
-    // Sync to D1 in batches (50 users per batch to avoid timeout)
+    // Sync to D1 in batches
     const BATCH_SIZE = 50;
-    let synced = 0;
-    let updated = 0;
+    let totalSynced = 0;
+    let totalUpdated = 0;
     
     for (let i = 0; i < users.length; i += BATCH_SIZE) {
       const batch = users.slice(i, i + BATCH_SIZE);
-      const result = await callD1API('/api/sync/users', {
+      
+      const response = await fetch(`${D1_API_URL}/api/sync/users`, {
         method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Admin-Key': ADMIN_KEY
+        },
         body: JSON.stringify({ users: batch })
       });
       
+      const result = await response.json();
+      
       if (result.success) {
-        synced += result.synced || 0;
-        updated += result.updated || 0;
+        totalSynced += result.synced || 0;
+        totalUpdated += result.updated || 0;
       }
       
       console.log(`📦 Batch ${Math.floor(i / BATCH_SIZE) + 1}: synced ${result.synced || 0}, updated ${result.updated || 0}`);
     }
     
-    console.log(`✅ Users sync complete: ${synced} new, ${updated} updated, ${users.length} total`);
+    console.log(`✅ Users sync complete: ${totalSynced} new, ${totalUpdated} updated, ${users.length} total`);
     
     return res.status(200).json({
       success: true,
-      synced: synced,
-      updated: updated,
+      synced: totalSynced,
+      updated: totalUpdated,
       total: users.length,
+      users: users,
       timestamp: new Date().toISOString()
     });
     
