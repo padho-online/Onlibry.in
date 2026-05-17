@@ -355,3 +355,29 @@ export async function syncFilesToD1(adminKey) {
     headers: { 'X-Admin-Key': adminKey },
   });
 }
+
+// ============================================
+// 11. USERS API (Admin)
+// ============================================
+
+// Sync users from Firebase to D1
+export async function syncUsersToD1(users, adminKey) {
+  return await callAPI('/api/sync/users', {
+    method: 'POST',
+    headers: { 'X-Admin-Key': adminKey },
+    body: JSON.stringify({ users }),
+  });
+}
+
+// Get all users from D1 (for admin panel)
+export async function getUsersFromD1(adminKey, page = 1, limit = 100, search = '') {
+  const offset = (page - 1) * limit;
+  const params = new URLSearchParams();
+  params.append('limit', limit);
+  params.append('offset', offset);
+  if (search) params.append('search', search);
+  
+  return await callAPI(`/api/admin/users?${params.toString()}`, {
+    headers: { 'X-Admin-Key': adminKey }
+  });
+}

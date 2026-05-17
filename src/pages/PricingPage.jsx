@@ -266,25 +266,12 @@ const handleSingleCheckout = async (item) => {
   
   console.log('========== SINGLE CHECKOUT START ==========');
   console.log('Item:', item);
-  console.log('User ID:', user.uid);
-  console.log('Item ID:', item.id);
+  console.log('Item Type:', item.type);
   
   setLoading(true);
   
   try {
     const order = await createRazorpayOrder(item.price);
-    console.log('Order created:', order.id);
-    
-    // Log to D1
-    await logPaymentToD1({
-      userId: user.uid,
-      userEmail: user.email,
-      event: 'single_checkout_initiated',
-      plan: item.name,
-      amount: item.price,
-      status: 'pending',
-      orderId: order.id
-    });
     
     const options = {
       key: 'rzp_live_SiS2QOdZl6zCUx',
@@ -292,20 +279,30 @@ const handleSingleCheckout = async (item) => {
       currency: order.currency,
       name: 'Onlibry',
       description: `Purchase: ${item.name}`,
-      image: 'https://onlibry.in/logo transparent.png',
+      image: '/logo.png',
       order_id: order.id,
       handler: async (response) => {
         console.log('========== PAYMENT SUCCESSFUL ==========');
-        console.log('Payment ID:', response.razorpay_payment_id);
-        console.log('Order ID:', response.razorpay_order_id);
         
-        // 🔥 1. Save to D1 Database (Primary)
+        // 🔥 Determine the correct item type
+        let finalItemType = item.type || 'file';
+        let firestoreField = 'purchasedFiles';
+        
+        if (finalItemType === 'mocktest') {
+          firestoreField = 'purchasedMockTests';
+        } else if (finalItemType === 'quiz') {
+          firestoreField = 'purchasedQuizzes';
+        }
+        
+        console.log(`📦 Item Type: ${finalItemType}, Firestore Field: ${firestoreField}`);
+        
+        // 1. Save to D1 Database
         try {
           const { savePurchaseToD1 } = await import('../services/d1Service');
           const d1Result = await savePurchaseToD1({
             userId: user.uid,
             fileId: item.id,
-            itemType: item.type || 'file',
+            itemType: finalItemType,
             itemName: item.name,
             price: item.price,
             paymentId: response.razorpay_payment_id,
@@ -316,42 +313,43 @@ const handleSingleCheckout = async (item) => {
           console.error('❌ D1 error:', d1Error);
         }
         
-        // 🔥 2. Save to Firestore (Backup - only purchasedFiles array)
+        // 2. Log payment to D1
+        try {
+          const { logPaymentToD1 } = await import('../services/d1Service');
+          await logPaymentToD1({
+            userId: user.uid,
+            userEmail: user.email,
+            event: 'single_purchase_success',
+            plan: item.name,
+            amount: item.price,
+            status: 'success',
+            paymentId: response.razorpay_payment_id,
+            orderId: response.razorpay_order_id
+          });
+          console.log('✅ Payment logged to D1');
+        } catch (logError) {
+          console.error('❌ Payment log error:', logError);
+        }
+        
+        // 3. Save to Firestore
         try {
           const { doc, updateDoc, arrayUnion, serverTimestamp } = await import('firebase/firestore');
           const { db } = await import('../config/firebase');
           
           const userRef = doc(db, 'users', user.uid);
           await updateDoc(userRef, {
-            purchasedFiles: arrayUnion(item.id),
+            [firestoreField]: arrayUnion(item.id),
             lastPurchaseAt: serverTimestamp()
           });
-          console.log('✅ Firestore updated with purchasedFiles');
+          console.log(`✅ Firestore updated: ${firestoreField}`);
         } catch (firestoreError) {
           console.error('❌ Firestore error:', firestoreError);
         }
         
-        // 🔥 3. Log payment success to D1
-        await logPaymentToD1({
-          userId: user.uid,
-          userEmail: user.email,
-          event: 'payment_success',
-          plan: item.name,
-          amount: item.price,
-          status: 'success',
-          paymentId: response.razorpay_payment_id,
-          orderId: response.razorpay_order_id
-        });
-        
-        // 🔥 4. Remove from cart
+        // 4. Remove from cart
         removeFromCart(item.id);
         
         alert(`Successfully purchased "${item.name}"! 🎉`);
-        
-        // 🔥 5. Clear any cached purchase status from localStorage
-        localStorage.removeItem(`purchased_${item.id}`);
-        
-        // 🔥 6. Redirect to saved files
         window.location.href = '/saved-files';
       },
       modal: {
@@ -372,15 +370,6 @@ const handleSingleCheckout = async (item) => {
     
   } catch (error) {
     console.error('❌ Payment error:', error);
-    await logPaymentToD1({
-      userId: user.uid,
-      userEmail: user.email,
-      event: 'payment_error',
-      plan: item.name,
-      amount: item.price,
-      status: 'failed',
-      error: error.message
-    });
     alert('Purchase failed. Please try again.');
     setLoading(false);
   }

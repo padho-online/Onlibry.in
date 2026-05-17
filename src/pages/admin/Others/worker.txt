@@ -495,7 +495,7 @@ if (method === 'GET' && url.pathname.startsWith('/api/cart/')) {
   
   try {
     const result = await db.prepare(`
-      SELECT file_id, file_name, price, action, created_at 
+      SELECT file_id, file_name, price, item_type, action, created_at 
       FROM cart_logs 
       WHERE user_id = ? AND status = 'active'
       ORDER BY created_at DESC
@@ -508,6 +508,7 @@ if (method === 'GET' && url.pathname.startsWith('/api/cart/')) {
           id: log.file_id,
           name: log.file_name,
           price: log.price,
+          type: log.item_type || 'file',
           action: log.action,
           addedAt: log.created_at
         });
@@ -515,13 +516,15 @@ if (method === 'GET' && url.pathname.startsWith('/api/cart/')) {
     }
     
     const cart = Array.from(cartMap.values());
+    console.log(`📦 Cart loaded for ${userId}: ${cart.length} items`);
+    
     return new Response(JSON.stringify({ success: true, cart: cart }), { headers: CORS_HEADERS });
   } catch (error) {
     return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500, headers: CORS_HEADERS });
   }
 }
 
-// POST /api/cart/add - Add item to cart (with debug logs)
+// POST /api/cart/add - Add item to cart (with item_type)
 if (method === 'POST' && url.pathname === '/api/cart/add') {
   console.log('🔍 Cart Add Request Received');
   
@@ -529,7 +532,7 @@ if (method === 'POST' && url.pathname === '/api/cart/add') {
     const body = await request.json();
     console.log('📦 Request Body:', body);
     
-    const { userId, fileId, fileName, price, action = 'add_to_cart' } = body;
+    const { userId, fileId, fileName, price, itemType, action = 'add_to_cart' } = body;
     
     if (!userId || !fileId) {
       console.log('❌ Missing userId or fileId');
@@ -545,13 +548,13 @@ if (method === 'POST' && url.pathname === '/api/cart/add') {
       WHERE user_id = ? AND file_id = ? AND status = 'active'
     `).bind(now, userId, fileId).run();
     
-    // Insert new active cart item
-    const result = await db.prepare(`
-      INSERT INTO cart_logs (id, user_id, file_id, file_name, price, action, status, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(id, userId, fileId, fileName || '', price || 0, action, 'active', now).run();
+    // Insert new active cart item with item_type
+    await db.prepare(`
+      INSERT INTO cart_logs (id, user_id, file_id, file_name, price, item_type, action, status, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(id, userId, fileId, fileName || '', price || 0, itemType || 'file', action, 'active', now).run();
     
-    console.log('✅ Cart item inserted:', result);
+    console.log('✅ Cart item inserted');
     
     return new Response(JSON.stringify({ success: true }), { headers: CORS_HEADERS });
   } catch (error) {
@@ -1094,6 +1097,129 @@ if (method === 'POST' && url.pathname === '/api/sync/quizzes') {
       total: quizzes.length 
     }), { headers: CORS_HEADERS });
     
+  } catch (error) {
+    return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500, headers: CORS_HEADERS });
+  }
+}
+
+// ============================================
+// SYNC USERS FROM FIREBASE TO D1
+// ============================================
+
+// POST /api/sync/users - Sync users from Firebase to D1
+if (method === 'POST' && url.pathname === '/api/sync/users') {
+  if (!isAdminRequest(request)) {
+    return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), { status: 401, headers: CORS_HEADERS });
+  }
+  
+  try {
+    const body = await request.json();
+    const users = body.users || [];
+    let synced = 0;
+    let updated = 0;
+    const now = new Date().toISOString();
+    
+    for (const user of users) {
+      if (!user.id) continue;
+      
+      // Check if user exists
+      const existing = await db.prepare(`SELECT id FROM users WHERE id = ?`).bind(user.id).first();
+      
+      if (existing) {
+        await db.prepare(`
+          UPDATE users SET 
+            email = ?, display_name = ?, photo_url = ?,
+            is_admin = ?, is_banned = ?,
+            subscription_type = ?, subscription_end = ?,
+            updated_at = ?
+          WHERE id = ?
+        `).bind(
+          user.email || '',
+          user.display_name || '',
+          user.photo_url || '',
+          user.is_admin ? 1 : 0,
+          user.is_banned ? 1 : 0,
+          user.subscription_type || '',
+          user.subscription_end || '',
+          now,
+          user.id
+        ).run();
+        updated++;
+      } else {
+        await db.prepare(`
+          INSERT INTO users (id, email, display_name, photo_url, is_admin, is_banned, subscription_type, subscription_end, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+          user.id,
+          user.email || '',
+          user.display_name || '',
+          user.photo_url || '',
+          user.is_admin ? 1 : 0,
+          user.is_banned ? 1 : 0,
+          user.subscription_type || '',
+          user.subscription_end || '',
+          user.created_at || now,
+          now
+        ).run();
+        synced++;
+      }
+    }
+    
+    return new Response(JSON.stringify({ 
+      success: true, 
+      synced: synced, 
+      updated: updated,
+      total: users.length 
+    }), { headers: CORS_HEADERS });
+    
+  } catch (error) {
+    console.error('❌ Users sync error:', error);
+    return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500, headers: CORS_HEADERS });
+  }
+}
+
+// GET /api/admin/users - Get all users from D1 (for admin panel)
+if (method === 'GET' && url.pathname === '/api/admin/users') {
+  if (!isAdminRequest(request)) {
+    return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), { status: 401, headers: CORS_HEADERS });
+  }
+  
+  try {
+    const limit = parseInt(url.searchParams.get('limit') || '100');
+    const offset = parseInt(url.searchParams.get('offset') || '0');
+    const search = url.searchParams.get('search') || '';
+    
+    let query = `SELECT * FROM users`;
+    let params = [];
+    
+    if (search) {
+      query += ` WHERE email LIKE ? OR display_name LIKE ?`;
+      params.push(`%${search}%`, `%${search}%`);
+    }
+    
+    query += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`;
+    params.push(limit, offset);
+    
+    const result = await db.prepare(query).bind(...params).all();
+    
+    // Get total count
+    let countQuery = `SELECT COUNT(*) as total FROM users`;
+    let countParams = [];
+    if (search) {
+      countQuery = `SELECT COUNT(*) as total FROM users WHERE email LIKE ? OR display_name LIKE ?`;
+      countParams.push(`%${search}%`, `%${search}%`);
+    }
+    const totalResult = await db.prepare(countQuery).bind(...countParams).first();
+    
+    return new Response(JSON.stringify({ 
+      success: true, 
+      users: result.results,
+      pagination: {
+        total: totalResult?.total || 0,
+        limit: limit,
+        offset: offset
+      }
+    }), { headers: CORS_HEADERS });
   } catch (error) {
     return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500, headers: CORS_HEADERS });
   }
