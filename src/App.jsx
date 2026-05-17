@@ -1,14 +1,15 @@
 // src/App.jsx
 // UPDATED - Added Blog CMS Routes + Notification Routes + Home Editor Admin Route
+// 🔥 FIXED: Page view logging with React Router
 
 import React, { useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider } from './contexts/AuthContext';
 import { CartProvider } from './contexts/CartContext';
 
-import { initPageViewLogger } from './services/loggerService';
+import { initPageViewLogger, logCurrentPageView } from './services/loggerService';
 
 import MainLayout from './layouts/MainLayout';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -37,14 +38,12 @@ import BlogDashboard from './blogger/pages/BlogDashboard';
 import CreatePost from './blogger/pages/CreatePost';
 import EditPost from './blogger/pages/EditPost';
 
-// Notification Pages (NEW)
+// Notification Pages
 import NotificationsPage from './pages/NotificationsPage';
 import NotificationDetailPage from './pages/NotificationDetailPage';
 
 // Import Info Pages
 import InfoHub from './Info/InfoHub';
-
-
 
 // Admin Pages
 import AdminDashboard from './pages/admin/AdminDashboard';
@@ -54,10 +53,23 @@ import SubscriptionsManagement from './pages/admin/SubscriptionsManagement';
 import PlansEditor from './pages/admin/PlansEditor';
 import FilesManager from './pages/admin/FilesManager';
 import FileUploadManager from './pages/admin/FileUploadManager';
-import HomeEditor from './pages/admin/HomeEditor'; // NEW
+import HomeEditor from './pages/admin/HomeEditor';
+
+// 🔥 NEW: Component to track route changes for page views
+function RouteChangeTracker() {
+  const location = useLocation();
+
+  useEffect(() => {
+    // Log page view on every route change
+    logCurrentPageView();
+  }, [location.pathname]);
+
+  return null;
+}
 
 function App() {
   useEffect(() => {
+    // Initialize logger (for popstate and beforeunload)
     initPageViewLogger();
   }, []);
 
@@ -67,8 +79,9 @@ function App() {
         <CartProvider>
           <Router>
             <MainLayout>
+              {/* 🔥 Route change tracker - logs every page view */}
+              <RouteChangeTracker />
               <Routes>
-
                 {/* Public Routes */}
                 <Route path="/" element={<HomePage />} />
                 <Route path="/login" element={<LoginPage />} />
@@ -86,14 +99,13 @@ function App() {
                 <Route path="/blog" element={<BlogHome />} />
                 <Route path="/blog/:slug" element={<BlogPage />} />
 
-                {/* Notification Routes (NEW) */}
+                {/* Notification Routes */}
                 <Route path="/notifications" element={<NotificationsPage />} />
                 <Route path="/notification/:id" element={<NotificationDetailPage />} />
 
                 {/* Info Pages */}
                 <Route path="/info" element={<InfoHub />} />
                 <Route path="/info/:tab" element={<InfoHub />} />
-               
 
                 {/* Protected Blog Routes */}
                 <Route
@@ -147,7 +159,7 @@ function App() {
                   <Route index element={<FileUploadManager />} />
                   <Route path="upload" element={<FileUploadManager />} />
                   <Route path="files" element={<FilesManager />} />
-                  <Route path="home" element={<HomeEditor />} /> {/* NEW - Home Editor Tab */}
+                  <Route path="home" element={<HomeEditor />} />
                   <Route path="logs" element={<PaymentLogs />} />
                   <Route path="users" element={<UsersManagement />} />
                   <Route path="subscriptions" element={<SubscriptionsManagement />} />
@@ -156,7 +168,6 @@ function App() {
 
                 {/* 404 */}
                 <Route path="*" element={<NotFoundPage />} />
-
               </Routes>
             </MainLayout>
           </Router>

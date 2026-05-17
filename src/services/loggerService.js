@@ -1,4 +1,6 @@
 // src/services/loggerService.js - D1 Database Version
+// UPDATED: React Router ke saath proper page view logging
+
 import {
   logPageViewToD1,
   logSearchToD1,
@@ -13,6 +15,10 @@ import {
 let sessionId = null;
 let pageViewStartTime = null;
 let currentPagePath = null;
+
+// Track if we're logging to avoid duplicates
+let lastLoggedPath = null;
+let lastLoggedTime = 0;
 
 // Generate session ID
 function getSessionId() {
@@ -35,17 +41,23 @@ async function getCurrentUser() {
 }
 
 // ============================================
-// PAGE VIEW LOGGING
+// PAGE VIEW LOGGING - Main function
 // ============================================
 
 export async function logPageView(pagePath, pageTitle) {
   try {
     const user = await getCurrentUser();
-    const now = new Date().toISOString();
+    const now = Date.now();
     
-    // If we were on a previous page, log time spent
-    if (currentPagePath && pageViewStartTime) {
-      const timeSpent = Math.floor((Date.now() - pageViewStartTime) / 1000);
+    // Prevent duplicate logging for same page within 500ms
+    if (lastLoggedPath === pagePath && (now - lastLoggedTime) < 500) {
+      console.log(`⏭️ Skipping duplicate page view: ${pagePath}`);
+      return;
+    }
+    
+    // If we were on a previous page, log time spent before navigating away
+    if (currentPagePath && pageViewStartTime && currentPagePath !== pagePath) {
+      const timeSpent = Math.floor((now - pageViewStartTime) / 1000);
       if (timeSpent > 0) {
         await logPageViewToD1({
           userId: user?.uid || 'guest',
@@ -55,19 +67,22 @@ export async function logPageView(pagePath, pageTitle) {
           timeSpent: timeSpent,
           sessionId: getSessionId()
         });
+        console.log(`⏱️ Time spent on ${currentPagePath}: ${timeSpent}s`);
       }
     }
     
-    // Start new page view tracking
+    // Update tracking for new page
     currentPagePath = pagePath;
-    pageViewStartTime = Date.now();
+    pageViewStartTime = now;
+    lastLoggedPath = pagePath;
+    lastLoggedTime = now;
     
-    // Also log the initial view
+    // Log the initial view
     await logPageViewToD1({
       userId: user?.uid || 'guest',
       userEmail: user?.email || 'guest',
       pagePath: pagePath,
-      pageTitle: pageTitle,
+      pageTitle: pageTitle || document.title,
       timeSpent: 0,
       sessionId: getSessionId()
     });
@@ -78,38 +93,38 @@ export async function logPageView(pagePath, pageTitle) {
   }
 }
 
-// Initialize page view logging (call on route change)
+// ============================================
+// REACT ROUTER COMPATIBLE PAGE VIEW LOGGER
+// Call this function from App.jsx on route change
+// ============================================
+
+export function logCurrentPageView() {
+  const path = window.location.pathname;
+  const title = document.title;
+  logPageView(path, title);
+}
+
+// ============================================
+// INITIALIZE PAGE VIEW LOGGER (Legacy - kept for compatibility)
+// Works with history API (for non-React Router navigations)
+// ============================================
+
 export function initPageViewLogger() {
+  console.log('📊 Page view logger initialized');
+  
   // Log initial page
   const path = window.location.pathname;
   const title = document.title;
   logPageView(path, title);
   
-  // Listen for navigation (for React Router)
-  const originalPushState = history.pushState;
-  const originalReplaceState = history.replaceState;
-  
-  history.pushState = function(...args) {
-    originalPushState.apply(this, args);
-    setTimeout(() => {
-      logPageView(window.location.pathname, document.title);
-    }, 100);
-  };
-  
-  history.replaceState = function(...args) {
-    originalReplaceState.apply(this, args);
-    setTimeout(() => {
-      logPageView(window.location.pathname, document.title);
-    }, 100);
-  };
-  
+  // Listen for popstate (back/forward buttons)
   window.addEventListener('popstate', () => {
     setTimeout(() => {
       logPageView(window.location.pathname, document.title);
     }, 100);
   });
   
-  // Log before unload
+  // Log before unload (time spent on last page)
   window.addEventListener('beforeunload', async () => {
     if (currentPagePath && pageViewStartTime) {
       const timeSpent = Math.floor((Date.now() - pageViewStartTime) / 1000);
@@ -123,6 +138,7 @@ export function initPageViewLogger() {
           timeSpent: timeSpent,
           sessionId: getSessionId()
         });
+        console.log(`⏱️ Final time spent on ${currentPagePath}: ${timeSpent}s`);
       }
     }
   });
@@ -132,10 +148,10 @@ export function initPageViewLogger() {
 // SEARCH LOGGING
 // ============================================
 
-export async function logSearch(query, resultCount) {
+export async function logSearch(query, resultCount, pagePath = '') {
   try {
     const user = await getCurrentUser();
-    await logSearchToD1(user?.uid || 'guest', query, resultCount);
+    await logSearchToD1(user?.uid || 'guest', query, resultCount, pagePath);
     console.log(`🔍 Search logged: "${query}" -> ${resultCount} results`);
   } catch (error) {
     console.error('Error logging search:', error);
@@ -169,7 +185,7 @@ export async function logFileViewClose() {
           user?.uid || 'guest',
           currentFileId,
           'File',
-          Math.floor(timeSpent / 60), // pages read approximation
+          Math.floor(timeSpent / 60),
           timeSpent
         );
         console.log(`📄 File read logged: ${currentFileId} -> ${timeSpent}s`);
@@ -273,7 +289,6 @@ export async function logPaymentEvent(event, plan, amount, status, paymentId = n
 export async function logUserLogin(user) {
   try {
     console.log(`👤 User logged in: ${user?.email}`);
-    // Also log to page view as login event
     await logPageView('/login-success', 'Login Success');
   } catch (error) {
     console.error('Error logging user login:', error);
@@ -285,6 +300,5 @@ export async function logUserLogin(user) {
 // ============================================
 
 export function setCurrentUserGetter(getterFn) {
-  // Legacy function - kept for compatibility
   console.log('setCurrentUserGetter called (legacy)');
 }
