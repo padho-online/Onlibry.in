@@ -145,146 +145,155 @@ function FilesManager() {
   };
 
   // BULK UPDATE - Handle both UPDATE and DELETE from Editor sheet
-  const handleBulkUpdateFromSheet = async () => {
-    if (!window.confirm('This will update/delete ALL files from "Editor" sheet. Continue?')) return;
+const handleBulkUpdateFromSheet = async () => {
+  if (!window.confirm('This will update/delete ALL files from "Editor" sheet. Continue?')) return;
+  
+  setBulkUpdating(true);
+  setMessage({ type: 'info', text: '🔄 Reading Editor sheet...' });
+  
+  try {
+    const userIp = await getClientIP();
     
-    setBulkUpdating(true);
-    setMessage({ type: 'info', text: '🔄 Reading Editor sheet...' });
+    // Get editor data using GET
+    const editorData = await getEditorData();
     
-    try {
-      const userIp = await getClientIP();
+    console.log('📊 Full editor data:', editorData);
+    
+    if (!editorData.success) {
+      throw new Error(editorData.error || 'Failed to read Editor sheet');
+    }
+    
+    const rows = editorData.files || [];
+    console.log(`📋 Total rows in editor: ${rows.length}`);
+    
+    if (rows.length === 0) {
+      setMessage({ type: 'info', text: '📭 No data found in Editor sheet.' });
+      setBulkUpdating(false);
+      return;
+    }
+    
+    let updated = 0;
+    let deleted = 0;
+    let failed = 0;
+    let skipped = 0;
+    
+    // Process each row
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
       
-      // Get editor data using GET
-      const editorData = await getEditorData();
+      // 🔥 Find fileId (case-insensitive)
+      const fileId = row.fileId || row.fileid || row.FileId;
       
-      console.log('📊 Full editor data:', editorData);
-      
-      if (!editorData.success) {
-        throw new Error(editorData.error || 'Failed to read Editor sheet');
+      if (!fileId || fileId === '' || fileId === 'fileId') {
+        console.log(`⚠️ Row ${i + 1}: No fileId found, skipping:`, row);
+        skipped++;
+        continue;
       }
       
-      const rows = editorData.files || [];
-      console.log(`📋 Total rows in editor: ${rows.length}`);
+      const status = (row.status || '').toLowerCase();
+      console.log(`📝 Row ${i + 1}: Processing ${fileId}, status: ${status || 'update'}`);
       
-      if (rows.length === 0) {
-        setMessage({ type: 'info', text: '📭 No data found in Editor sheet.' });
-        setBulkUpdating(false);
-        return;
-      }
-      
-      let updated = 0;
-      let deleted = 0;
-      let failed = 0;
-      
-      // Process each row
-      for (const row of rows) {
-        const fileId = row.fileId;
-        if (!fileId) continue;
+      // DELETE operation
+      if (status === 'deleted') {
+        console.log(`🗑️ Deleting file: ${fileId}`);
+        const cloudflareDeleted = await deleteFromCloudflare(fileId);
         
-        const status = (row.status || '').toLowerCase();
-        console.log(`Processing: ${fileId}, status: ${status || 'update'}`);
-        
-        // DELETE operation
-        if (status === 'deleted') {
-          console.log(`🗑️ Deleting file: ${fileId}`);
-          const cloudflareDeleted = await deleteFromCloudflare(fileId);
-          
-          if (cloudflareDeleted) {
-            const result = await sendToSheetGet({
-              action: 'delete',
-              fileId: fileId,
-              fileName: row.fileName || 'Unknown',
-              deletedBy: user?.email || 'admin',
-              deletedByName: user?.displayName || 'Admin',
-              userIp: userIp,
-              userAgent: navigator.userAgent,
-              reason: 'Bulk delete from Editor sheet'
-            });
-            
-            if (result.success) {
-              deleted++;
-              console.log(`✅ Deleted: ${fileId}`);
-            } else {
-              failed++;
-              console.log(`❌ Delete failed: ${fileId}`);
-            }
-          } else {
-            failed++;
-            console.log(`❌ Cloudflare delete failed: ${fileId}`);
-          }
-        }
-        
-        // UPDATE operation (status = 'update' or no status)
-        else {
-          // Convert boolean values
-          let isPremiumVal = false;
-          const premiumStr = String(row.isPremium || '').toLowerCase();
-          if (premiumStr === 'true' || premiumStr === 'yes' || premiumStr === '1') {
-            isPremiumVal = true;
-          }
-          
-          let showOnWebsiteVal = true;
-          const showStr = String(row.showOnWebsite || '').toLowerCase();
-          if (showStr === 'false' || showStr === 'no' || showStr === '0') {
-            showOnWebsiteVal = false;
-          }
-          
-          let priceVal = 29;
-          if (row.price && !isNaN(parseInt(row.price))) {
-            priceVal = parseInt(row.price);
-          }
-          
-          console.log(`📝 Updating file: ${fileId}, Name: ${row.fileName}, Price: ${priceVal}, Premium: ${isPremiumVal}, Visible: ${showOnWebsiteVal}`);
-          
+        if (cloudflareDeleted) {
           const result = await sendToSheetGet({
-            action: 'update',
+            action: 'delete',
             fileId: fileId,
-            fileName: row.fileName || '',
-            price: priceVal,
-            isPremium: isPremiumVal ? 'true' : 'false',
-            showOnWebsite: showOnWebsiteVal ? 'true' : 'false',
-            tags: row.tags || '',
-            updatedBy: user?.email || 'admin',
-            updatedByName: user?.displayName || 'Admin',
+            fileName: row.fileName || 'Unknown',
+            deletedBy: user?.email || 'admin',
+            deletedByName: user?.displayName || 'Admin',
             userIp: userIp,
-            userAgent: navigator.userAgent
+            userAgent: navigator.userAgent,
+            reason: 'Bulk delete from Editor sheet'
           });
           
           if (result.success) {
-            updated++;
-            console.log(`✅ Updated: ${fileId}`);
+            deleted++;
+            console.log(`✅ Deleted: ${fileId}`);
           } else {
             failed++;
-            console.log(`❌ Update failed: ${fileId}`, result);
+            console.log(`❌ Delete failed: ${fileId}`, result);
           }
+        } else {
+          failed++;
+          console.log(`❌ Cloudflare delete failed: ${fileId}`);
         }
       }
-      
-      // Clear the editor sheet after processing
-      console.log('🧹 Clearing Editor sheet...');
-      await sendToSheetGet({ action: 'clearEditor' });
-      
-      let resultText = '';
-      if (updated > 0) resultText += `✅ Updated: ${updated} files. `;
-      if (deleted > 0) resultText += `🗑️ Deleted: ${deleted} files. `;
-      if (failed > 0) resultText += `❌ Failed: ${failed}. `;
-      
-      if (updated === 0 && deleted === 0 && failed === 0) {
-        resultText = '📭 No changes were made. Make sure Editor sheet has data with fileId column.';
-      } else {
-        resultText += ' Refreshing files...';
+      // UPDATE operation
+      else {
+        // Convert boolean values
+        let isPremiumVal = false;
+        const premiumStr = String(row.isPremium || '').toLowerCase();
+        if (premiumStr === 'true' || premiumStr === 'yes' || premiumStr === '1') {
+          isPremiumVal = true;
+        }
+        
+        let showOnWebsiteVal = true;
+        const showStr = String(row.showOnWebsite || '').toLowerCase();
+        if (showStr === 'false' || showStr === 'no' || showStr === '0') {
+          showOnWebsiteVal = false;
+        }
+        
+        let priceVal = 29;
+        if (row.price && !isNaN(parseInt(row.price))) {
+          priceVal = parseInt(row.price);
+        }
+        
+        console.log(`📝 Updating file: ${fileId}, Name: ${row.fileName}, Price: ${priceVal}, Premium: ${isPremiumVal}, Visible: ${showOnWebsiteVal}`);
+        
+        const result = await sendToSheetGet({
+          action: 'update',
+          fileId: fileId,
+          fileName: row.fileName || '',
+          price: priceVal,
+          isPremium: isPremiumVal ? 'true' : 'false',
+          showOnWebsite: showOnWebsiteVal ? 'true' : 'false',
+          tags: row.tags || '',
+          updatedBy: user?.email || 'admin',
+          updatedByName: user?.displayName || 'Admin',
+          userIp: userIp,
+          userAgent: navigator.userAgent
+        });
+        
+        if (result.success) {
+          updated++;
+          console.log(`✅ Updated: ${fileId}`);
+        } else {
+          failed++;
+          console.log(`❌ Update failed: ${fileId}`, result);
+        }
       }
-      
-      setMessage({ type: 'success', text: resultText });
-      setTimeout(() => loadFiles(), 2000);
-      
-    } catch (error) {
-      console.error('Bulk update error:', error);
-      setMessage({ type: 'error', text: '❌ Bulk update failed: ' + error.message });
-    } finally {
-      setBulkUpdating(false);
     }
-  };
+    
+    // Clear the editor sheet after processing
+    console.log('🧹 Clearing Editor sheet...');
+    await sendToSheetGet({ action: 'clearEditor' });
+    
+    let resultText = '';
+    if (updated > 0) resultText += `✅ Updated: ${updated} files. `;
+    if (deleted > 0) resultText += `🗑️ Deleted: ${deleted} files. `;
+    if (skipped > 0) resultText += `⚠️ Skipped: ${skipped} (no fileId). `;
+    if (failed > 0) resultText += `❌ Failed: ${failed}. `;
+    
+    if (updated === 0 && deleted === 0 && skipped === 0 && failed === 0) {
+      resultText = '📭 No changes were made. Make sure Editor sheet has data with fileId column.';
+    } else {
+      resultText += ' Refreshing files...';
+    }
+    
+    setMessage({ type: 'success', text: resultText });
+    setTimeout(() => loadFiles(), 2000);
+    
+  } catch (error) {
+    console.error('Bulk update error:', error);
+    setMessage({ type: 'error', text: '❌ Bulk update failed: ' + error.message });
+  } finally {
+    setBulkUpdating(false);
+  }
+};
 
   // Clear Editor sheet
   const handleClearEditorSheet = async () => {
