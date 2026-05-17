@@ -1102,6 +1102,7 @@ if (method === 'POST' && url.pathname === '/api/sync/quizzes') {
   }
 }
 
+
 // ============================================
 // SYNC USERS FROM FIREBASE TO D1
 // ============================================
@@ -1137,10 +1138,10 @@ if (method === 'POST' && url.pathname === '/api/sync/users') {
           user.email || '',
           user.display_name || '',
           user.photo_url || '',
-          user.is_admin ? 1 : 0,
-          user.is_banned ? 1 : 0,
-          user.subscription_type || '',
-          user.subscription_end || '',
+          user.is_admin || 0,
+          user.is_banned || 0,
+          user.subscription_type || 'free',
+          user.subscription_end || null,
           now,
           user.id
         ).run();
@@ -1154,10 +1155,10 @@ if (method === 'POST' && url.pathname === '/api/sync/users') {
           user.email || '',
           user.display_name || '',
           user.photo_url || '',
-          user.is_admin ? 1 : 0,
-          user.is_banned ? 1 : 0,
-          user.subscription_type || '',
-          user.subscription_end || '',
+          user.is_admin || 0,
+          user.is_banned || 0,
+          user.subscription_type || 'free',
+          user.subscription_end || null,
           user.created_at || now,
           now
         ).run();
@@ -1185,7 +1186,7 @@ if (method === 'GET' && url.pathname === '/api/admin/users') {
   }
   
   try {
-    const limit = parseInt(url.searchParams.get('limit') || '100');
+    const limit = parseInt(url.searchParams.get('limit') || '500');  // 🔥 Change from 100 to 500
     const offset = parseInt(url.searchParams.get('offset') || '0');
     const search = url.searchParams.get('search') || '';
     
@@ -1224,6 +1225,7 @@ if (method === 'GET' && url.pathname === '/api/admin/users') {
     return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500, headers: CORS_HEADERS });
   }
 }
+
 // ============================================
 // 🔥 ADD THIS NEW ENDPOINT - PUT /api/admin/users/:id
 // ============================================

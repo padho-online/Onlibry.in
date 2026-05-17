@@ -35,11 +35,5 @@
         }
       ]
     }
-  ],
-  "crons": [
-    {
-      "path": "/api/sync-users",
-      "schedule": "0 * * * *"
-    }
   ]
 }
