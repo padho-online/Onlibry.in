@@ -1,4 +1,4 @@
-// src/pages/PricingPage.jsx - Complete Fixed with Payment Logs
+// src/pages/PricingPage.jsx - Fixed Weekly Plan Detection
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
@@ -24,6 +24,7 @@ function PricingPage() {
   // Default plans (fallback if Firestore fails)
   const defaultPlans = [
     { id: 'free', name: 'FREE', price: 0, period: 'lifetime', durationDays: 0, features: ['Access to free resources', 'Selected PYQs', 'Limited searches', 'Ads enabled'], enabled: true, isPopular: false },
+    { id: 'weekly', name: 'PRO WEEKLY', price: 59, period: 'week', durationDays: 7, features: ['All premium files', 'Unlimited downloads', 'Ad-free', 'Mock tests', 'Priority support'], enabled: true, isPopular: false },
     { id: 'monthly', name: 'PRO MONTHLY', price: 99, period: 'month', durationDays: 30, features: ['All premium files', 'Unlimited downloads', 'Ad-free', 'Mock tests', 'Priority support'], enabled: true, isPopular: true },
     { id: 'yearly', name: 'PRO ANNUAL', price: 499, period: 'year', durationDays: 365, features: ['All Pro features', 'Best value', 'Premium badge', 'Early access'], enabled: true, isPopular: true, monthlyEquivalent: 42 }
   ];
@@ -63,6 +64,7 @@ function PricingPage() {
 
   const getButtonClass = (planId) => {
     if (planId === 'free') return 'bg-gray-500';
+    if (planId === 'weekly') return 'bg-blue-600';
     if (planId === 'monthly') return 'bg-green-600';
     if (planId === 'yearly') return 'bg-orange-600';
     return 'bg-green-600';
@@ -70,6 +72,7 @@ function PricingPage() {
 
   const getPeriodText = (period, durationDays) => {
     if (period === 'lifetime') return 'lifetime';
+    if (period === 'week') return 'week';
     if (period === 'month') return 'month';
     if (period === 'year') return 'year';
     if (durationDays === 7) return 'week';
@@ -78,6 +81,7 @@ function PricingPage() {
     return period || `${durationDays} days`;
   };
 
+  // 🔥 FIXED: handleSubscribe with proper weekly detection
   const handleSubscribe = async (plan) => {
     console.log('🚀 handleSubscribe called with plan:', plan);
     
@@ -99,21 +103,42 @@ function PricingPage() {
       const order = await createRazorpayOrder(plan.price);
       console.log('✅ Order created:', order);
       
+      // 🔥 FIX: Plan type properly identify karo - WEEKLY ADDED
       let planType = 'monthly';
       let durationDays = 30;
+      const planNameLower = (plan.name || '').toLowerCase();
+      const planIdLower = (plan.id || '').toLowerCase();
       
-      if (plan.id === 'yearly' || plan.name?.toLowerCase().includes('annual') || plan.name?.toLowerCase().includes('yearly')) {
+      // YEARLY check
+      if (planIdLower === 'yearly' || planNameLower.includes('annual') || planNameLower.includes('yearly') || plan.durationDays === 365) {
         planType = 'yearly';
         durationDays = 365;
-      } else if (plan.id === 'monthly' || plan.name?.toLowerCase().includes('monthly')) {
+      }
+      // WEEKLY check (ADDED)
+      else if (planIdLower === 'weekly' || planNameLower.includes('weekly') || plan.durationDays === 7) {
+        planType = 'weekly';
+        durationDays = 7;
+      }
+      // MONTHLY check
+      else if (planIdLower === 'monthly' || planNameLower.includes('monthly') || plan.durationDays === 30) {
         planType = 'monthly';
         durationDays = 30;
-      } else if (plan.durationDays) {
-        durationDays = plan.durationDays;
-        if (durationDays === 365) planType = 'yearly';
-        else if (durationDays === 30) planType = 'monthly';
-        else if (durationDays === 7) planType = 'weekly';
       }
+      // Fallback: plan.period se
+      else if (plan.period === 'week') {
+        planType = 'weekly';
+        durationDays = 7;
+      }
+      else if (plan.period === 'month') {
+        planType = 'monthly';
+        durationDays = 30;
+      }
+      else if (plan.period === 'year') {
+        planType = 'yearly';
+        durationDays = 365;
+      }
+      
+      console.log('📦 Calculated plan type:', { planType, durationDays, originalName: plan.name });
       
       const options = {
         key: 'rzp_live_SiS2QOdZl6zCUx',
@@ -384,6 +409,7 @@ function PricingPage() {
     if (!isSubscribed) return false;
     const currentType = subscriptionType?.toLowerCase();
     if (plan.id === 'free') return false;
+    if (plan.id === 'weekly' && currentType === 'weekly') return true;
     if (plan.id === 'monthly' && currentType === 'monthly') return true;
     if (plan.id === 'yearly' && currentType === 'yearly') return true;
     return plan.id === currentType;
