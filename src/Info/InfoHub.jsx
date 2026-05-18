@@ -202,7 +202,7 @@ function InfoHub() {
       <section>
         <h3 className="text-lg font-semibold text-green-600 mb-2">Our Mission</h3>
         <p className="text-gray-600 leading-relaxed">
-          Onlibry's mission is to provide every student with free, quality educational materials. 
+          Onlibry's mission is to provide every student with most affordable, quality educational materials. 
           We believe that money should never be a barrier to learning and education.
         </p>
       </section>
@@ -240,7 +240,7 @@ function InfoHub() {
         <p className="text-gray-600 leading-relaxed">
           Onlibry was created by a group of passionate educators and developers. We noticed that 
           many students lack access to quality study materials or cannot afford expensive courses. 
-          That's why we built Onlibry - a free digital library where any student can find the 
+          That's why we built Onlibry - a free and affordable digital library where any student can find the 
           resources they need for their studies.
         </p>
       </section>
@@ -252,6 +252,10 @@ function InfoHub() {
           We are a small but dedicated team constantly working to improve the website and add 
           new materials. If you'd like to contribute or have any suggestions, please feel free 
           to reach out to us.
+        </p>
+        <p className="text-gray-600 leading-relaxed">
+          Our intention is not to raise money from this website, It is the server charges that forces us to keep price tag on some resources.
+          We are providing resources for most affordable price and most of the resources are free. Still if you feel you can't afford please contact Us we will give access to the resource.
         </p>
       </section>
 
