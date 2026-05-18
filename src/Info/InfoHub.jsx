@@ -265,7 +265,7 @@ function InfoHub() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
           <div className="bg-gray-50 rounded-lg p-3 text-center">
             <div className="text-2xl mb-1">💰</div>
-            <p className="font-medium text-gray-800">100% Free</p>
+            <p className="font-medium text-gray-800">100% Affordable</p>
             <p className="text-xs text-gray-500">No hidden charges</p>
           </div>
           <div className="bg-gray-50 rounded-lg p-3 text-center">
