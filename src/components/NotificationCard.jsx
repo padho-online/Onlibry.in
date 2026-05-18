@@ -66,8 +66,8 @@ function NotificationCard({ notification, compact = false }) {
                 {notification.title}
               </h4>
             </div>
-            <p className="text-xs text-gray-500 line-clamp-2">
-              {truncateText(notification.content, 80)}
+            <p className="text-xs text-gray-500 line-clamp-4">
+              {truncateText(notification.content,250)}
             </p>
             <div className="flex justify-between items-center mt-1">
               <span className="text-[10px] text-gray-400">

@@ -718,7 +718,7 @@ function HomeEditor() {
               </select>
               
               <textarea
-                placeholder="Content"
+                placeholder="Content (in less than 12 words)"
                 value={notificationForm.content}
                 onChange={(e) => setNotificationForm({ ...notificationForm, content: e.target.value })}
                 rows="6"
