@@ -83,7 +83,7 @@ export async function getAllPapers(forceRefresh = false) {
 }
 
 // ============================================
-// GET EXAM DATA (QUESTIONS FROM SHEET - SAME AS BEFORE)
+// GET EXAM DATA (QUESTION FROM SHEET - SAME AS BEFORE)
 // ============================================
 export async function getExamData(examName, forceRefresh = false) {
   try {
