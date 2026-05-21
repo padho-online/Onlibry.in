@@ -1,6 +1,6 @@
 // ============================================
 // ONLIBRY MAIN API WORKER - WITH D1 CACHING
-// Files, Notifications, Quick Access, Slider, Categories, Logs, Purchases
+// Files, Notifications, Quick Access, Slider, Categories, Logs, Purchases, CART
 // ============================================
 
 const CORS_HEADERS = {
@@ -40,7 +40,6 @@ async function getCachedResponse(cacheKey, ttlSeconds, fetchFunction) {
   const cache = caches.default;
   const cacheUrl = new URL(`https://cache.onlibry.com/${cacheKey}`);
   
-  // Try to get from cache
   const cachedResponse = await cache.match(cacheUrl);
   
   if (cachedResponse) {
@@ -50,10 +49,8 @@ async function getCachedResponse(cacheKey, ttlSeconds, fetchFunction) {
   
   console.log(`💾 Cache MISS: ${cacheKey}, fetching from DB...`);
   
-  // Fetch fresh data
   const data = await fetchFunction();
   
-  // Create response with cache headers
   const response = new Response(JSON.stringify(data), {
     headers: {
       ...CORS_HEADERS,
@@ -62,7 +59,6 @@ async function getCachedResponse(cacheKey, ttlSeconds, fetchFunction) {
     }
   });
   
-  // Store in cache
   await cache.put(cacheUrl, response.clone());
   
   return response;
@@ -102,14 +98,12 @@ export default {
     // 1. FILES API (WITH CACHE)
     // ============================================
     
-    // GET /api/files - All files (with pagination)
     if (method === 'GET' && url.pathname === '/api/files') {
       const page = parseInt(url.searchParams.get('page') || '1');
       const limit = parseInt(url.searchParams.get('limit') || '20');
       const offset = (page - 1) * limit;
       const search = url.searchParams.get('search') || '';
       
-      // Only cache page 1 without search
       const shouldCache = page === 1 && !search;
       
       if (shouldCache) {
@@ -133,7 +127,6 @@ export default {
         });
       }
       
-      // Search or paginated - no cache
       let query = `SELECT * FROM files WHERE show_on_website = 1`;
       let params = [];
       
@@ -166,7 +159,6 @@ export default {
       }), { headers: CORS_HEADERS });
     }
     
-    // GET /api/files/:id - Single file
     if (method === 'GET' && url.pathname.startsWith('/api/files/') && !url.pathname.includes('/sync')) {
       const fileId = url.pathname.split('/api/files/')[1];
       
@@ -185,7 +177,6 @@ export default {
     // 2. CATEGORIES API (WITH CACHE)
     // ============================================
     
-    // GET /api/categories
     if (method === 'GET' && url.pathname === '/api/categories') {
       const cacheKey = `categories_all`;
       return await getCachedResponse(cacheKey, CACHE_TTL.CATEGORIES, async () => {
@@ -198,7 +189,6 @@ export default {
     // 3. NOTIFICATIONS API (WITH CACHE)
     // ============================================
     
-    // GET /api/notifications/latest
     if (method === 'GET' && url.pathname === '/api/notifications/latest') {
       const limit = parseInt(url.searchParams.get('limit') || '5');
       const cacheKey = `notifications_latest_${limit}`;
@@ -216,7 +206,6 @@ export default {
       });
     }
     
-    // GET /api/notifications (with pagination - NO CACHE for paginated)
     if (method === 'GET' && url.pathname === '/api/notifications' && !url.pathname.includes('/latest')) {
       const page = parseInt(url.searchParams.get('page') || '1');
       const limit = parseInt(url.searchParams.get('limit') || '10');
@@ -254,7 +243,6 @@ export default {
       }), { headers: CORS_HEADERS });
     }
     
-    // GET /api/notifications/:id - Single notification (NO CACHE - increments views)
     if (method === 'GET' && url.pathname.startsWith('/api/notifications/') && !url.pathname.includes('/latest')) {
       const id = url.pathname.split('/api/notifications/')[1];
       try {
@@ -280,7 +268,6 @@ export default {
     // 4. QUICK ACCESS BUTTONS API (WITH CACHE)
     // ============================================
     
-    // GET /api/quick-access
     if (method === 'GET' && url.pathname === '/api/quick-access') {
       const cacheKey = `quick_access_all`;
       return await getCachedResponse(cacheKey, CACHE_TTL.QUICK_ACCESS, async () => {
@@ -293,7 +280,6 @@ export default {
     // 5. SLIDER CARDS API (WITH CACHE)
     // ============================================
     
-    // GET /api/slider-cards
     if (method === 'GET' && url.pathname === '/api/slider-cards') {
       const cacheKey = `slider_cards_all`;
       return await getCachedResponse(cacheKey, CACHE_TTL.SLIDER_CARDS, async () => {
@@ -306,7 +292,6 @@ export default {
     // 6. MOCK TESTS & QUIZZES API (WITH CACHE)
     // ============================================
     
-    // GET /api/mock-tests
     if (method === 'GET' && url.pathname === '/api/mock-tests') {
       const cacheKey = `mock_tests_all`;
       return await getCachedResponse(cacheKey, CACHE_TTL.MOCK_TESTS, async () => {
@@ -315,7 +300,6 @@ export default {
       });
     }
     
-    // GET /api/quizzes
     if (method === 'GET' && url.pathname === '/api/quizzes') {
       const cacheKey = `quizzes_all`;
       return await getCachedResponse(cacheKey, CACHE_TTL.QUIZZES, async () => {
@@ -328,7 +312,6 @@ export default {
     // 7. PURCHASE API (NO CACHE - Real-time)
     // ============================================
     
-    // POST /api/purchase/save
     if (method === 'POST' && url.pathname === '/api/purchase/save') {
       try {
         const body = await request.json();
@@ -353,7 +336,6 @@ export default {
       }
     }
     
-    // GET /api/purchase/check
     if (method === 'GET' && url.pathname === '/api/purchase/check') {
       const userId = url.searchParams.get('userId');
       const fileId = url.searchParams.get('fileId');
@@ -372,7 +354,6 @@ export default {
     // 8. SAVED FILES API (NO CACHE)
     // ============================================
     
-    // POST /api/saved/save
     if (method === 'POST' && url.pathname === '/api/saved/save') {
       try {
         const body = await request.json();
@@ -399,7 +380,6 @@ export default {
       }
     }
     
-    // DELETE /api/saved/remove
     if (method === 'DELETE' && url.pathname === '/api/saved/remove') {
       try {
         const body = await request.json();
@@ -418,7 +398,6 @@ export default {
       }
     }
     
-    // GET /api/saved/user/:userId
     if (method === 'GET' && url.pathname.startsWith('/api/saved/user/')) {
       const userId = url.pathname.split('/api/saved/user/')[1];
       try {
@@ -437,7 +416,130 @@ export default {
     }
     
     // ============================================
-    // 9. ADMIN APIS (With Cache Invalidation)
+    // 🔥 9. CART API (NEW - D1 + Sheet backup)
+    // ============================================
+    
+    // GET /api/cart/:userId - Get user's cart
+    if (method === 'GET' && url.pathname.startsWith('/api/cart/')) {
+      const userId = url.pathname.split('/api/cart/')[1];
+      if (!userId) {
+        return new Response(JSON.stringify({ success: false, error: 'User ID required' }), { status: 400, headers: CORS_HEADERS });
+      }
+      
+      try {
+        const result = await db.prepare(`
+          SELECT file_id as id, file_name as name, price, item_type as type, created_at as addedAt
+          FROM cart_logs 
+          WHERE user_id = ? AND status = 'active'
+          ORDER BY created_at DESC
+        `).bind(userId).all();
+        
+        console.log(`📦 Cart loaded for ${userId}: ${result.results.length} items`);
+        
+        return new Response(JSON.stringify({ success: true, cart: result.results }), { headers: CORS_HEADERS });
+      } catch (error) {
+        console.error('Cart GET error:', error);
+        return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500, headers: CORS_HEADERS });
+      }
+    }
+    
+    // POST /api/cart/add - Add item to cart
+    if (method === 'POST' && url.pathname === '/api/cart/add') {
+      console.log('🔍 Cart Add Request Received');
+      
+      try {
+        const body = await request.json();
+        console.log('📦 Request Body:', body);
+        
+        const { userId, fileId, fileName, price, itemType, action = 'add_to_cart' } = body;
+        
+        if (!userId || !fileId) {
+          console.log('❌ Missing userId or fileId');
+          return new Response(JSON.stringify({ success: false, error: 'userId and fileId required' }), { status: 400, headers: CORS_HEADERS });
+        }
+        
+        const id = generateId();
+        const now = new Date().toISOString();
+        
+        // Mark any existing active entry for this file as inactive
+        await db.prepare(`
+          UPDATE cart_logs SET status = 'inactive', updated_at = ? 
+          WHERE user_id = ? AND file_id = ? AND status = 'active'
+        `).bind(now, userId, fileId).run();
+        
+        // Insert new active cart item
+        await db.prepare(`
+          INSERT INTO cart_logs (id, user_id, file_id, file_name, price, item_type, action, status, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(id, userId, fileId, fileName || '', price || 0, itemType || 'file', action, 'active', now).run();
+        
+        console.log('✅ Cart item inserted');
+        
+        return new Response(JSON.stringify({ success: true }), { headers: CORS_HEADERS });
+      } catch (error) {
+        console.error('❌ Cart Add Error:', error);
+        return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500, headers: CORS_HEADERS });
+      }
+    }
+    
+    // DELETE /api/cart/remove - Remove item from cart
+    if (method === 'DELETE' && url.pathname === '/api/cart/remove') {
+      try {
+        const body = await request.json();
+        const { userId, fileId, fileName, price } = body;
+        
+        if (!userId || !fileId) {
+          return new Response(JSON.stringify({ success: false, error: 'userId and fileId required' }), { status: 400, headers: CORS_HEADERS });
+        }
+        
+        const now = new Date().toISOString();
+        
+        await db.prepare(`
+          UPDATE cart_logs SET status = 'inactive', updated_at = ?
+          WHERE user_id = ? AND file_id = ? AND status = 'active'
+        `).bind(now, userId, fileId).run();
+        
+        await db.prepare(`
+          INSERT INTO cart_logs (id, user_id, file_id, file_name, price, action, status, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(generateId(), userId, fileId, fileName || '', price || 0, 'remove_from_cart', 'inactive', now).run();
+        
+        console.log('✅ Cart item removed');
+        
+        return new Response(JSON.stringify({ success: true }), { headers: CORS_HEADERS });
+      } catch (error) {
+        console.error('Cart remove error:', error);
+        return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500, headers: CORS_HEADERS });
+      }
+    }
+    
+    // DELETE /api/cart/clear/:userId - Clear user's entire cart
+    if (method === 'DELETE' && url.pathname.startsWith('/api/cart/clear/')) {
+      const userId = url.pathname.split('/api/cart/clear/')[1];
+      
+      if (!userId) {
+        return new Response(JSON.stringify({ success: false, error: 'User ID required' }), { status: 400, headers: CORS_HEADERS });
+      }
+      
+      try {
+        const now = new Date().toISOString();
+        
+        await db.prepare(`
+          UPDATE cart_logs SET status = 'inactive', updated_at = ?
+          WHERE user_id = ? AND status = 'active'
+        `).bind(now, userId).run();
+        
+        console.log('✅ Cart cleared for user:', userId);
+        
+        return new Response(JSON.stringify({ success: true }), { headers: CORS_HEADERS });
+      } catch (error) {
+        console.error('Cart clear error:', error);
+        return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500, headers: CORS_HEADERS });
+      }
+    }
+    
+    // ============================================
+    // 10. ADMIN APIS (With Cache Invalidation)
     // ============================================
     
     if (!isAdminRequest(request)) {
@@ -571,10 +673,9 @@ export default {
     }
     
     // ============================================
-    // 10. FILE SYNC (Admin) - Invalidate file cache
+    // 11. FILE SYNC (Admin) - Invalidate file cache
     // ============================================
     
-    // POST /api/sync/files
     if (method === 'POST' && url.pathname === '/api/sync/files') {
       const body = await request.json();
       const files = body.files || [];
@@ -596,17 +697,15 @@ export default {
         }
       }
       
-      // Invalidate files cache after sync
       await invalidateCache('files_page1');
       
       return new Response(JSON.stringify({ success: true, synced: synced, updated: updated, total: files.length }), { headers: CORS_HEADERS });
     }
     
     // ============================================
-    // 11. SYNC USERS
+    // 12. SYNC USERS
     // ============================================
     
-    // POST /api/sync/users
     if (method === 'POST' && url.pathname === '/api/sync/users') {
       const body = await request.json();
       const users = body.users || [];
@@ -631,7 +730,6 @@ export default {
       return new Response(JSON.stringify({ success: true, synced: synced, updated: updated, total: users.length }), { headers: CORS_HEADERS });
     }
     
-    // GET /api/admin/users
     if (method === 'GET' && url.pathname === '/api/admin/users') {
       const limit = parseInt(url.searchParams.get('limit') || '500');
       const offset = parseInt(url.searchParams.get('offset') || '0');
@@ -661,7 +759,6 @@ export default {
       return new Response(JSON.stringify({ success: true, users: result.results, pagination: { total: totalResult?.total || 0, limit: limit, offset: offset } }), { headers: CORS_HEADERS });
     }
     
-    // GET /api/admin/payment-logs
     if (method === 'GET' && url.pathname === '/api/admin/payment-logs') {
       const limit = parseInt(url.searchParams.get('limit') || '200');
       const result = await db.prepare(`SELECT * FROM payment_logs ORDER BY timestamp DESC LIMIT ?`).bind(limit).all();

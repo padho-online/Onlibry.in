@@ -57,10 +57,13 @@ async function sendToLogsSheet(action, data) {
     return false;
   }
   
+  console.log(`📤 Sending to logs sheet: ${action}`, data);
+  console.log(`📤 URL: ${LOGS_SHEET_API_URL}`);
+  
   try {
-    await fetch(LOGS_SHEET_API_URL, {
+    // Use fetch with proper mode to see response
+    const response = await fetch(LOGS_SHEET_API_URL, {
       method: 'POST',
-      mode: 'no-cors',
       headers: { 
         'Content-Type': 'application/json'
       },
@@ -70,8 +73,23 @@ async function sendToLogsSheet(action, data) {
         timestamp: new Date().toISOString()
       })
     });
-    console.log(`✅ Log sent to sheet: ${action}`);
-    return true;
+    
+    const responseText = await response.text();
+    console.log(`📥 Response from sheet (${action}):`, responseText);
+    
+    try {
+      const result = JSON.parse(responseText);
+      if (result.success) {
+        console.log(`✅ Log sent to sheet: ${action}`);
+        return true;
+      } else {
+        console.error(`❌ Sheet returned error: ${result.error}`);
+        return false;
+      }
+    } catch (e) {
+      console.log(`📥 Response (not JSON): ${responseText.substring(0, 200)}`);
+      return true;
+    }
   } catch (error) {
     console.error(`❌ Error sending log to sheet (${action}):`, error);
     return false;
@@ -247,8 +265,10 @@ export async function logFileViewClose() {
 // ============================================
 
 export async function logCartAction(userId, fileId, fileName, price, action) {
+  console.log('🛒 logCartAction called:', { userId, fileId, fileName, price, action });
+  
   try {
-    await sendToLogsSheet('cartLog', {
+    const result = await sendToLogsSheet('cartLog', {
       user_id: userId || 'guest',
       file_id: fileId,
       file_name: fileName,
@@ -258,7 +278,7 @@ export async function logCartAction(userId, fileId, fileName, price, action) {
       status: action === 'add_to_cart' ? 'active' : 'inactive'
     });
     
-    console.log(`🛒 Cart action logged to Sheet: ${action} - ${fileName}`);
+    console.log(`🛒 Cart action logged to Sheet: ${action} - ${fileName}, result:`, result);
   } catch (error) {
     console.error('Error logging cart action:', error);
   }
@@ -356,6 +376,8 @@ export async function logUserLogin(user) {
 
 export async function logUserPurchase(data) {
   try {
+    console.log('💾 logUserPurchase called:', data);
+    
     await sendToLogsSheet('userPurchase', {
       user_id: data.userId,
       file_id: data.fileId,
@@ -377,6 +399,8 @@ export async function logUserPurchase(data) {
 
 export async function logSavedFile(data) {
   try {
+    console.log('💾 logSavedFile called:', data);
+    
     await sendToLogsSheet('userSaved', {
       user_id: data.userId,
       file_id: data.fileId,
