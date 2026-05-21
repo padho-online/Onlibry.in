@@ -1,6 +1,7 @@
 // src/services/loggerService.js - GOOGLE SHEET LOGS VERSION
 // UPDATED: All logs now go to NEW Google Sheet (VITE_LOGS_SHEET_API_URL)
 // D1 is no longer used for logs
+// ❌ REMOVED: logUserSync - Users only synced via bulk sync
 
 const LOGS_SHEET_API_URL = import.meta.env.VITE_LOGS_SHEET_API_URL;
 
@@ -57,7 +58,6 @@ async function sendToLogsSheet(action, data) {
   }
   
   try {
-    // Use fetch with no-cors mode (Google Apps Script accepts it)
     await fetch(LOGS_SHEET_API_URL, {
       method: 'POST',
       mode: 'no-cors',
@@ -228,7 +228,7 @@ export async function logFileViewClose() {
           user_id: user?.uid || 'guest',
           file_id: currentFileId,
           file_name: 'File',
-          pages_read: Math.floor(timeSpent / 60), // rough estimate
+          pages_read: Math.floor(timeSpent / 60),
           time_spent: timeSpent
         });
         console.log(`📄 File read logged to Sheet: ${currentFileId} -> ${timeSpent}s`);
@@ -248,7 +248,6 @@ export async function logFileViewClose() {
 
 export async function logCartAction(userId, fileId, fileName, price, action) {
   try {
-    // Send to Google Sheet Logs
     await sendToLogsSheet('cartLog', {
       user_id: userId || 'guest',
       file_id: fileId,
@@ -319,7 +318,6 @@ export async function logPaymentEvent(event, plan, amount, status, paymentId = n
   try {
     const user = await getCurrentUser();
     
-    // Send to Google Sheet Logs
     await sendToLogsSheet('paymentLog', {
       user_id: user?.uid || 'guest',
       user_email: user?.email || 'guest',
@@ -339,38 +337,13 @@ export async function logPaymentEvent(event, plan, amount, status, paymentId = n
 }
 
 // ============================================
-// USER SYNC LOGGING (Both - D1 + Sheet)
-// ============================================
-
-export async function logUserSync(user) {
-  if (!user) return;
-  
-  try {
-    await sendToLogsSheet('userSync', {
-      user_id: user.uid,
-      email: user.email || '',
-      display_name: user.displayName || '',
-      photo_url: user.photoURL || '',
-      is_admin: false,
-      is_banned: false,
-      subscription_type: 'free',
-      subscription_end: ''
-    });
-    console.log(`👤 User synced to Sheet: ${user.email}`);
-  } catch (error) {
-    console.error('Error logging user sync:', error);
-  }
-}
-
-// ============================================
-// USER LOGIN LOGGING (for tracking)
+// USER LOGIN LOGGING (for tracking only - NO USER SYNC)
 // ============================================
 
 export async function logUserLogin(user) {
   try {
     console.log(`👤 User logged in: ${user?.email}`);
-    // Also sync user to sheet
-    await logUserSync(user);
+    // ❌ REMOVED: logUserSync - Users only synced via bulk sync
     await logPageView('/login-success', 'Login Success');
   } catch (error) {
     console.error('Error logging user login:', error);
@@ -408,7 +381,7 @@ export async function logSavedFile(data) {
       user_id: data.userId,
       file_id: data.fileId,
       file_name: data.fileName,
-      action: data.action  // 'save' or 'unsave'
+      action: data.action
     });
     console.log(`💾 Saved file logged to Sheet: ${data.action} - ${data.fileName}`);
   } catch (error) {

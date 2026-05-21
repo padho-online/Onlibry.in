@@ -13,7 +13,7 @@ import {
   setDoc,
   serverTimestamp,
 } from 'firebase/firestore';
-import { logUserLogin, logUserSync } from '../services/loggerService';
+import { logUserLogin } from '../services/loggerService';
 
 const AuthContext = createContext();
 
@@ -88,30 +88,6 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // Sync user to Google Sheet Logs
-  const syncUserToSheet = async (firebaseUser) => {
-    if (!firebaseUser) return;
-    try {
-      const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-      const userData = userDoc.exists() ? userDoc.data() : {};
-      const subscription = userData.subscription || {};
-      
-      await logUserSync({
-        uid: firebaseUser.uid,
-        email: firebaseUser.email || '',
-        displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || '',
-        photoURL: firebaseUser.photoURL || '',
-        isAdmin: userData.isAdmin || false,
-        isBanned: userData.isBanned || false,
-        subscriptionType: subscription.isActive ? (subscription.type || 'free') : 'free',
-        subscriptionEnd: subscription.isActive ? (subscription.endDate || null) : null
-      });
-      console.log('👤 User synced to Sheet:', firebaseUser.email);
-    } catch (error) {
-      console.error('Error syncing user to sheet:', error);
-    }
-  };
-
   // Google Sign In
   const loginWithGoogle = async () => {
     try {
@@ -145,8 +121,8 @@ export function AuthProvider({ children }) {
 
       await checkUserSubscription(firebaseUser.uid);
       
-      // Sync user to Google Sheet Logs
-      await syncUserToSheet(firebaseUser);
+      // ❌ REMOVED: syncUserToSheet - No longer sync on every login
+      // Users will be synced via hourly bulk sync only
 
       return { success: true, user: firebaseUser };
     } catch (error) {
@@ -261,11 +237,7 @@ export function AuthProvider({ children }) {
       localStorage.setItem('isSubscribed', 'true');
       localStorage.setItem('subscriptionType', finalPlanType);
       
-      // Get current user and sync to sheet
-      const currentUser = auth.currentUser;
-      if (currentUser) {
-        await syncUserToSheet(currentUser);
-      }
+      // ❌ REMOVED: syncUserToSheet - Subscription update will be synced via hourly bulk sync
       
       return { success: true };
       
@@ -300,8 +272,8 @@ export function AuthProvider({ children }) {
         
         await checkUserSubscription(currentUser.uid);
         
-        // Sync user to Google Sheet Logs on auth state change
-        await syncUserToSheet(currentUser);
+        // ❌ REMOVED: syncUserToSheet - No longer sync on every login
+        // Users will be synced via hourly bulk sync only
       } else {
         setIsSubscribed(false);
         setSubscriptionType(null);
