@@ -1,4 +1,4 @@
-// src/pages/PricingPage.jsx - Fixed Weekly Plan Detection
+// src/pages/PricingPage.jsx - Fixed Weekly Plan Detection + Payment Logs + Purchase Logs
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
@@ -7,7 +7,7 @@ import { loadRazorpayScript, createRazorpayOrder } from "../services/razorpay";
 import { db } from '../config/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { CreditCard, ShoppingCart, Trash2, Check, Crown } from 'lucide-react';
-import { logPaymentToD1, savePurchaseToD1 } from '../services/d1Service';
+import { savePurchaseToD1 } from '../services/d1Service';
 
 function PricingPage() {
   const { user, isSubscribed, subscriptionType, updateSubscription } = useAuth();
@@ -81,7 +81,9 @@ function PricingPage() {
     return period || `${durationDays} days`;
   };
 
-  // 🔥 FIXED: handleSubscribe with proper weekly detection
+  // ============================================
+  // SUBSCRIPTION HANDLER
+  // ============================================
   const handleSubscribe = async (plan) => {
     console.log('🚀 handleSubscribe called with plan:', plan);
     
@@ -103,28 +105,23 @@ function PricingPage() {
       const order = await createRazorpayOrder(plan.price);
       console.log('✅ Order created:', order);
       
-      // 🔥 FIX: Plan type properly identify karo - WEEKLY ADDED
       let planType = 'monthly';
       let durationDays = 30;
       const planNameLower = (plan.name || '').toLowerCase();
       const planIdLower = (plan.id || '').toLowerCase();
       
-      // YEARLY check
       if (planIdLower === 'yearly' || planNameLower.includes('annual') || planNameLower.includes('yearly') || plan.durationDays === 365) {
         planType = 'yearly';
         durationDays = 365;
       }
-      // WEEKLY check (ADDED)
       else if (planIdLower === 'weekly' || planNameLower.includes('weekly') || plan.durationDays === 7) {
         planType = 'weekly';
         durationDays = 7;
       }
-      // MONTHLY check
       else if (planIdLower === 'monthly' || planNameLower.includes('monthly') || plan.durationDays === 30) {
         planType = 'monthly';
         durationDays = 30;
       }
-      // Fallback: plan.period se
       else if (plan.period === 'week') {
         planType = 'weekly';
         durationDays = 7;
@@ -156,16 +153,17 @@ function PricingPage() {
             console.log('Subscription update result:', result);
             
             if (result.success) {
-              await logPaymentToD1({
-                userId: user.uid,
-                userEmail: user.email,
-                event: 'subscription_success',
-                plan: plan.name,
-                amount: plan.price,
-                status: 'success',
-                paymentId: response.razorpay_payment_id,
-                orderId: response.razorpay_order_id
-              });
+              // Log to Sheet
+              const { logPaymentEvent } = await import('../services/loggerService');
+              await logPaymentEvent(
+                'subscription_success',
+                plan.name,
+                plan.price,
+                'success',
+                response.razorpay_payment_id,
+                response.razorpay_order_id
+              );
+              
               alert(`Successfully subscribed to ${plan.name}! 🎉`);
               window.location.reload();
             } else {
@@ -201,6 +199,9 @@ function PricingPage() {
     }
   };
 
+  // ============================================
+  // CART CHECKOUT HANDLER
+  // ============================================
   const handleCartCheckout = async () => {
     if (!user) { navigate('/login'); return; }
     if (cartItems.length === 0) { alert('Cart is empty'); return; }
@@ -221,8 +222,9 @@ function PricingPage() {
         handler: async (response) => {
           console.log('========== CART PAYMENT SUCCESSFUL ==========');
           
-          // Process each item in cart
+          const { logPaymentEvent, logUserPurchase } = await import('../services/loggerService');
           let successCount = 0;
+          
           for (const item of cartItems) {
             const finalItemType = item.type || 'file';
             
@@ -237,23 +239,57 @@ function PricingPage() {
               orderId: response.razorpay_order_id
             });
             
-            // Log to payment_logs
-            await logPaymentToD1({
+            // Log payment to Sheet
+            await logPaymentEvent(
+              'cart_purchase_success',
+              item.name,
+              item.price,
+              'success',
+              response.razorpay_payment_id,
+              response.razorpay_order_id
+            );
+            
+            // Log user purchase to Sheet
+            await logUserPurchase({
               userId: user.uid,
-              userEmail: user.email,
-              event: 'cart_purchase_success',
-              plan: item.name,
-              amount: item.price,
-              status: 'success',
+              fileId: item.id,
+              itemType: finalItemType,
+              itemName: item.name,
+              price: item.price,
               paymentId: response.razorpay_payment_id,
               orderId: response.razorpay_order_id
             });
+            
+            // Save to Firestore
+            try {
+              const { doc, updateDoc, arrayUnion, serverTimestamp } = await import('firebase/firestore');
+              const { db } = await import('../config/firebase');
+              
+              let firestoreField = 'purchasedFiles';
+              if (finalItemType === 'mocktest') firestoreField = 'purchasedMockTests';
+              if (finalItemType === 'quiz') firestoreField = 'purchasedQuizzes';
+              
+              const userRef = doc(db, 'users', user.uid);
+              await updateDoc(userRef, {
+                [firestoreField]: arrayUnion(item.id),
+                lastPurchaseAt: serverTimestamp()
+              });
+            } catch (fsError) {
+              console.error('Firestore error:', fsError);
+            }
             
             successCount++;
           }
           
           alert(`Successfully purchased ${successCount} item(s)! 🎉`);
           clearCart();
+          
+          // Clear cache
+          const { clearCache } = await import('../services/cacheService');
+          clearCache('files');
+          clearCache('mockTests');
+          clearCache('quizzes');
+          
           navigate('/saved-files');
         },
         modal: {
@@ -275,6 +311,9 @@ function PricingPage() {
     }
   };
 
+  // ============================================
+  // SINGLE ITEM CHECKOUT HANDLER
+  // ============================================
   const handleSingleCheckout = async (item) => {
     console.log('========== SINGLE CHECKOUT START ==========');
     console.log('📦 Item:', item);
@@ -289,10 +328,9 @@ function PricingPage() {
       return; 
     }
     
-    // Validate item has id
     if (!item.id) {
-      console.error('❌ Item ID is missing! Cannot proceed with purchase.');
-      alert('Error: Item ID is missing. Please try adding to cart again.');
+      console.error('❌ Item ID is missing!');
+      alert('Error: Item ID is missing. Please try again.');
       setLoading(false);
       return;
     }
@@ -314,20 +352,16 @@ function PricingPage() {
           console.log('========== PAYMENT SUCCESSFUL ==========');
           console.log('Payment ID:', response.razorpay_payment_id);
           
-          // 🔥 Determine the correct item type
-          let finalItemType = item.type || 'file';
+          const finalItemType = item.type || 'file';
           let firestoreField = 'purchasedFiles';
-          
-          if (finalItemType === 'mocktest') {
-            firestoreField = 'purchasedMockTests';
-          } else if (finalItemType === 'quiz') {
-            firestoreField = 'purchasedQuizzes';
-          }
+          if (finalItemType === 'mocktest') firestoreField = 'purchasedMockTests';
+          if (finalItemType === 'quiz') firestoreField = 'purchasedQuizzes';
           
           console.log(`📦 Item Type: ${finalItemType}, Firestore Field: ${firestoreField}`);
-          console.log(`📦 File ID being saved: ${item.id}`);
           
-          // 1. Save to D1 Database (Primary)
+          // ============================================
+          // 1. SAVE TO D1 DATABASE
+          // ============================================
           try {
             const d1Result = await savePurchaseToD1({
               userId: user.uid,
@@ -343,24 +377,46 @@ function PricingPage() {
             console.error('❌ D1 error:', d1Error);
           }
           
-          // 2. Log payment to D1
+          // ============================================
+          // 2. LOG PAYMENT TO GOOGLE SHEET
+          // ============================================
           try {
-            await logPaymentToD1({
-              userId: user.uid,
-              userEmail: user.email,
-              event: 'single_purchase_success',
-              plan: item.name,
-              amount: item.price,
-              status: 'success',
-              paymentId: response.razorpay_payment_id,
-              orderId: response.razorpay_order_id
-            });
-            console.log('✅ Payment logged to D1');
+            const { logPaymentEvent } = await import('../services/loggerService');
+            await logPaymentEvent(
+              'single_purchase_success',
+              item.name,
+              item.price,
+              'success',
+              response.razorpay_payment_id,
+              response.razorpay_order_id
+            );
+            console.log('✅ Payment logged to Sheet');
           } catch (logError) {
             console.error('❌ Payment log error:', logError);
           }
           
-          // 3. Save to Firestore (Backup)
+          // ============================================
+          // 3. LOG USER PURCHASE TO GOOGLE SHEET
+          // ============================================
+          try {
+            const { logUserPurchase } = await import('../services/loggerService');
+            await logUserPurchase({
+              userId: user.uid,
+              fileId: item.id,
+              itemType: finalItemType,
+              itemName: item.name,
+              price: item.price,
+              paymentId: response.razorpay_payment_id,
+              orderId: response.razorpay_order_id
+            });
+            console.log('✅ User purchase logged to Sheet');
+          } catch (purchaseError) {
+            console.error('❌ User purchase log error:', purchaseError);
+          }
+          
+          // ============================================
+          // 4. SAVE TO FIRESTORE (Backup)
+          // ============================================
           try {
             const { doc, updateDoc, arrayUnion, serverTimestamp } = await import('firebase/firestore');
             const { db } = await import('../config/firebase');
@@ -375,8 +431,23 @@ function PricingPage() {
             console.error('❌ Firestore error:', firestoreError);
           }
           
-          // 4. Remove from cart
+          // ============================================
+          // 5. REMOVE FROM CART
+          // ============================================
           removeFromCart(item.id);
+          
+          // ============================================
+          // 6. CLEAR CACHE
+          // ============================================
+          try {
+            const { clearCache } = await import('../services/cacheService');
+            clearCache('files');
+            clearCache('mockTests');
+            clearCache('quizzes');
+            console.log('✅ Cache cleared');
+          } catch (cacheError) {
+            console.error('❌ Cache clear error:', cacheError);
+          }
           
           alert(`Successfully purchased "${item.name}"! 🎉`);
           window.location.href = '/saved-files';

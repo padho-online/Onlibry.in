@@ -450,7 +450,115 @@ export async function getUsersFromD1(adminKey, page = 1, limit = 100, search = '
 }
 
 // ============================================
-// 12. EXPORT CLEAR CACHE FUNCTION (for manual refresh)
+// 12. CART API (D1 + Sheet backup)
+// ============================================
+
+/**
+ * Get user's cart from D1
+ * @param {string} userId - User UID
+ * @returns {Promise<Object>} - Cart items
+ */
+export async function getCartFromD1(userId) {
+  if (!userId) return { success: false, cart: [] };
+  
+  try {
+    const result = await callAPI(`/api/cart/${encodeURIComponent(userId)}`);
+    console.log('📦 Cart from D1:', result);
+    
+    if (result.success && result.cart) {
+      return { success: true, cart: result.cart };
+    }
+    return { success: true, cart: [] };
+  } catch (error) {
+    console.error('Error getting cart from D1:', error);
+    return { success: false, cart: [], error: error.message };
+  }
+}
+
+/**
+ * Add item to cart in D1
+ * @param {string} userId - User UID
+ * @param {Object} item - { id, name, price, type }
+ * @returns {Promise<Object>}
+ */
+export async function addToCartInD1(userId, item) {
+  if (!userId || !item || !item.id) {
+    return { success: false, error: 'userId and item.id required' };
+  }
+  
+  try {
+    const result = await callAPI('/api/cart/add', {
+      method: 'POST',
+      body: JSON.stringify({
+        userId: userId,
+        fileId: item.id,
+        fileName: item.name,
+        price: item.price || 0,
+        itemType: item.type || 'file',
+        action: 'add_to_cart'
+      })
+    });
+    console.log(`✅ Added to cart in D1: ${item.name}`);
+    return result;
+  } catch (error) {
+    console.error('Error adding to cart in D1:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Remove item from cart in D1
+ * @param {string} userId - User UID
+ * @param {string} fileId - File ID
+ * @param {string} fileName - File name
+ * @returns {Promise<Object>}
+ */
+export async function removeFromCartInD1(userId, fileId, fileName = '') {
+  if (!userId || !fileId) {
+    return { success: false, error: 'userId and fileId required' };
+  }
+  
+  try {
+    const result = await callAPI('/api/cart/remove', {
+      method: 'DELETE',
+      body: JSON.stringify({
+        userId: userId,
+        fileId: fileId,
+        fileName: fileName
+      })
+    });
+    console.log(`✅ Removed from cart in D1: ${fileId}`);
+    return result;
+  } catch (error) {
+    console.error('Error removing from cart in D1:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Clear user's entire cart in D1
+ * @param {string} userId - User UID
+ * @returns {Promise<Object>}
+ */
+export async function clearCartInD1(userId) {
+  if (!userId) {
+    return { success: false, error: 'userId required' };
+  }
+  
+  try {
+    const result = await callAPI(`/api/cart/clear/${encodeURIComponent(userId)}`, {
+      method: 'DELETE'
+    });
+    console.log(`✅ Cart cleared in D1 for user: ${userId}`);
+    return result;
+  } catch (error) {
+    console.error('Error clearing cart in D1:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// ============================================
+// 13. EXPORT CLEAR CACHE FUNCTION (for manual refresh)
 // ============================================
 
 export { clearCache } from './cacheService';

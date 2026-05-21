@@ -1,5 +1,5 @@
 // src/services/fileService.js
-// UPDATED for single file storage
+// UPDATED for single file storage - WITH GOOGLE SHEET LOGS
 
 import { db, auth } from '../config/firebase';
 import {
@@ -16,7 +16,6 @@ import {
   arrayUnion,
   arrayRemove
 } from 'firebase/firestore';
-import { logSavedFileToSheet } from './firebaseLogger';
 import { 
   getAllFilesFromSheet, 
   getFileByIdFromSheet, 
@@ -97,13 +96,29 @@ export async function saveFile(fileId) {
   if (!user) throw new Error('Please login to save files');
   
   try {
+    // 1. Update Firestore (primary - for quick access)
     const userRef = doc(db, 'users', user.uid);
     await updateDoc(userRef, { savedFiles: arrayUnion(fileId) });
     
+    // 2. Get file details for logging
     const file = await getFileByIdFromSheet(fileId);
     const fileName = file?.name || 'Unknown';
     
-    await logSavedFileToSheet(fileId, fileName, 'save', user.uid, user.email, user.displayName || user.email?.split('@')[0]);
+    // 3. Save to D1 (for cross-device sync)
+    const { saveFileToD1 } = await import('./d1Service');
+    const d1Result = await saveFileToD1(user.uid, fileId, fileName);
+    console.log('📦 D1 save result:', d1Result);
+    
+    // 4. Log to Google Sheet (NEW - using loggerService)
+    const { logSavedFile } = await import('./loggerService');
+    await logSavedFile({
+      userId: user.uid,
+      fileId: fileId,
+      fileName: fileName,
+      action: 'save'
+    });
+    console.log(`✅ File saved and logged to Sheet: ${fileName}`);
+    
     return { success: true };
   } catch (error) {
     console.error('Error saving:', error);
@@ -116,13 +131,29 @@ export async function unsaveFile(fileId) {
   if (!user) throw new Error('Please login to unsave files');
   
   try {
+    // 1. Update Firestore (primary)
     const userRef = doc(db, 'users', user.uid);
     await updateDoc(userRef, { savedFiles: arrayRemove(fileId) });
     
+    // 2. Get file details for logging
     const file = await getFileByIdFromSheet(fileId);
     const fileName = file?.name || 'Unknown';
     
-    await logSavedFileToSheet(fileId, fileName, 'unsave', user.uid, user.email, user.displayName || user.email?.split('@')[0]);
+    // 3. Remove from D1 (mark as unsave)
+    const { removeSavedFileFromD1 } = await import('./d1Service');
+    const d1Result = await removeSavedFileFromD1(user.uid, fileId, fileName);
+    console.log('📦 D1 unsave result:', d1Result);
+    
+    // 4. Log to Google Sheet (NEW - using loggerService)
+    const { logSavedFile } = await import('./loggerService');
+    await logSavedFile({
+      userId: user.uid,
+      fileId: fileId,
+      fileName: fileName,
+      action: 'unsave'
+    });
+    console.log(`✅ File unsaved and logged to Sheet: ${fileName}`);
+    
     return { success: true };
   } catch (error) {
     console.error('Error unsaving:', error);

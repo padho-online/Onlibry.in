@@ -1,5 +1,6 @@
-// Firebase to Sheets Logger - Direct logging from Firebase
-
+// DEPRECATED: This file is no longer used for logging.
+// Please use loggerService.js instead.
+// All logs now go to VITE_LOGS_SHEET_API_URL
 // ✅ CORRECTED URL - Make sure this is exactly your deployed URL
 const SHEET_API_URL = 'https://script.google.com/macros/s/AKfycbyHujfaaRZTsH6FBKplt4EdpURVrLPC-Efrd1gaQ-NqGQydfhMloAGsnHAaKSdgj0w/exec';
 

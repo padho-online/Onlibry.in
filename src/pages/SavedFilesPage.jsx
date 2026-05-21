@@ -38,154 +38,170 @@ function SavedFilesPage() {
   };
 
   const loadSavedFiles = async () => {
-  setLoadingSaved(true);
-  try {
-    // 🔥 Get saved files from D1
-    const { getUserSavedFromD1 } = await import('../services/d1Service');
-    const result = await getUserSavedFromD1(user.uid);
-    
-    console.log('📊 Saved files from D1:', result);
-    
-    if (result.success && result.saved) {
-      const files = result.saved.map(item => ({
-        id: item.file_id,
-        name: item.file_name || 'Unknown',
-        price: item.price,
-        isPremium: item.is_premium === 1,
-        cloudflareKey: item.cloudflare_key,
-        type: 'file'
-      }));
-      setSavedFiles(files);
-    } else {
+    setLoadingSaved(true);
+    try {
+      // 🔥 Get saved files from D1
+      const { getUserSavedFromD1 } = await import('../services/d1Service');
+      const result = await getUserSavedFromD1(user.uid);
+      
+      console.log('📊 Saved files from D1:', result);
+      
+      if (result.success && result.saved) {
+        const files = result.saved.map(item => ({
+          id: item.file_id,
+          name: item.file_name || 'Unknown',
+          price: item.price,
+          isPremium: item.is_premium === 1,
+          cloudflareKey: item.cloudflare_key,
+          type: 'file'
+        }));
+        setSavedFiles(files);
+      } else {
+        setSavedFiles([]);
+      }
+    } catch (error) { 
+      console.error('Error loading saved files:', error);
       setSavedFiles([]);
+    } finally { 
+      setLoadingSaved(false); 
     }
-  } catch (error) { 
-    console.error('Error loading saved files:', error);
-    setSavedFiles([]);
-  } finally { 
-    setLoadingSaved(false); 
-  }
-};
+  };
 
-const loadPurchasedItems = async () => {
-  setLoadingPurchased(true);
-  try {
-    // 🔥 PRIMARY: Get purchases from D1 database
-    const { getUserPurchasesFromD1 } = await import('../services/d1Service');
-    const d1Result = await getUserPurchasesFromD1(user.uid);
-    
-    console.log('📊 D1 Purchases Full Result:', d1Result);
-    
-    // Get purchases from D1
-    const d1Purchases = d1Result.success ? d1Result.purchases : [];
-    console.log('📊 D1 Purchases array:', d1Purchases);
-    
-    // Separate by type
-    const purchasedFileIds = d1Purchases
-      .filter(p => p.item_type === 'file')
-      .map(p => p.file_id);
-    
-    const purchasedMockIds = d1Purchases
-      .filter(p => p.item_type === 'mocktest')
-      .map(p => p.file_id);
-    
-    const purchasedQuizIds = d1Purchases
-      .filter(p => p.item_type === 'quiz')
-      .map(p => p.file_id);
-    
-    console.log('📊 Purchased file IDs from D1:', purchasedFileIds);
-    console.log('📊 Purchased mock IDs from D1:', purchasedMockIds);
-    console.log('📊 Purchased quiz IDs from D1:', purchasedQuizIds);
-    
-    // 🔥 SECONDARY: Also get from Firestore as backup
-    const userDoc = await getDoc(doc(db, 'users', user.uid));
-    const userData = userDoc.data();
-    const firestorePurchasedIds = userData?.purchasedFiles || [];
-    const firestoreMockIds = userData?.purchasedMockTests || [];
-    const firestoreQuizIds = userData?.purchasedQuizzes || [];
-    
-    console.log('📊 Firestore purchased IDs:', firestorePurchasedIds);
-    console.log('📊 Firestore mock IDs:', firestoreMockIds);
-    console.log('📊 Firestore quiz IDs:', firestoreQuizIds);
-    
-    // Merge both sources (D1 primary, Firestore backup)
-    const allPurchasedFileIds = [...new Set([...purchasedFileIds, ...firestorePurchasedIds])];
-    const allPurchasedMockIds = [...new Set([...purchasedMockIds, ...firestoreMockIds])];
-    const allPurchasedQuizIds = [...new Set([...purchasedQuizIds, ...firestoreQuizIds])];
-    
-    console.log('📊 All purchased file IDs (merged):', allPurchasedFileIds);
-    console.log('📊 All purchased mock IDs (merged):', allPurchasedMockIds);
-    console.log('📊 All purchased quiz IDs (merged):', allPurchasedQuizIds);
-    
-    const hasSubscription = isSubscribed;
-    
-    // Load purchased files from D1 files table
-    if (allPurchasedFileIds.length > 0) {
-      const { getFilesFromD1 } = await import('../services/d1Service');
+  const loadPurchasedItems = async () => {
+    setLoadingPurchased(true);
+    try {
+      // 🔥 PRIMARY: Get purchases from D1 database
+      const { getUserPurchasesFromD1 } = await import('../services/d1Service');
+      const d1Result = await getUserPurchasesFromD1(user.uid);
       
-      // Fetch all files first, then filter
-      const result = await getFilesFromD1(1, 1000, '');
-      if (result.success && result.files) {
-        const files = result.files
-          .filter(f => allPurchasedFileIds.includes(f.id))
-          .map(f => ({
-            id: f.id,
-            name: f.name,
-            type: 'file',
-            cloudflareKey: f.cloudflare_key,
-            price: f.price
-          }));
+      console.log('📊 D1 Purchases Full Result:', d1Result);
+      
+      // Get purchases from D1
+      const d1Purchases = d1Result.success ? d1Result.purchases : [];
+      console.log('📊 D1 Purchases array:', d1Purchases);
+      
+      // Separate by type
+      const purchasedFileIds = d1Purchases
+        .filter(p => p.item_type === 'file')
+        .map(p => p.file_id);
+      
+      const purchasedMockIds = d1Purchases
+        .filter(p => p.item_type === 'mocktest')
+        .map(p => p.file_id);
+      
+      const purchasedQuizIds = d1Purchases
+        .filter(p => p.item_type === 'quiz')
+        .map(p => p.file_id);
+      
+      console.log('📊 Purchased file IDs from D1:', purchasedFileIds);
+      console.log('📊 Purchased mock IDs from D1:', purchasedMockIds);
+      console.log('📊 Purchased quiz IDs from D1:', purchasedQuizIds);
+      
+      // 🔥 SECONDARY: Also get from Firestore as backup
+      const userDoc = await getDoc(doc(db, 'users', user.uid));
+      const userData = userDoc.data();
+      const firestorePurchasedIds = userData?.purchasedFiles || [];
+      const firestoreMockIds = userData?.purchasedMockTests || [];
+      const firestoreQuizIds = userData?.purchasedQuizzes || [];
+      
+      console.log('📊 Firestore purchased IDs:', firestorePurchasedIds);
+      console.log('📊 Firestore mock IDs:', firestoreMockIds);
+      console.log('📊 Firestore quiz IDs:', firestoreQuizIds);
+      
+      // Merge both sources (D1 primary, Firestore backup)
+      const allPurchasedFileIds = [...new Set([...purchasedFileIds, ...firestorePurchasedIds])];
+      const allPurchasedMockIds = [...new Set([...purchasedMockIds, ...firestoreMockIds])];
+      const allPurchasedQuizIds = [...new Set([...purchasedQuizIds, ...firestoreQuizIds])];
+      
+      console.log('📊 All purchased file IDs (merged):', allPurchasedFileIds);
+      console.log('📊 All purchased mock IDs (merged):', allPurchasedMockIds);
+      console.log('📊 All purchased quiz IDs (merged):', allPurchasedQuizIds);
+      
+      const hasSubscription = isSubscribed;
+      
+      // ============================================
+      // 🔥 FIXED: Load purchased files from D1 files table
+      // ============================================
+      if (allPurchasedFileIds.length > 0) {
+        const { getFilesFromD1 } = await import('../services/d1Service');
         
-        console.log('📊 Purchased files found:', files.length);
-        setPurchasedFiles(files);
-        files.forEach(f => setPurchasedAccessStatus(prev => ({ ...prev, [f.id]: true })));
+        // 🔥 FIX: Use forceRefresh = true to get latest files
+        const result = await getFilesFromD1(1, 1000, '', true);
+        console.log('📊 All files from D1 (forceRefresh):', result.files?.length);
+        
+        if (result.success && result.files) {
+          const files = result.files
+            .filter(f => allPurchasedFileIds.includes(f.id))
+            .map(f => ({
+              id: f.id,
+              name: f.name,
+              type: 'file',
+              cloudflareKey: f.cloudflare_key,
+              price: f.price
+            }));
+          
+          console.log('📊 Purchased files found after filtering:', files.length);
+          console.log('📊 Purchased files details:', files.map(f => ({ id: f.id, name: f.name })));
+          setPurchasedFiles(files);
+          files.forEach(f => setPurchasedAccessStatus(prev => ({ ...prev, [f.id]: true })));
+        } else {
+          console.log('📊 No files found in D1 or API failed');
+          setPurchasedFiles([]);
+        }
+      } else {
+        console.log('📊 No purchased file IDs found');
+        setPurchasedFiles([]);
       }
-    } else {
-      console.log('📊 No purchased files found');
+      
+      // ============================================
+      // Load purchased mock tests
+      // ============================================
+      if (allPurchasedMockIds.length > 0 || hasSubscription) {
+        const allTests = await getAllMockTests();
+        let purchasedTests = [];
+        
+        if (hasSubscription) {
+          purchasedTests = allTests;
+          console.log('📊 User has subscription, all mock tests accessible');
+        } else if (allPurchasedMockIds.length > 0) {
+          purchasedTests = allTests.filter(t => allPurchasedMockIds.includes(t.id));
+        }
+        
+        console.log('📊 Purchased mock tests:', purchasedTests.length);
+        setPurchasedMockTests(purchasedTests);
+      } else {
+        setPurchasedMockTests([]);
+      }
+      
+      // ============================================
+      // Load purchased quizzes
+      // ============================================
+      if (allPurchasedQuizIds.length > 0 || hasSubscription) {
+        const allQuizzes = await getAllQuizzes();
+        let purchasedQuizzesList = [];
+        
+        if (hasSubscription) {
+          purchasedQuizzesList = allQuizzes;
+          console.log('📊 User has subscription, all quizzes accessible');
+        } else if (allPurchasedQuizIds.length > 0) {
+          purchasedQuizzesList = allQuizzes.filter(q => allPurchasedQuizIds.includes(q.id));
+        }
+        
+        console.log('📊 Purchased quizzes:', purchasedQuizzesList.length);
+        setPurchasedQuizzes(purchasedQuizzesList);
+      } else {
+        setPurchasedQuizzes([]);
+      }
+      
+    } catch (error) { 
+      console.error('Error loading purchased items:', error);
       setPurchasedFiles([]);
+      setPurchasedMockTests([]);
+      setPurchasedQuizzes([]);
+    } finally { 
+      setLoadingPurchased(false);
     }
-    
-    // Load purchased mock tests
-    if (allPurchasedMockIds.length > 0 || hasSubscription) {
-      const allTests = await getAllMockTests();
-      let purchasedTests = [];
-      
-      if (hasSubscription) {
-        purchasedTests = allTests;
-        console.log('📊 User has subscription, all mock tests accessible');
-      } else if (allPurchasedMockIds.length > 0) {
-        purchasedTests = allTests.filter(t => allPurchasedMockIds.includes(t.id));
-      }
-      
-      console.log('📊 Purchased mock tests:', purchasedTests.length);
-      setPurchasedMockTests(purchasedTests);
-    }
-    
-    // Load purchased quizzes
-    if (allPurchasedQuizIds.length > 0 || hasSubscription) {
-      const allQuizzes = await getAllQuizzes();
-      let purchasedQuizzesList = [];
-      
-      if (hasSubscription) {
-        purchasedQuizzesList = allQuizzes;
-        console.log('📊 User has subscription, all quizzes accessible');
-      } else if (allPurchasedQuizIds.length > 0) {
-        purchasedQuizzesList = allQuizzes.filter(q => allPurchasedQuizIds.includes(q.id));
-      }
-      
-      console.log('📊 Purchased quizzes:', purchasedQuizzesList.length);
-      setPurchasedQuizzes(purchasedQuizzesList);
-    }
-    
-  } catch (error) { 
-    console.error('Error loading purchased items:', error);
-    setPurchasedFiles([]);
-    setPurchasedMockTests([]);
-    setPurchasedQuizzes([]);
-  } finally { 
-    setLoadingPurchased(false);
-  }
-};
+  };
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -204,21 +220,20 @@ const loadPurchasedItems = async () => {
   };
 
   const handleUnsave = async (fileId, fileName) => {
-  try {
-    const { removeSavedFileFromD1 } = await import('../services/d1Service');
-    const result = await removeSavedFileFromD1(user.uid, fileId, fileName);
-    console.log('Unsave result:', result);
-    
-    if (result.success) {
-      setSavedFiles(prev => prev.filter(f => f.id !== fileId));
-      // Optional: Show success toast
-    } else {
-      console.error('Unsave failed:', result.error);
+    try {
+      const { removeSavedFileFromD1 } = await import('../services/d1Service');
+      const result = await removeSavedFileFromD1(user.uid, fileId, fileName);
+      console.log('Unsave result:', result);
+      
+      if (result.success) {
+        setSavedFiles(prev => prev.filter(f => f.id !== fileId));
+      } else {
+        console.error('Unsave failed:', result.error);
+      }
+    } catch (error) {
+      console.error('Error unsaving file:', error);
     }
-  } catch (error) {
-    console.error('Error unsaving file:', error);
-  }
-};
+  };
 
   const renderCard = (item, showUnsave = false, isPurch = false) => {
     const isPurchased = isPurch || purchasedAccessStatus[item.id];
@@ -265,13 +280,13 @@ const loadPurchasedItems = async () => {
               <span className="hidden sm:inline">View</span>
             </button>
             {showUnsave && (
-            <button 
-  onClick={(e) => { e.stopPropagation(); handleUnsave(item.id, item.name); }} 
-  className="px-3 py-1.5 bg-red-50 hover:bg-red-100 rounded-lg transition"
-  title="Remove from saved"
->
-  <Trash2 size={14} className="text-red-500" />
-</button>
+              <button 
+                onClick={(e) => { e.stopPropagation(); handleUnsave(item.id, item.name); }} 
+                className="px-3 py-1.5 bg-red-50 hover:bg-red-100 rounded-lg transition"
+                title="Remove from saved"
+              >
+                <Trash2 size={14} className="text-red-500" />
+              </button>
             )}
           </div>
         </div>
