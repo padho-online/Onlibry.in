@@ -1,10 +1,10 @@
-// src/pages/QuizzesPage.jsx - with Search Logs + Debounce + Page Path
+// src/pages/QuizzesPage.jsx - with Search Logs to Sheet + Debounce + Page Path
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { getAllPapers, getAllCategories, getSubCategoriesForCategory } from '../services/quizService';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
-import { logSearchToD1 } from '../services/d1Service';
+import { logSearch } from '../services/loggerService';
 import { db } from '../config/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { Search, ChevronDown, ShoppingCart, Trash2, Play, Lock } from 'lucide-react';
@@ -31,34 +31,34 @@ function QuizzesPage() {
   const debounceTimerRef = useRef(null);
   const lastLoggedQueryRef = useRef('');
 
-  // REPLACE the existing checkPurchasedQuiz function with:
-const checkPurchasedQuiz = async (userId, quizId) => {
-  if (!userId) return false;
-  try {
-    // ✅ FIRST check D1
-    const { checkPurchasedInD1 } = await import('../services/d1Service');
-    const d1Result = await checkPurchasedInD1(userId, quizId);
-    
-    if (d1Result.success && d1Result.purchased) {
-      console.log('✅ Quiz found in D1 purchases');
-      return true;
+  // Check purchased quiz from D1 first, then Firestore
+  const checkPurchasedQuiz = async (userId, quizId) => {
+    if (!userId) return false;
+    try {
+      // ✅ FIRST check D1
+      const { checkPurchasedInD1 } = await import('../services/d1Service');
+      const d1Result = await checkPurchasedInD1(userId, quizId);
+      
+      if (d1Result.success && d1Result.purchased) {
+        console.log('✅ Quiz found in D1 purchases');
+        return true;
+      }
+      
+      // ✅ FALLBACK to Firestore
+      const userDoc = await getDoc(doc(db, 'users', userId));
+      const purchasedQuizzes = userDoc.data()?.purchasedQuizzes || [];
+      const isPurchased = purchasedQuizzes === 'all' || purchasedQuizzes.includes(quizId);
+      
+      if (isPurchased) {
+        console.log('✅ Quiz found in Firestore purchases');
+      }
+      
+      return isPurchased;
+    } catch (error) {
+      console.error('Error checking purchased quiz:', error);
+      return false;
     }
-    
-    // ✅ FALLBACK to Firestore
-    const userDoc = await getDoc(doc(db, 'users', userId));
-    const purchasedQuizzes = userDoc.data()?.purchasedQuizzes || [];
-    const isPurchased = purchasedQuizzes === 'all' || purchasedQuizzes.includes(quizId);
-    
-    if (isPurchased) {
-      console.log('✅ Quiz found in Firestore purchases');
-    }
-    
-    return isPurchased;
-  } catch (error) {
-    console.error('Error checking purchased quiz:', error);
-    return false;
-  }
-};
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -100,23 +100,24 @@ const checkPurchasedQuiz = async (userId, quizId) => {
     filtered.sort((a, b) => a.isFree === b.isFree ? 0 : a.isFree ? -1 : 1);
     setFilteredPapers(filtered);
     
-    // 🔥 Log search to D1 with debounce and page path
+    // 🔥 Log search to Google Sheet with debounce and page path
     if (searchQuery.trim() && user) {
+      // Clear previous timer
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
       }
       
+      // Set new timer
       debounceTimerRef.current = setTimeout(async () => {
         const currentQuery = searchQuery.trim();
         if (lastLoggedQueryRef.current !== currentQuery) {
           lastLoggedQueryRef.current = currentQuery;
-          await logSearchToD1(
-            user.uid,
+          await logSearch(
             currentQuery,
             filtered.length,
             location.pathname
           );
-          console.log(`🔍 Search logged: "${currentQuery}" on ${location.pathname} -> ${filtered.length} results`);
+          console.log(`🔍 Search logged to Sheet: "${currentQuery}" on ${location.pathname} -> ${filtered.length} results`);
         }
       }, 800);
     }
@@ -131,6 +132,7 @@ const checkPurchasedQuiz = async (userId, quizId) => {
     }
   }, [selectedCategory]);
 
+  // Cleanup debounce on unmount
   useEffect(() => {
     return () => {
       if (debounceTimerRef.current) {

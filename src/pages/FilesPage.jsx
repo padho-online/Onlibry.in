@@ -1,9 +1,9 @@
-// src/pages/FilesPage.jsx - D1 Database Version with Search Logs
+// src/pages/FilesPage.jsx - D1 Database Version with Search Logs to Sheet
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams, useLocation } from 'react-router-dom';
 import FileCard from '../components/FileCard';
 import { getFilesFromD1 } from '../services/d1Service';
-import { logSearchToD1 } from '../services/d1Service';
+import { logSearch } from '../services/loggerService';
 import { useAuth } from '../contexts/AuthContext';
 import { Search, X, ChevronLeft, ChevronRight } from 'lucide-react';
 
@@ -43,6 +43,7 @@ function FilesPage() {
           totalPages: result.pagination?.totalPages || 1
         }));
         
+        // Log search to Google Sheet (not D1 anymore)
         if (searchQuery.trim() && user && result.pagination?.total !== undefined) {
           if (debounceTimerRef.current) {
             clearTimeout(debounceTimerRef.current);
@@ -52,13 +53,12 @@ function FilesPage() {
             const currentQuery = searchQuery.trim();
             if (lastLoggedQueryRef.current !== currentQuery) {
               lastLoggedQueryRef.current = currentQuery;
-              await logSearchToD1(
-                user.uid,
+              await logSearch(
                 currentQuery,
                 result.pagination?.total || 0,
                 location.pathname
               );
-              console.log(`🔍 Search logged: "${currentQuery}" on ${location.pathname} -> ${result.pagination?.total || 0} results`);
+              console.log(`🔍 Search logged to Sheet: "${currentQuery}" on ${location.pathname} -> ${result.pagination?.total || 0} results`);
             }
           }, 800);
         }

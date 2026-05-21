@@ -1,10 +1,10 @@
-// src/pages/MockTestsPage.jsx - with Search Logs + Debounce + Page Path
+// src/pages/MockTestsPage.jsx - with Search Logs to Sheet + Debounce + Page Path
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { getAllPapers, getAllCategories, getSubCategoriesForCategory } from '../services/mockTestService';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
-import { logSearchToD1 } from '../services/d1Service';
+import { logSearch } from '../services/loggerService';
 import { db } from '../config/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { Search, ChevronDown, ShoppingCart, Trash2, Play, Lock } from 'lucide-react';
@@ -31,34 +31,34 @@ function MockTestsPage() {
   const debounceTimerRef = useRef(null);
   const lastLoggedQueryRef = useRef('');
 
- // REPLACE the existing checkPurchasedMockTest function with:
-const checkPurchasedMockTest = async (userId, testId) => {
-  if (!userId) return false;
-  try {
-    // ✅ FIRST check D1
-    const { checkPurchasedInD1 } = await import('../services/d1Service');
-    const d1Result = await checkPurchasedInD1(userId, testId);
-    
-    if (d1Result.success && d1Result.purchased) {
-      console.log('✅ Mock test found in D1 purchases');
-      return true;
+  // Check purchased mock test from D1 first, then Firestore
+  const checkPurchasedMockTest = async (userId, testId) => {
+    if (!userId) return false;
+    try {
+      // ✅ FIRST check D1
+      const { checkPurchasedInD1 } = await import('../services/d1Service');
+      const d1Result = await checkPurchasedInD1(userId, testId);
+      
+      if (d1Result.success && d1Result.purchased) {
+        console.log('✅ Mock test found in D1 purchases');
+        return true;
+      }
+      
+      // ✅ FALLBACK to Firestore
+      const userDoc = await getDoc(doc(db, 'users', userId));
+      const purchasedMockTests = userDoc.data()?.purchasedMockTests || [];
+      const isPurchased = purchasedMockTests === 'all' || purchasedMockTests.includes(testId);
+      
+      if (isPurchased) {
+        console.log('✅ Mock test found in Firestore purchases');
+      }
+      
+      return isPurchased;
+    } catch (error) {
+      console.error('Error checking purchased mock test:', error);
+      return false;
     }
-    
-    // ✅ FALLBACK to Firestore
-    const userDoc = await getDoc(doc(db, 'users', userId));
-    const purchasedMockTests = userDoc.data()?.purchasedMockTests || [];
-    const isPurchased = purchasedMockTests === 'all' || purchasedMockTests.includes(testId);
-    
-    if (isPurchased) {
-      console.log('✅ Mock test found in Firestore purchases');
-    }
-    
-    return isPurchased;
-  } catch (error) {
-    console.error('Error checking purchased mock test:', error);
-    return false;
-  }
-};
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -100,7 +100,7 @@ const checkPurchasedMockTest = async (userId, testId) => {
     filtered.sort((a, b) => a.isFree === b.isFree ? 0 : a.isFree ? -1 : 1);
     setFilteredPapers(filtered);
     
-    // 🔥 Log search to D1 with debounce and page path
+    // 🔥 Log search to Google Sheet with debounce and page path
     if (searchQuery.trim() && user) {
       // Clear previous timer
       if (debounceTimerRef.current) {
@@ -112,13 +112,12 @@ const checkPurchasedMockTest = async (userId, testId) => {
         const currentQuery = searchQuery.trim();
         if (lastLoggedQueryRef.current !== currentQuery) {
           lastLoggedQueryRef.current = currentQuery;
-          await logSearchToD1(
-            user.uid,
+          await logSearch(
             currentQuery,
             filtered.length,
             location.pathname
           );
-          console.log(`🔍 Search logged: "${currentQuery}" on ${location.pathname} -> ${filtered.length} results`);
+          console.log(`🔍 Search logged to Sheet: "${currentQuery}" on ${location.pathname} -> ${filtered.length} results`);
         }
       }, 800);
     }

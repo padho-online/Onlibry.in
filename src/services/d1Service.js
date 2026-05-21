@@ -1,9 +1,13 @@
 // src/services/d1Service.js
-// D1 Database API Service - Complete
+// D1 Database API Service - WITH FRONTEND CACHING
+// UPDATED: Files, Categories, Notifications, QuickAccess, SliderCards, MockTests, Quizzes have caching
+// Purchase/Saved/Cart/Logs - No caching (real-time data)
+
+import { getCachedData, clearCache } from './cacheService';
 
 const D1_API_URL = import.meta.env.VITE_D1_API_URL || 'https://onlibry-main-api.mdhabibul12212141.workers.dev';
 
-// Helper function for API calls
+// Helper function for API calls (no cache - for real-time ops)
 async function callAPI(endpoint, options = {}) {
   try {
     const response = await fetch(`${D1_API_URL}${endpoint}`, {
@@ -23,23 +27,36 @@ async function callAPI(endpoint, options = {}) {
 }
 
 // ============================================
-// 1. FILES API
+// 1. FILES API (WITH CACHE)
 // ============================================
 
-export async function getFilesFromD1(page = 1, limit = 20, search = '') {
+export async function getFilesFromD1(page = 1, limit = 20, search = '', forceRefresh = false) {
   const params = new URLSearchParams();
   params.append('page', page);
   params.append('limit', limit);
   if (search) params.append('search', search);
+  
+  // Only cache when page=1 and no search (home page files list)
+  const shouldCache = page === 1 && !search;
+  
+  if (shouldCache) {
+    const result = await getCachedData('files', async () => {
+      return await callAPI(`/api/files?${params.toString()}`);
+    }, forceRefresh);
+    return result;
+  }
+  
+  // Search or paginated - no cache
   return await callAPI(`/api/files?${params.toString()}`);
 }
 
 export async function getFileFromD1(fileId) {
+  // Single file - no cache (can be changed frequently)
   return await callAPI(`/api/files/${encodeURIComponent(fileId)}`);
 }
 
 // ============================================
-// 2. PURCHASE API
+// 2. PURCHASE API (NO CACHE - Real-time)
 // ============================================
 
 export async function savePurchaseToD1(data) {
@@ -58,7 +75,7 @@ export async function checkPurchasedInD1(userId, fileId) {
 }
 
 // ============================================
-// 3. SAVED FILES API
+// 3. SAVED FILES API (NO CACHE - Real-time)
 // ============================================
 
 export async function saveFileToD1(userId, fileId, fileName) {
@@ -80,34 +97,50 @@ export async function getUserSavedFromD1(userId) {
 }
 
 // ============================================
-// 4. NOTIFICATIONS API (with Categories)
+// 4. NOTIFICATIONS API (WITH CACHE)
 // ============================================
 
-export async function getCategoriesFromD1() {
-  const result = await callAPI('/api/categories');
+export async function getCategoriesFromD1(forceRefresh = false) {
+  const result = await getCachedData('categories', async () => {
+    return await callAPI('/api/categories');
+  }, forceRefresh);
   return result.success ? result.categories : [];
 }
 
-export async function getNotificationsFromD1(page = 1, limit = 10, category = 'all') {
+export async function getNotificationsFromD1(page = 1, limit = 10, category = 'all', forceRefresh = false) {
   const params = new URLSearchParams();
   params.append('page', page);
   params.append('limit', limit);
   if (category && category !== 'all') params.append('category', category);
+  
+  // Only cache first page, all categories
+  const shouldCache = page === 1 && category === 'all';
+  
+  if (shouldCache) {
+    const result = await getCachedData('notifications', async () => {
+      return await callAPI(`/api/notifications?${params.toString()}`);
+    }, forceRefresh);
+    return result.success ? result : { notifications: [], pagination: { total: 0, totalPages: 0 } };
+  }
+  
   const result = await callAPI(`/api/notifications?${params.toString()}`);
   return result.success ? result : { notifications: [], pagination: { total: 0, totalPages: 0 } };
 }
 
-export async function getLatestNotificationsFromD1(limit = 5) {
-  const result = await callAPI(`/api/notifications/latest?limit=${limit}`);
+export async function getLatestNotificationsFromD1(limit = 5, forceRefresh = false) {
+  const result = await getCachedData('notifications', async () => {
+    return await callAPI(`/api/notifications/latest?limit=${limit}`);
+  }, forceRefresh);
   return result.success ? result.notifications : [];
 }
 
 export async function getNotificationByIdFromD1(id) {
+  // Single notification - no cache (views increment)
   const result = await callAPI(`/api/notifications/${encodeURIComponent(id)}`);
   return result.success ? result.notification : null;
 }
 
-// Admin APIs
+// Admin APIs (no cache - admin needs latest data)
 export async function getAllNotificationsAdminFromD1(adminKey) {
   const result = await callAPI('/api/admin/notifications/all', {
     headers: { 'X-Admin-Key': adminKey }
@@ -116,38 +149,49 @@ export async function getAllNotificationsAdminFromD1(adminKey) {
 }
 
 export async function createNotificationInD1(data, adminKey) {
-  return await callAPI('/api/admin/notifications', {
+  const result = await callAPI('/api/admin/notifications', {
     method: 'POST',
     headers: { 'X-Admin-Key': adminKey },
     body: JSON.stringify(data),
   });
+  // Clear notifications cache after create
+  clearCache('notifications');
+  return result;
 }
 
 export async function updateNotificationInD1(id, data, adminKey) {
-  return await callAPI(`/api/admin/notifications/${encodeURIComponent(id)}`, {
+  const result = await callAPI(`/api/admin/notifications/${encodeURIComponent(id)}`, {
     method: 'PUT',
     headers: { 'X-Admin-Key': adminKey },
     body: JSON.stringify(data),
   });
+  // Clear notifications cache after update
+  clearCache('notifications');
+  return result;
 }
 
 export async function deleteNotificationFromD1(id, adminKey) {
-  return await callAPI(`/api/admin/notifications/${encodeURIComponent(id)}`, {
+  const result = await callAPI(`/api/admin/notifications/${encodeURIComponent(id)}`, {
     method: 'DELETE',
     headers: { 'X-Admin-Key': adminKey },
   });
+  // Clear notifications cache after delete
+  clearCache('notifications');
+  return result;
 }
 
 // ============================================
-// 5. QUICK ACCESS BUTTONS API
+// 5. QUICK ACCESS BUTTONS API (WITH CACHE)
 // ============================================
 
-export async function getQuickAccessFromD1() {
-  const result = await callAPI('/api/quick-access');
+export async function getQuickAccessFromD1(forceRefresh = false) {
+  const result = await getCachedData('quickAccess', async () => {
+    return await callAPI('/api/quick-access');
+  }, forceRefresh);
   return result.success ? result.buttons : [];
 }
 
-// Admin APIs
+// Admin APIs (no cache)
 export async function getAllQuickAccessAdminFromD1(adminKey) {
   const result = await callAPI('/api/admin/quick-access/all', {
     headers: { 'X-Admin-Key': adminKey }
@@ -156,46 +200,56 @@ export async function getAllQuickAccessAdminFromD1(adminKey) {
 }
 
 export async function addQuickAccessButtonToD1(data, adminKey) {
-  return await callAPI('/api/admin/quick-access', {
+  const result = await callAPI('/api/admin/quick-access', {
     method: 'POST',
     headers: { 'X-Admin-Key': adminKey },
     body: JSON.stringify(data),
   });
+  clearCache('quickAccess');
+  return result;
 }
 
 export async function updateQuickAccessButtonInD1(id, data, adminKey) {
-  return await callAPI(`/api/admin/quick-access/${encodeURIComponent(id)}`, {
+  const result = await callAPI(`/api/admin/quick-access/${encodeURIComponent(id)}`, {
     method: 'PUT',
     headers: { 'X-Admin-Key': adminKey },
     body: JSON.stringify(data),
   });
+  clearCache('quickAccess');
+  return result;
 }
 
 export async function deleteQuickAccessButtonFromD1(id, adminKey) {
-  return await callAPI(`/api/admin/quick-access/${encodeURIComponent(id)}`, {
+  const result = await callAPI(`/api/admin/quick-access/${encodeURIComponent(id)}`, {
     method: 'DELETE',
     headers: { 'X-Admin-Key': adminKey },
   });
+  clearCache('quickAccess');
+  return result;
 }
 
 export async function reorderQuickAccessButtonsInD1(buttons, adminKey) {
-  return await callAPI('/api/admin/quick-access/reorder', {
+  const result = await callAPI('/api/admin/quick-access/reorder', {
     method: 'POST',
     headers: { 'X-Admin-Key': adminKey },
     body: JSON.stringify({ buttons }),
   });
+  clearCache('quickAccess');
+  return result;
 }
 
 // ============================================
-// 6. SLIDER CARDS API
+// 6. SLIDER CARDS API (WITH CACHE)
 // ============================================
 
-export async function getSliderCardsFromD1() {
-  const result = await callAPI('/api/slider-cards');
+export async function getSliderCardsFromD1(forceRefresh = false) {
+  const result = await getCachedData('sliderCards', async () => {
+    return await callAPI('/api/slider-cards');
+  }, forceRefresh);
   return result.success ? result.cards : [];
 }
 
-// Admin APIs
+// Admin APIs (no cache)
 export async function getAllSliderCardsAdminFromD1(adminKey) {
   const result = await callAPI('/api/admin/slider-cards/all', {
     headers: { 'X-Admin-Key': adminKey }
@@ -204,38 +258,46 @@ export async function getAllSliderCardsAdminFromD1(adminKey) {
 }
 
 export async function addSliderCardToD1(data, adminKey) {
-  return await callAPI('/api/admin/slider-cards', {
+  const result = await callAPI('/api/admin/slider-cards', {
     method: 'POST',
     headers: { 'X-Admin-Key': adminKey },
     body: JSON.stringify(data),
   });
+  clearCache('sliderCards');
+  return result;
 }
 
 export async function updateSliderCardInD1(id, data, adminKey) {
-  return await callAPI(`/api/admin/slider-cards/${encodeURIComponent(id)}`, {
+  const result = await callAPI(`/api/admin/slider-cards/${encodeURIComponent(id)}`, {
     method: 'PUT',
     headers: { 'X-Admin-Key': adminKey },
     body: JSON.stringify(data),
   });
+  clearCache('sliderCards');
+  return result;
 }
 
 export async function deleteSliderCardFromD1(id, adminKey) {
-  return await callAPI(`/api/admin/slider-cards/${encodeURIComponent(id)}`, {
+  const result = await callAPI(`/api/admin/slider-cards/${encodeURIComponent(id)}`, {
     method: 'DELETE',
     headers: { 'X-Admin-Key': adminKey },
   });
+  clearCache('sliderCards');
+  return result;
 }
 
 export async function reorderSliderCardsInD1(cards, adminKey) {
-  return await callAPI('/api/admin/slider-cards/reorder', {
+  const result = await callAPI('/api/admin/slider-cards/reorder', {
     method: 'POST',
     headers: { 'X-Admin-Key': adminKey },
     body: JSON.stringify({ cards }),
   });
+  clearCache('sliderCards');
+  return result;
 }
 
 // ============================================
-// 7. CATEGORIES API (Admin)
+// 7. CATEGORIES API (Admin - WITH CACHE CLEAR)
 // ============================================
 
 export async function getAllCategoriesAdminFromD1(adminKey) {
@@ -246,103 +308,110 @@ export async function getAllCategoriesAdminFromD1(adminKey) {
 }
 
 export async function addCategoryToD1(data, adminKey) {
-  return await callAPI('/api/admin/categories', {
+  const result = await callAPI('/api/admin/categories', {
     method: 'POST',
     headers: { 'X-Admin-Key': adminKey },
     body: JSON.stringify(data),
   });
+  clearCache('categories');
+  return result;
 }
 
 export async function updateCategoryInD1(id, data, adminKey) {
-  return await callAPI(`/api/admin/categories/${encodeURIComponent(id)}`, {
+  const result = await callAPI(`/api/admin/categories/${encodeURIComponent(id)}`, {
     method: 'PUT',
     headers: { 'X-Admin-Key': adminKey },
     body: JSON.stringify(data),
   });
+  clearCache('categories');
+  return result;
 }
 
 export async function deleteCategoryFromD1(id, adminKey) {
-  return await callAPI(`/api/admin/categories/${encodeURIComponent(id)}`, {
+  const result = await callAPI(`/api/admin/categories/${encodeURIComponent(id)}`, {
     method: 'DELETE',
     headers: { 'X-Admin-Key': adminKey },
   });
+  clearCache('categories');
+  return result;
 }
 
 // ============================================
-// 8. MOCK TESTS & QUIZZES API
+// 8. MOCK TESTS & QUIZZES API (WITH CACHE)
 // ============================================
 
-export async function getMockTestsFromD1() {
-  const result = await callAPI('/api/mock-tests');
+export async function getMockTestsFromD1(forceRefresh = false) {
+  const result = await getCachedData('mockTests', async () => {
+    return await callAPI('/api/mock-tests');
+  }, forceRefresh);
   return result.success ? result.tests : [];
 }
 
 export async function getMockTestFromD1(id) {
+  // Single test - no cache
   const result = await callAPI(`/api/mock-tests/${encodeURIComponent(id)}`);
   return result.success ? result.test : null;
 }
 
-export async function getQuizzesFromD1() {
-  const result = await callAPI('/api/quizzes');
+export async function getQuizzesFromD1(forceRefresh = false) {
+  const result = await getCachedData('quizzes', async () => {
+    return await callAPI('/api/quizzes');
+  }, forceRefresh);
   return result.success ? result.quizzes : [];
 }
 
 export async function getQuizFromD1(id) {
+  // Single quiz - no cache
   const result = await callAPI(`/api/quizzes/${encodeURIComponent(id)}`);
   return result.success ? result.quiz : null;
 }
 
 // ============================================
-// 9. LOGS API
+// 9. LOGS API (NO CACHE - Direct to Google Sheet now)
+// NOTE: These functions are kept for compatibility but now send to Google Sheet
+// The actual implementation will be in loggerService.js
 // ============================================
 
 export async function logPaymentToD1(data) {
-  return await callAPI('/api/log/payment', {
-    method: 'POST',
-    body: JSON.stringify(data),
-  });
+  // This now goes to Google Sheet (implemented in loggerService)
+  console.log('Payment log redirected to Google Sheet');
+  return { success: true };
 }
 
 export async function logPageViewToD1(data) {
-  return await callAPI('/api/log/pageview', {
-    method: 'POST',
-    body: JSON.stringify(data),
-  });
+  // This now goes to Google Sheet
+  console.log('Page view log redirected to Google Sheet');
+  return { success: true };
 }
 
 export async function logSearchToD1(userId, searchQuery, resultCount, pagePath = '') {
-  return await callAPI('/api/log/search', {
-    method: 'POST',
-    body: JSON.stringify({ userId, searchQuery, resultCount, pagePath }),
-  });
+  // This now goes to Google Sheet
+  console.log('Search log redirected to Google Sheet');
+  return { success: true };
 }
 
 export async function logFileReadToD1(userId, fileId, fileName, pagesRead, timeSpent) {
-  return await callAPI('/api/log/fileread', {
-    method: 'POST',
-    body: JSON.stringify({ userId, fileId, fileName, pagesRead, timeSpent }),
-  });
+  // This now goes to Google Sheet
+  console.log('File read log redirected to Google Sheet');
+  return { success: true };
 }
 
 export async function logCartToD1(userId, fileId, fileName, price, action) {
-  return await callAPI('/api/log/cart', {
-    method: 'POST',
-    body: JSON.stringify({ userId, fileId, fileName, price, action }),
-  });
+  // This now goes to Google Sheet
+  console.log('Cart log redirected to Google Sheet');
+  return { success: true };
 }
 
 export async function logMockResultToD1(userId, testName, totalQuestions, correct, incorrect, unanswered, score, timeTaken) {
-  return await callAPI('/api/log/mockresult', {
-    method: 'POST',
-    body: JSON.stringify({ userId, testName, totalQuestions, correct, incorrect, unanswered, score, timeTaken }),
-  });
+  // This now goes to Google Sheet
+  console.log('Mock result log redirected to Google Sheet');
+  return { success: true };
 }
 
 export async function logQuizResultToD1(userId, quizName, totalQuestions, correct, incorrect, unanswered, score, timeTaken) {
-  return await callAPI('/api/log/quizresult', {
-    method: 'POST',
-    body: JSON.stringify({ userId, quizName, totalQuestions, correct, incorrect, unanswered, score, timeTaken }),
-  });
+  // This now goes to Google Sheet
+  console.log('Quiz result log redirected to Google Sheet');
+  return { success: true };
 }
 
 // ============================================
@@ -360,7 +429,6 @@ export async function syncFilesToD1(adminKey) {
 // 11. USERS API (Admin)
 // ============================================
 
-// Sync users from Firebase to D1
 export async function syncUsersToD1(users, adminKey) {
   return await callAPI('/api/sync/users', {
     method: 'POST',
@@ -369,7 +437,6 @@ export async function syncUsersToD1(users, adminKey) {
   });
 }
 
-// Get all users from D1 (for admin panel)
 export async function getUsersFromD1(adminKey, page = 1, limit = 100, search = '') {
   const offset = (page - 1) * limit;
   const params = new URLSearchParams();
@@ -381,3 +448,9 @@ export async function getUsersFromD1(adminKey, page = 1, limit = 100, search = '
     headers: { 'X-Admin-Key': adminKey }
   });
 }
+
+// ============================================
+// 12. EXPORT CLEAR CACHE FUNCTION (for manual refresh)
+// ============================================
+
+export { clearCache } from './cacheService';

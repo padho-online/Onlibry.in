@@ -13,7 +13,7 @@ import {
   setDoc,
   serverTimestamp,
 } from 'firebase/firestore';
-import { logUserLogin, setCurrentUserGetter } from '../services/loggerService';
+import { logUserLogin, logUserSync } from '../services/loggerService';
 
 const AuthContext = createContext();
 
@@ -88,6 +88,30 @@ export function AuthProvider({ children }) {
     }
   };
 
+  // Sync user to Google Sheet Logs
+  const syncUserToSheet = async (firebaseUser) => {
+    if (!firebaseUser) return;
+    try {
+      const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+      const userData = userDoc.exists() ? userDoc.data() : {};
+      const subscription = userData.subscription || {};
+      
+      await logUserSync({
+        uid: firebaseUser.uid,
+        email: firebaseUser.email || '',
+        displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || '',
+        photoURL: firebaseUser.photoURL || '',
+        isAdmin: userData.isAdmin || false,
+        isBanned: userData.isBanned || false,
+        subscriptionType: subscription.isActive ? (subscription.type || 'free') : 'free',
+        subscriptionEnd: subscription.isActive ? (subscription.endDate || null) : null
+      });
+      console.log('👤 User synced to Sheet:', firebaseUser.email);
+    } catch (error) {
+      console.error('Error syncing user to sheet:', error);
+    }
+  };
+
   // Google Sign In
   const loginWithGoogle = async () => {
     try {
@@ -120,6 +144,9 @@ export function AuthProvider({ children }) {
       }
 
       await checkUserSubscription(firebaseUser.uid);
+      
+      // Sync user to Google Sheet Logs
+      await syncUserToSheet(firebaseUser);
 
       return { success: true, user: firebaseUser };
     } catch (error) {
@@ -145,102 +172,108 @@ export function AuthProvider({ children }) {
   };
 
   // Update subscription (for admin/payment)
-const updateSubscription = async (userId, planType, durationInDays) => {
-  console.log('📝 updateSubscription called with:', { userId, planType, durationInDays });
-  
-  if (!userId) {
-    console.error('❌ No userId provided');
-    return { success: false, error: 'No userId provided' };
-  }
-  
-  // 🔥 FIX: Ensure planType is a string
-  let finalPlanType = 'monthly'; // default fallback
-  let finalDuration = 30; // default fallback
-  
-  if (planType && typeof planType === 'string' && planType !== 'undefined') {
-    if (planType.toLowerCase().includes('yearly') || planType.toLowerCase().includes('annual')) {
-      finalPlanType = 'yearly';
-      finalDuration = 365;
-    } else if (planType.toLowerCase().includes('monthly')) {
-      finalPlanType = 'monthly';
+  const updateSubscription = async (userId, planType, durationInDays) => {
+    console.log('📝 updateSubscription called with:', { userId, planType, durationInDays });
+    
+    if (!userId) {
+      console.error('❌ No userId provided');
+      return { success: false, error: 'No userId provided' };
+    }
+    
+    // 🔥 FIX: Ensure planType is a string
+    let finalPlanType = 'monthly'; // default fallback
+    let finalDuration = 30; // default fallback
+    
+    if (planType && typeof planType === 'string' && planType !== 'undefined') {
+      if (planType.toLowerCase().includes('yearly') || planType.toLowerCase().includes('annual')) {
+        finalPlanType = 'yearly';
+        finalDuration = 365;
+      } else if (planType.toLowerCase().includes('monthly')) {
+        finalPlanType = 'monthly';
+        finalDuration = 30;
+      } else if (planType.toLowerCase().includes('weekly')) {
+        finalPlanType = 'weekly';
+        finalDuration = 7;
+      } else {
+        finalPlanType = planType.toLowerCase();
+      }
+    }
+    
+    // Use durationDays if provided and valid
+    if (durationInDays && !isNaN(parseInt(durationInDays))) {
+      finalDuration = parseInt(durationInDays);
+      if (finalDuration === 365) finalPlanType = 'yearly';
+      else if (finalDuration === 30) finalPlanType = 'monthly';
+      else if (finalDuration === 7) finalPlanType = 'weekly';
+    }
+    
+    console.log('📝 Processed plan:', { finalPlanType, finalDuration });
+    
+    // Validate final values
+    if (!finalPlanType || finalPlanType === 'undefined') {
+      console.error('❌ Invalid planType:', finalPlanType);
+      return { success: false, error: 'Invalid plan type' };
+    }
+    
+    if (isNaN(finalDuration) || finalDuration <= 0) {
+      console.error('❌ Invalid duration:', finalDuration);
       finalDuration = 30;
-    } else if (planType.toLowerCase().includes('weekly')) {
-      finalPlanType = 'weekly';
-      finalDuration = 7;
-    } else {
-      finalPlanType = planType.toLowerCase();
-    }
-  }
-  
-  // Use durationDays if provided and valid
-  if (durationInDays && !isNaN(parseInt(durationInDays))) {
-    finalDuration = parseInt(durationInDays);
-    if (finalDuration === 365) finalPlanType = 'yearly';
-    else if (finalDuration === 30) finalPlanType = 'monthly';
-    else if (finalDuration === 7) finalPlanType = 'weekly';
-  }
-  
-  console.log('📝 Processed plan:', { finalPlanType, finalDuration });
-  
-  // Validate final values
-  if (!finalPlanType || finalPlanType === 'undefined') {
-    console.error('❌ Invalid planType:', finalPlanType);
-    return { success: false, error: 'Invalid plan type' };
-  }
-  
-  if (isNaN(finalDuration) || finalDuration <= 0) {
-    console.error('❌ Invalid duration:', finalDuration);
-    finalDuration = 30;
-  }
-  
-  try {
-    // Calculate end date
-    const now = new Date();
-    const endDate = new Date(now);
-    endDate.setDate(now.getDate() + finalDuration);
-    
-    // Validate dates
-    if (isNaN(now.getTime()) || isNaN(endDate.getTime())) {
-      console.error('❌ Invalid date calculation');
-      return { success: false, error: 'Invalid date calculation' };
     }
     
-    const endDateISO = endDate.toISOString();
-    console.log('📝 Start date:', now.toISOString());
-    console.log('📝 End date:', endDateISO);
-    
-    const userRef = doc(db, 'users', userId);
-    
-    const updateData = {
-      subscription: {
-        type: finalPlanType,
-        startDate: serverTimestamp(),
-        endDate: endDateISO,
-        isActive: true,
-      },
-      purchasedMockTests: 'all',
-      purchasedQuizzes: 'all',
-      lastSubscriptionAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
-    };
-    
-    console.log('📝 Updating Firestore with:', updateData);
-    await setDoc(userRef, updateData, { merge: true });
-    console.log('✅ Firestore update successful');
-    
-    // Update local state
-    setIsSubscribed(true);
-    setSubscriptionType(finalPlanType);
-    localStorage.setItem('isSubscribed', 'true');
-    localStorage.setItem('subscriptionType', finalPlanType);
-    
-    return { success: true };
-    
-  } catch (error) {
-    console.error('❌ Error updating subscription:', error);
-    return { success: false, error: error.message };
-  }
-};
+    try {
+      // Calculate end date
+      const now = new Date();
+      const endDate = new Date(now);
+      endDate.setDate(now.getDate() + finalDuration);
+      
+      // Validate dates
+      if (isNaN(now.getTime()) || isNaN(endDate.getTime())) {
+        console.error('❌ Invalid date calculation');
+        return { success: false, error: 'Invalid date calculation' };
+      }
+      
+      const endDateISO = endDate.toISOString();
+      console.log('📝 Start date:', now.toISOString());
+      console.log('📝 End date:', endDateISO);
+      
+      const userRef = doc(db, 'users', userId);
+      
+      const updateData = {
+        subscription: {
+          type: finalPlanType,
+          startDate: serverTimestamp(),
+          endDate: endDateISO,
+          isActive: true,
+        },
+        purchasedMockTests: 'all',
+        purchasedQuizzes: 'all',
+        lastSubscriptionAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      };
+      
+      console.log('📝 Updating Firestore with:', updateData);
+      await setDoc(userRef, updateData, { merge: true });
+      console.log('✅ Firestore update successful');
+      
+      // Update local state
+      setIsSubscribed(true);
+      setSubscriptionType(finalPlanType);
+      localStorage.setItem('isSubscribed', 'true');
+      localStorage.setItem('subscriptionType', finalPlanType);
+      
+      // Get current user and sync to sheet
+      const currentUser = auth.currentUser;
+      if (currentUser) {
+        await syncUserToSheet(currentUser);
+      }
+      
+      return { success: true };
+      
+    } catch (error) {
+      console.error('❌ Error updating subscription:', error);
+      return { success: false, error: error.message };
+    }
+  };
 
   // Force refresh subscription status
   const refreshSubscription = async () => {
@@ -252,8 +285,6 @@ const updateSubscription = async (userId, planType, durationInDays) => {
 
   // Auth state listener
   useEffect(() => {
-    setCurrentUserGetter(() => auth.currentUser);
-    
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       
@@ -268,6 +299,9 @@ const updateSubscription = async (userId, planType, durationInDays) => {
         }
         
         await checkUserSubscription(currentUser.uid);
+        
+        // Sync user to Google Sheet Logs on auth state change
+        await syncUserToSheet(currentUser);
       } else {
         setIsSubscribed(false);
         setSubscriptionType(null);
