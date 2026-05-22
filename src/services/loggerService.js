@@ -1,10 +1,8 @@
 // src/services/loggerService.js - GOOGLE SHEET LOGS VERSION
-// UPDATED: Separate URLs for different log types
-// - VITE_LOGS_SHEET_API_URL: For page_views, search_logs, file_read_logs, mock_results, quiz_results
-// - VITE_BOTH_LOGS_SHEET_API_URL: For cart, saved, purchases, payments (D1 + Sheet backup)
+// UPDATED: Only logs PageViews, SearchLogs, FileReadLogs, MockTestResults, QuizResults
+// ❌ REMOVED: CartLogs, PaymentLogs, UserPurchases, UserSaved, UserSync (These are now D1 only)
 
 const LOGS_SHEET_API_URL = import.meta.env.VITE_LOGS_SHEET_API_URL;
-const BOTH_LOGS_SHEET_API_URL = import.meta.env.VITE_BOTH_LOGS_SHEET_API_URL;
 
 // Session ID for page view tracking
 let sessionId = null;
@@ -51,10 +49,7 @@ async function getCurrentUser() {
   }
 }
 
-// ============================================
-// SEND TO REGULAR LOGS SHEET (PageViews, Search, FileRead, Mock, Quiz)
-// ============================================
-
+// Send data to Google Sheet Logs
 async function sendToLogsSheet(action, data) {
   if (!LOGS_SHEET_API_URL) {
     console.warn('⚠️ VITE_LOGS_SHEET_API_URL not set, skipping log');
@@ -81,40 +76,6 @@ async function sendToLogsSheet(action, data) {
     return true;
   } catch (error) {
     console.error(`❌ Error sending log to sheet (${action}):`, error);
-    return false;
-  }
-}
-
-// ============================================
-// SEND TO BOTH LOGS SHEET (Cart, Saved, Purchases, Payments)
-// ============================================
-
-async function sendToBothLogsSheet(action, data) {
-  if (!BOTH_LOGS_SHEET_API_URL) {
-    console.warn('⚠️ VITE_BOTH_LOGS_SHEET_API_URL not set, skipping log');
-    return false;
-  }
-  
-  console.log(`📤 Sending to both logs sheet: ${action}`, data);
-  
-  try {
-    await fetch(BOTH_LOGS_SHEET_API_URL, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: { 
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ 
-        action: action, 
-        ...data,
-        timestamp: new Date().toISOString()
-      })
-    });
-    
-    console.log(`✅ Both log sent to sheet: ${action}`);
-    return true;
-  } catch (error) {
-    console.error(`❌ Error sending both log (${action}):`, error);
     return false;
   }
 }
@@ -339,101 +300,36 @@ export async function logUserLogin(user) {
 
 // ============================================
 // ============================================
-// 🔥 BOTH LOGS (D1 + Sheet) - Using Separate Sheet
+// 🔥 REMOVED FUNCTIONS (Now only in D1 - No Sheet Logging)
 // ============================================
 // ============================================
 
-// ============================================
-// CART LOGGING (Both - D1 + Sheet)
-// ============================================
-
+// CART LOGGING - Now only in D1
 export async function logCartAction(userId, fileId, fileName, price, action) {
-  console.log('🛒 logCartAction called:', { userId, fileId, fileName, price, action });
-  
-  try {
-    await sendToBothLogsSheet('cartLog', {
-      user_id: userId || 'guest',
-      file_id: fileId,
-      file_name: fileName,
-      price: price,
-      item_type: 'file',
-      action: action,
-      status: action === 'add_to_cart' ? 'active' : 'inactive'
-    });
-    
-    console.log(`🛒 Cart action logged to Both Sheet: ${action} - ${fileName}`);
-  } catch (error) {
-    console.error('Error logging cart action:', error);
-  }
+  console.log('🛒 Cart action (D1 only - no sheet):', { userId, fileId, fileName, price, action });
+  // D1 handles this via CartContext -> d1Service
+  return true;
 }
 
-// ============================================
-// SAVED FILE LOGGING (Both - D1 + Sheet)
-// ============================================
-
+// SAVED FILE LOGGING - Now only in D1
 export async function logSavedFile(data) {
-  console.log('💾 logSavedFile called:', data);
-  
-  try {
-    await sendToBothLogsSheet('savedLog', {
-      user_id: data.userId || 'guest',
-      file_id: data.fileId,
-      file_name: data.fileName,
-      action: data.action
-    });
-    console.log(`💾 Saved file logged to Both Sheet: ${data.action} - ${data.fileName}`);
-  } catch (error) {
-    console.error('Error logging saved file:', error);
-  }
+  console.log('💾 Saved file (D1 only - no sheet):', data);
+  // D1 handles this via fileService -> d1Service
+  return true;
 }
 
-// ============================================
-// PURCHASE LOGGING (Both - D1 + Sheet)
-// ============================================
-
+// PURCHASE LOGGING - Now only in D1
 export async function logUserPurchase(data) {
-  console.log('💾 logUserPurchase called:', data);
-  
-  try {
-    await sendToBothLogsSheet('purchaseLog', {
-      user_id: data.userId || 'guest',
-      file_id: data.fileId,
-      item_type: data.itemType,
-      item_name: data.itemName,
-      price: data.price,
-      payment_id: data.paymentId,
-      order_id: data.orderId
-    });
-    console.log(`💾 User purchase logged to Both Sheet: ${data.itemName}`);
-  } catch (error) {
-    console.error('Error logging user purchase:', error);
-  }
+  console.log('💾 User purchase (D1 only - no sheet):', data);
+  // D1 handles this via PricingPage -> d1Service
+  return true;
 }
 
-// ============================================
-// PAYMENT LOGGING (Both - D1 + Sheet)
-// ============================================
-
+// PAYMENT LOGGING - Now only in D1
 export async function logPaymentEvent(event, plan, amount, status, paymentId = null, orderId = null, error = null) {
-  try {
-    const user = await getCurrentUser();
-    
-    await sendToBothLogsSheet('paymentLog', {
-      user_id: user?.uid || 'guest',
-      user_email: user?.email || 'guest',
-      event: event,
-      plan: plan,
-      amount: amount,
-      status: status,
-      payment_id: paymentId,
-      order_id: orderId,
-      error: error
-    });
-    
-    console.log(`💰 Payment logged to Both Sheet: ${event} - ${status}`);
-  } catch (error) {
-    console.error('Error logging payment:', error);
-  }
+  console.log('💰 Payment event (D1 only - no sheet):', { event, plan, amount, status, paymentId, orderId, error });
+  // D1 handles this via PricingPage -> d1Service
+  return true;
 }
 
 // ============================================
