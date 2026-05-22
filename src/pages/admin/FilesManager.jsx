@@ -267,18 +267,17 @@ function FilesManager() {
           
           // 🔥 FIXED: Show On Website - Handle BOTH true AND false
           if (row.showOnWebsite !== undefined && row.showOnWebsite !== null && row.showOnWebsite.toString().trim() !== '') {
-            const showStr = row.showOnWebsite.toString().toLowerCase().trim();
-            // Handle both true and false cases
-            if (showStr === 'true' || showStr === 'yes' || showStr === '1') {
-              updateParams.showOnWebsite = true;
-            } else if (showStr === 'false' || showStr === 'no' || showStr === '0') {
-              updateParams.showOnWebsite = false;
-            } else {
-              // Default to false if invalid value
-              updateParams.showOnWebsite = false;
-            }
-            console.log(`  👁️ Updating showOnWebsite: ${updateParams.showOnWebsite} (from: ${showStr})`);
-          }
+    const showStr = row.showOnWebsite.toString().toLowerCase().trim();
+    // ✅ Handle BOTH true and false
+    if (showStr === 'true' || showStr === 'yes' || showStr === '1') {
+        updateParams.showOnWebsite = true;
+    } else if (showStr === 'false' || showStr === 'no' || showStr === '0') {
+        updateParams.showOnWebsite = false;
+    } else {
+        updateParams.showOnWebsite = false;
+    }
+    console.log(`  👁️ Updating showOnWebsite: ${updateParams.showOnWebsite} (from: ${showStr})`);
+}
           
           console.log(`📤 Sending update for ${fileId}:`, updateParams);
           
