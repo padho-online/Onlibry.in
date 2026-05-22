@@ -235,8 +235,6 @@ function FilesManager() {
             userAgent: navigator.userAgent
           };
           
-          // 🔥 CRITICAL FIX: ONLY add field if it has a value in Editor
-          
           // File Name - ONLY if not empty
           if (row.fileName && row.fileName.toString().trim() !== '') {
             updateParams.fileName = row.fileName.toString().trim();
@@ -267,17 +265,16 @@ function FilesManager() {
           
           // 🔥 FIXED: Show On Website - Handle BOTH true AND false
           if (row.showOnWebsite !== undefined && row.showOnWebsite !== null && row.showOnWebsite.toString().trim() !== '') {
-    const showStr = row.showOnWebsite.toString().toLowerCase().trim();
-    // ✅ Handle BOTH true and false
-    if (showStr === 'true' || showStr === 'yes' || showStr === '1') {
-        updateParams.showOnWebsite = true;
-    } else if (showStr === 'false' || showStr === 'no' || showStr === '0') {
-        updateParams.showOnWebsite = false;
-    } else {
-        updateParams.showOnWebsite = false;
-    }
-    console.log(`  👁️ Updating showOnWebsite: ${updateParams.showOnWebsite} (from: ${showStr})`);
-}
+            const showStr = row.showOnWebsite.toString().toLowerCase().trim();
+            // Handle both true and false cases
+            if (showStr === 'true' || showStr === 'yes' || showStr === '1') {
+              updateParams.showOnWebsite = true;
+            } else {
+              // "false", "FALSE", "no", "0", or any other value -> false
+              updateParams.showOnWebsite = false;
+            }
+            console.log(`  👁️ Updating showOnWebsite: ${updateParams.showOnWebsite} (from: "${showStr}")`);
+          }
           
           console.log(`📤 Sending update for ${fileId}:`, updateParams);
           
@@ -586,7 +583,7 @@ function FilesManager() {
                       </td>
                       <td className="p-2 text-gray-500 text-xs">
                         {(file.size / 1024).toFixed(2)} KB
-                      </td>
+                       </td>
                       <td className="p-2">
                         <input
                           type="number"
@@ -594,7 +591,7 @@ function FilesManager() {
                           onChange={(e) => setEditForm({ ...editForm, price: parseInt(e.target.value) || 0 })}
                           className="w-20 px-2 py-1 border rounded"
                         />
-                      </td>
+                       </td>
                       <td className="p-2">
                         <input
                           type="checkbox"
@@ -602,7 +599,7 @@ function FilesManager() {
                           onChange={(e) => setEditForm({ ...editForm, isPremium: e.target.checked })}
                           className="w-4 h-4"
                         />
-                      </td>
+                       </td>
                       <td className="p-2">
                         <input
                           type="checkbox"
@@ -610,7 +607,7 @@ function FilesManager() {
                           onChange={(e) => setEditForm({ ...editForm, showOnWebsite: e.target.checked })}
                           className="w-4 h-4"
                         />
-                      </td>
+                       </td>
                       <td className="p-2">
                         <input
                           type="text"
@@ -619,7 +616,7 @@ function FilesManager() {
                           placeholder="subject:Maths"
                           className="w-full px-2 py-1 text-xs border rounded"
                         />
-                      </td>
+                       </td>
                       <td className="p-2">
                         <button
                           onClick={() => handleUpdateFile(file)}
@@ -633,7 +630,7 @@ function FilesManager() {
                         >
                           Cancel
                         </button>
-                      </td>
+                       </td>
                     </>
                   ) : (
                     <>
@@ -652,7 +649,7 @@ function FilesManager() {
                         {!file.showOnWebsite && (
                           <span className="inline-block mt-1 px-1.5 py-0.5 bg-red-100 text-red-600 text-xs rounded">Hidden</span>
                         )}
-                      </td>
+                       </td>
                       <td className="p-2 text-gray-500 text-xs">
                         {(file.size / 1024).toFixed(2)} KB
                        </td>
@@ -711,7 +708,7 @@ function FilesManager() {
                 </tr>
               ))}
             </tbody>
-           </table>
+          </table>
           
           {filteredFiles.length === 0 && (
             <div className="text-center py-12 text-gray-500">
