@@ -1,4 +1,4 @@
-// src/pages/PricingPage.jsx - Fixed Weekly Plan Detection + Payment Logs + Purchase Logs
+// src/pages/PricingPage.jsx - Fixed Weekly Plan Detection + Payment Logs + Purchase Logs + D1 Worker Logs
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
@@ -8,6 +8,8 @@ import { db } from '../config/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { CreditCard, ShoppingCart, Trash2, Check, Crown } from 'lucide-react';
 import { savePurchaseToD1 } from '../services/d1Service';
+
+const WORKER_URL = 'https://onlibry-main-api.mdhabibul12212141.workers.dev';
 
 function PricingPage() {
   const { user, isSubscribed, subscriptionType, updateSubscription } = useAuth();
@@ -82,6 +84,40 @@ function PricingPage() {
   };
 
   // ============================================
+  // HELPER: LOG PAYMENT TO D1 WORKER
+  // ============================================
+  const logPaymentToWorker = async (event, planName, amount, status, paymentId, orderId, error = null) => {
+    try {
+      const body = {
+        userId: user?.uid || 'guest',
+        userEmail: user?.email || 'guest',
+        event: event,
+        plan: planName,
+        amount: amount,
+        status: status,
+        paymentId: paymentId || null,
+        orderId: orderId || null,
+        error: error || null
+      };
+      
+      console.log('💰 Sending payment log to Worker:', body);
+      
+      const response = await fetch(`${WORKER_URL}/api/log/payment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      
+      const result = await response.json();
+      console.log('✅ Worker payment log response:', result);
+      return result;
+    } catch (error) {
+      console.error('❌ Worker payment log error:', error);
+      return { success: false, error: error.message };
+    }
+  };
+
+  // ============================================
   // SUBSCRIPTION HANDLER
   // ============================================
   const handleSubscribe = async (plan) => {
@@ -149,11 +185,21 @@ function PricingPage() {
           console.log('✅ Payment successful!', response);
           
           try {
+            // 🔥 LOG TO D1 WORKER FIRST
+            await logPaymentToWorker(
+              'subscription_success',
+              plan.name,
+              plan.price,
+              'success',
+              response.razorpay_payment_id,
+              response.razorpay_order_id
+            );
+            
             const result = await updateSubscription(user.uid, planType, durationDays);
             console.log('Subscription update result:', result);
             
             if (result.success) {
-              // Log to Sheet
+              // Log to Sheet (backup)
               const { logPaymentEvent } = await import('../services/loggerService');
               await logPaymentEvent(
                 'subscription_success',
@@ -177,6 +223,7 @@ function PricingPage() {
         modal: {
           ondismiss: () => {
             console.log('Payment modal closed by user');
+            logPaymentToWorker('subscription_cancelled', plan.name, plan.price, 'cancelled', null, null);
             setLoading(false);
             setProcessingPlan(null);
           }
@@ -193,6 +240,7 @@ function PricingPage() {
       
     } catch (error) {
       console.error('Payment error:', error);
+      await logPaymentToWorker('subscription_failed', plan.name, plan.price, 'failed', null, null, error.message);
       alert('Payment failed. Please try again. Error: ' + error.message);
       setLoading(false);
       setProcessingPlan(null);
@@ -221,6 +269,16 @@ function PricingPage() {
         order_id: order.id,
         handler: async (response) => {
           console.log('========== CART PAYMENT SUCCESSFUL ==========');
+          
+          // 🔥 LOG TO D1 WORKER FIRST
+          await logPaymentToWorker(
+            'cart_purchase_success',
+            `${cartItems.length} items`,
+            cartTotal,
+            'success',
+            response.razorpay_payment_id,
+            response.razorpay_order_id
+          );
           
           const { logPaymentEvent, logUserPurchase } = await import('../services/loggerService');
           let successCount = 0;
@@ -295,6 +353,7 @@ function PricingPage() {
         modal: {
           ondismiss: () => {
             console.log('Payment modal closed');
+            logPaymentToWorker('cart_purchase_cancelled', `${cartItems.length} items`, cartTotal, 'cancelled', null, null);
             setLoading(false);
           }
         },
@@ -305,6 +364,7 @@ function PricingPage() {
       rzp.open();
     } catch (error) {
       console.error('Checkout error:', error);
+      await logPaymentToWorker('cart_purchase_failed', `${cartItems.length} items`, cartTotal, 'failed', null, null, error.message);
       alert('Checkout failed. Please try again.');
     } finally {
       setLoading(false);
@@ -359,6 +419,16 @@ function PricingPage() {
           
           console.log(`📦 Item Type: ${finalItemType}, Firestore Field: ${firestoreField}`);
           
+          // 🔥 LOG TO D1 WORKER FIRST
+          await logPaymentToWorker(
+            'single_purchase_success',
+            item.name,
+            item.price,
+            'success',
+            response.razorpay_payment_id,
+            response.razorpay_order_id
+          );
+          
           // ============================================
           // 1. SAVE TO D1 DATABASE
           // ============================================
@@ -378,7 +448,7 @@ function PricingPage() {
           }
           
           // ============================================
-          // 2. LOG PAYMENT TO GOOGLE SHEET
+          // 2. LOG PAYMENT TO GOOGLE SHEET (Backup)
           // ============================================
           try {
             const { logPaymentEvent } = await import('../services/loggerService');
@@ -396,7 +466,7 @@ function PricingPage() {
           }
           
           // ============================================
-          // 3. LOG USER PURCHASE TO GOOGLE SHEET
+          // 3. LOG USER PURCHASE TO GOOGLE SHEET (Backup)
           // ============================================
           try {
             const { logUserPurchase } = await import('../services/loggerService');
@@ -455,6 +525,7 @@ function PricingPage() {
         modal: {
           ondismiss: () => {
             console.log('Payment modal closed');
+            logPaymentToWorker('single_purchase_cancelled', item.name, item.price, 'cancelled', null, null);
             setLoading(false);
           }
         },
@@ -470,6 +541,7 @@ function PricingPage() {
       
     } catch (error) {
       console.error('❌ Payment error:', error);
+      await logPaymentToWorker('single_purchase_failed', item.name, item.price, 'failed', null, null, error.message);
       alert('Purchase failed. Please try again.');
       setLoading(false);
     }
