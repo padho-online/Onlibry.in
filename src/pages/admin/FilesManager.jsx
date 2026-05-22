@@ -1,5 +1,6 @@
 // src/pages/admin/FilesManager.jsx
 // FULLY FIXED - Only update fields that have values in Editor sheet
+// FIXED: showOnWebsite FALSE now updates correctly
 
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
@@ -222,7 +223,7 @@ function FilesManager() {
             console.log(`❌ Cloudflare delete failed: ${fileId}`);
           }
         }
-        // UPDATE operation - ONLY send fields that have values
+        // UPDATE operation - ONLY send fields that have values in Editor
         else {
           // Build update params - ONLY add fields that exist in Editor row
           const updateParams = {
@@ -264,11 +265,19 @@ function FilesManager() {
             console.log(`  ⭐ Updating isPremium: ${updateParams.isPremium}`);
           }
           
-          // Show On Website - ONLY if not empty
+          // 🔥 FIXED: Show On Website - Handle BOTH true AND false
           if (row.showOnWebsite !== undefined && row.showOnWebsite !== null && row.showOnWebsite.toString().trim() !== '') {
             const showStr = row.showOnWebsite.toString().toLowerCase().trim();
-            updateParams.showOnWebsite = (showStr === 'true' || showStr === 'yes' || showStr === '1');
-            console.log(`  👁️ Updating showOnWebsite: ${updateParams.showOnWebsite}`);
+            // Handle both true and false cases
+            if (showStr === 'true' || showStr === 'yes' || showStr === '1') {
+              updateParams.showOnWebsite = true;
+            } else if (showStr === 'false' || showStr === 'no' || showStr === '0') {
+              updateParams.showOnWebsite = false;
+            } else {
+              // Default to false if invalid value
+              updateParams.showOnWebsite = false;
+            }
+            console.log(`  👁️ Updating showOnWebsite: ${updateParams.showOnWebsite} (from: ${showStr})`);
           }
           
           console.log(`📤 Sending update for ${fileId}:`, updateParams);
@@ -647,7 +656,7 @@ function FilesManager() {
                       </td>
                       <td className="p-2 text-gray-500 text-xs">
                         {(file.size / 1024).toFixed(2)} KB
-                      </td>
+                       </td>
                       <td className="p-2 font-medium">₹{file.price || 29}</td>
                       <td className="p-2">
                         {file.isPremium ? (
@@ -655,14 +664,14 @@ function FilesManager() {
                         ) : (
                           <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded-full text-xs">Free</span>
                         )}
-                      </td>
+                       </td>
                       <td className="p-2">
                         {file.showOnWebsite ? (
                           <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs">Visible</span>
                         ) : (
                           <span className="px-2 py-1 bg-red-100 text-red-700 rounded-full text-xs">Hidden</span>
                         )}
-                      </td>
+                       </td>
                       <td className="p-2 text-xs text-gray-500 max-w-[250px]">
                         {(() => {
                           const displayTags = tagsToString(file.tags, file.tagsString);
@@ -674,7 +683,7 @@ function FilesManager() {
                             <span className="text-gray-400 text-xs">—</span>
                           );
                         })()}
-                      </td>
+                       </td>
                       <td className="p-2">
                         <button
                           onClick={() => {
@@ -697,13 +706,13 @@ function FilesManager() {
                         >
                           Delete
                         </button>
-                      </td>
+                       </td>
                     </>
                   )}
                 </tr>
               ))}
             </tbody>
-          </table>
+           </table>
           
           {filteredFiles.length === 0 && (
             <div className="text-center py-12 text-gray-500">
