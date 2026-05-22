@@ -1,5 +1,5 @@
 // src/pages/admin/FilesManager.jsx
-// FULLY FIXED - Bulk Update working with GET requests (No CORS issues)
+// FULLY FIXED - Only update fields that have values in Editor sheet
 
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
@@ -144,156 +144,173 @@ function FilesManager() {
     }
   };
 
-  // BULK UPDATE - Handle both UPDATE and DELETE from Editor sheet
-const handleBulkUpdateFromSheet = async () => {
-  if (!window.confirm('This will update/delete ALL files from "Editor" sheet. Continue?')) return;
-  
-  setBulkUpdating(true);
-  setMessage({ type: 'info', text: '🔄 Reading Editor sheet...' });
-  
-  try {
-    const userIp = await getClientIP();
+  // BULK UPDATE - ONLY update fields that have values in Editor sheet
+  const handleBulkUpdateFromSheet = async () => {
+    if (!window.confirm('This will update files from "Editor" sheet. Only fields with values will be updated. Continue?')) return;
     
-    // Get editor data using GET
-    const editorData = await getEditorData();
+    setBulkUpdating(true);
+    setMessage({ type: 'info', text: '🔄 Reading Editor sheet...' });
     
-    console.log('📊 Full editor data:', editorData);
-    
-    if (!editorData.success) {
-      throw new Error(editorData.error || 'Failed to read Editor sheet');
-    }
-    
-    const rows = editorData.files || [];
-    console.log(`📋 Total rows in editor: ${rows.length}`);
-    
-    if (rows.length === 0) {
-      setMessage({ type: 'info', text: '📭 No data found in Editor sheet.' });
-      setBulkUpdating(false);
-      return;
-    }
-    
-    let updated = 0;
-    let deleted = 0;
-    let failed = 0;
-    let skipped = 0;
-    
-    // Process each row
-    for (let i = 0; i < rows.length; i++) {
-      const row = rows[i];
+    try {
+      const userIp = await getClientIP();
       
-      // 🔥 Find fileId (case-insensitive)
-      const fileId = row.fileId || row.fileid || row.FileId;
+      // Get editor data using GET
+      const editorData = await getEditorData();
       
-      if (!fileId || fileId === '' || fileId === 'fileId') {
-        console.log(`⚠️ Row ${i + 1}: No fileId found, skipping:`, row);
-        skipped++;
-        continue;
+      console.log('📊 Full editor data:', editorData);
+      
+      if (!editorData.success) {
+        throw new Error(editorData.error || 'Failed to read Editor sheet');
       }
       
-      const status = (row.status || '').toLowerCase();
-      console.log(`📝 Row ${i + 1}: Processing ${fileId}, status: ${status || 'update'}`);
+      const rows = editorData.files || [];
+      console.log(`📋 Total rows in editor: ${rows.length}`);
       
-      // DELETE operation
-      if (status === 'deleted') {
-        console.log(`🗑️ Deleting file: ${fileId}`);
-        const cloudflareDeleted = await deleteFromCloudflare(fileId);
+      if (rows.length === 0) {
+        setMessage({ type: 'info', text: '📭 No data found in Editor sheet.' });
+        setBulkUpdating(false);
+        return;
+      }
+      
+      let updated = 0;
+      let deleted = 0;
+      let failed = 0;
+      let skipped = 0;
+      
+      // Process each row
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
         
-        if (cloudflareDeleted) {
-          const result = await sendToSheetGet({
-            action: 'delete',
-            fileId: fileId,
-            fileName: row.fileName || 'Unknown',
-            deletedBy: user?.email || 'admin',
-            deletedByName: user?.displayName || 'Admin',
-            userIp: userIp,
-            userAgent: navigator.userAgent,
-            reason: 'Bulk delete from Editor sheet'
-          });
+        // Find fileId
+        const fileId = row.fileId || row.fileid || row.FileId;
+        
+        if (!fileId || fileId === '' || fileId === 'fileId') {
+          console.log(`⚠️ Row ${i + 1}: No fileId found, skipping:`, row);
+          skipped++;
+          continue;
+        }
+        
+        const status = (row.status || '').toLowerCase();
+        console.log(`📝 Row ${i + 1}: Processing ${fileId}, status: ${status || 'update'}`);
+        
+        // DELETE operation
+        if (status === 'deleted') {
+          console.log(`🗑️ Deleting file: ${fileId}`);
+          const cloudflareDeleted = await deleteFromCloudflare(fileId);
           
-          if (result.success) {
-            deleted++;
-            console.log(`✅ Deleted: ${fileId}`);
+          if (cloudflareDeleted) {
+            const result = await sendToSheetGet({
+              action: 'delete',
+              fileId: fileId,
+              fileName: row.fileName || 'Unknown',
+              deletedBy: user?.email || 'admin',
+              deletedByName: user?.displayName || 'Admin',
+              userIp: userIp,
+              userAgent: navigator.userAgent,
+              reason: 'Bulk delete from Editor sheet'
+            });
+            
+            if (result.success) {
+              deleted++;
+              console.log(`✅ Deleted: ${fileId}`);
+            } else {
+              failed++;
+              console.log(`❌ Delete failed: ${fileId}`, result);
+            }
           } else {
             failed++;
-            console.log(`❌ Delete failed: ${fileId}`, result);
+            console.log(`❌ Cloudflare delete failed: ${fileId}`);
           }
-        } else {
-          failed++;
-          console.log(`❌ Cloudflare delete failed: ${fileId}`);
+        }
+        // UPDATE operation - ONLY send fields that have values
+        else {
+          // Build update params - ONLY add fields that exist in Editor row
+          const updateParams = {
+            action: 'update',
+            fileId: fileId,
+            updatedBy: user?.email || 'admin',
+            updatedByName: user?.displayName || 'Admin',
+            userIp: userIp,
+            userAgent: navigator.userAgent
+          };
+          
+          // 🔥 CRITICAL FIX: ONLY add field if it has a value in Editor
+          
+          // File Name - ONLY if not empty
+          if (row.fileName && row.fileName.toString().trim() !== '') {
+            updateParams.fileName = row.fileName.toString().trim();
+            console.log(`  📝 Updating name: ${updateParams.fileName}`);
+          }
+          
+          // Price - ONLY if not empty and is valid number
+          if (row.price !== undefined && row.price !== null && row.price.toString().trim() !== '') {
+            const priceNum = parseInt(row.price);
+            if (!isNaN(priceNum)) {
+              updateParams.price = priceNum;
+              console.log(`  💰 Updating price: ${priceNum}`);
+            }
+          }
+          
+          // Tags - ONLY if not empty
+          if (row.tags && row.tags.toString().trim() !== '') {
+            updateParams.tags = row.tags.toString().trim();
+            console.log(`  🏷️ Updating tags: ${updateParams.tags}`);
+          }
+          
+          // Is Premium - ONLY if not empty
+          if (row.isPremium !== undefined && row.isPremium !== null && row.isPremium.toString().trim() !== '') {
+            const premiumStr = row.isPremium.toString().toLowerCase().trim();
+            updateParams.isPremium = (premiumStr === 'true' || premiumStr === 'yes' || premiumStr === '1');
+            console.log(`  ⭐ Updating isPremium: ${updateParams.isPremium}`);
+          }
+          
+          // Show On Website - ONLY if not empty
+          if (row.showOnWebsite !== undefined && row.showOnWebsite !== null && row.showOnWebsite.toString().trim() !== '') {
+            const showStr = row.showOnWebsite.toString().toLowerCase().trim();
+            updateParams.showOnWebsite = (showStr === 'true' || showStr === 'yes' || showStr === '1');
+            console.log(`  👁️ Updating showOnWebsite: ${updateParams.showOnWebsite}`);
+          }
+          
+          console.log(`📤 Sending update for ${fileId}:`, updateParams);
+          
+          const result = await sendToSheetGet(updateParams);
+          
+          if (result.success) {
+            updated++;
+            console.log(`✅ Updated: ${fileId}, changes: ${result.changes?.join(', ') || 'none'}`);
+          } else {
+            failed++;
+            console.log(`❌ Update failed: ${fileId}`, result);
+          }
         }
       }
-      // UPDATE operation
-      else {
-        // Convert boolean values
-        let isPremiumVal = false;
-        const premiumStr = String(row.isPremium || '').toLowerCase();
-        if (premiumStr === 'true' || premiumStr === 'yes' || premiumStr === '1') {
-          isPremiumVal = true;
-        }
-        
-        let showOnWebsiteVal = true;
-        const showStr = String(row.showOnWebsite || '').toLowerCase();
-        if (showStr === 'false' || showStr === 'no' || showStr === '0') {
-          showOnWebsiteVal = false;
-        }
-        
-        let priceVal = 29;
-        if (row.price && !isNaN(parseInt(row.price))) {
-          priceVal = parseInt(row.price);
-        }
-        
-        console.log(`📝 Updating file: ${fileId}, Name: ${row.fileName}, Price: ${priceVal}, Premium: ${isPremiumVal}, Visible: ${showOnWebsiteVal}`);
-        
-        const result = await sendToSheetGet({
-          action: 'update',
-          fileId: fileId,
-          fileName: row.fileName || '',
-          price: priceVal,
-          isPremium: isPremiumVal ? 'true' : 'false',
-          showOnWebsite: showOnWebsiteVal ? 'true' : 'false',
-          tags: row.tags || '',
-          updatedBy: user?.email || 'admin',
-          updatedByName: user?.displayName || 'Admin',
-          userIp: userIp,
-          userAgent: navigator.userAgent
-        });
-        
-        if (result.success) {
-          updated++;
-          console.log(`✅ Updated: ${fileId}`);
-        } else {
-          failed++;
-          console.log(`❌ Update failed: ${fileId}`, result);
-        }
+      
+      // Clear the editor sheet after processing
+      console.log('🧹 Clearing Editor sheet...');
+      await sendToSheetGet({ action: 'clearEditor' });
+      
+      let resultText = '';
+      if (updated > 0) resultText += `✅ Updated: ${updated} files. `;
+      if (deleted > 0) resultText += `🗑️ Deleted: ${deleted} files. `;
+      if (skipped > 0) resultText += `⚠️ Skipped: ${skipped} (no fileId). `;
+      if (failed > 0) resultText += `❌ Failed: ${failed}. `;
+      
+      if (updated === 0 && deleted === 0 && skipped === 0 && failed === 0) {
+        resultText = '📭 No changes were made. Make sure Editor sheet has data with fileId column.';
+      } else {
+        resultText += ' Refreshing files...';
       }
+      
+      setMessage({ type: 'success', text: resultText });
+      setTimeout(() => loadFiles(), 2000);
+      
+    } catch (error) {
+      console.error('Bulk update error:', error);
+      setMessage({ type: 'error', text: '❌ Bulk update failed: ' + error.message });
+    } finally {
+      setBulkUpdating(false);
     }
-    
-    // Clear the editor sheet after processing
-    console.log('🧹 Clearing Editor sheet...');
-    await sendToSheetGet({ action: 'clearEditor' });
-    
-    let resultText = '';
-    if (updated > 0) resultText += `✅ Updated: ${updated} files. `;
-    if (deleted > 0) resultText += `🗑️ Deleted: ${deleted} files. `;
-    if (skipped > 0) resultText += `⚠️ Skipped: ${skipped} (no fileId). `;
-    if (failed > 0) resultText += `❌ Failed: ${failed}. `;
-    
-    if (updated === 0 && deleted === 0 && skipped === 0 && failed === 0) {
-      resultText = '📭 No changes were made. Make sure Editor sheet has data with fileId column.';
-    } else {
-      resultText += ' Refreshing files...';
-    }
-    
-    setMessage({ type: 'success', text: resultText });
-    setTimeout(() => loadFiles(), 2000);
-    
-  } catch (error) {
-    console.error('Bulk update error:', error);
-    setMessage({ type: 'error', text: '❌ Bulk update failed: ' + error.message });
-  } finally {
-    setBulkUpdating(false);
-  }
-};
+  };
 
   // Clear Editor sheet
   const handleClearEditorSheet = async () => {
@@ -561,7 +578,7 @@ const handleBulkUpdateFromSheet = async () => {
                       </td>
                       <td className="p-2 text-gray-500 text-xs">
                         {(file.size / 1024).toFixed(2)} KB
-                       </td>
+                      </td>
                       <td className="p-2">
                         <input
                           type="number"
@@ -569,7 +586,7 @@ const handleBulkUpdateFromSheet = async () => {
                           onChange={(e) => setEditForm({ ...editForm, price: parseInt(e.target.value) || 0 })}
                           className="w-20 px-2 py-1 border rounded"
                         />
-                       </td>
+                      </td>
                       <td className="p-2">
                         <input
                           type="checkbox"
@@ -577,7 +594,7 @@ const handleBulkUpdateFromSheet = async () => {
                           onChange={(e) => setEditForm({ ...editForm, isPremium: e.target.checked })}
                           className="w-4 h-4"
                         />
-                       </td>
+                      </td>
                       <td className="p-2">
                         <input
                           type="checkbox"
@@ -585,7 +602,7 @@ const handleBulkUpdateFromSheet = async () => {
                           onChange={(e) => setEditForm({ ...editForm, showOnWebsite: e.target.checked })}
                           className="w-4 h-4"
                         />
-                       </td>
+                      </td>
                       <td className="p-2">
                         <input
                           type="text"
@@ -594,7 +611,7 @@ const handleBulkUpdateFromSheet = async () => {
                           placeholder="subject:Maths"
                           className="w-full px-2 py-1 text-xs border rounded"
                         />
-                       </td>
+                      </td>
                       <td className="p-2">
                         <button
                           onClick={() => handleUpdateFile(file)}
@@ -608,7 +625,7 @@ const handleBulkUpdateFromSheet = async () => {
                         >
                           Cancel
                         </button>
-                       </td>
+                      </td>
                     </>
                   ) : (
                     <>
@@ -627,10 +644,10 @@ const handleBulkUpdateFromSheet = async () => {
                         {!file.showOnWebsite && (
                           <span className="inline-block mt-1 px-1.5 py-0.5 bg-red-100 text-red-600 text-xs rounded">Hidden</span>
                         )}
-                       </td>
+                      </td>
                       <td className="p-2 text-gray-500 text-xs">
                         {(file.size / 1024).toFixed(2)} KB
-                       </td>
+                      </td>
                       <td className="p-2 font-medium">₹{file.price || 29}</td>
                       <td className="p-2">
                         {file.isPremium ? (
@@ -638,14 +655,14 @@ const handleBulkUpdateFromSheet = async () => {
                         ) : (
                           <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded-full text-xs">Free</span>
                         )}
-                       </td>
+                      </td>
                       <td className="p-2">
                         {file.showOnWebsite ? (
                           <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs">Visible</span>
                         ) : (
                           <span className="px-2 py-1 bg-red-100 text-red-700 rounded-full text-xs">Hidden</span>
                         )}
-                       </td>
+                      </td>
                       <td className="p-2 text-xs text-gray-500 max-w-[250px]">
                         {(() => {
                           const displayTags = tagsToString(file.tags, file.tagsString);
@@ -657,7 +674,7 @@ const handleBulkUpdateFromSheet = async () => {
                             <span className="text-gray-400 text-xs">—</span>
                           );
                         })()}
-                       </td>
+                      </td>
                       <td className="p-2">
                         <button
                           onClick={() => {
@@ -680,7 +697,7 @@ const handleBulkUpdateFromSheet = async () => {
                         >
                           Delete
                         </button>
-                       </td>
+                      </td>
                     </>
                   )}
                 </tr>
