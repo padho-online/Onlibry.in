@@ -51,6 +51,7 @@ async function getCurrentUser() {
 }
 
 // Send data to Google Sheet Logs
+// Send data to Google Sheet Logs
 async function sendToLogsSheet(action, data) {
   if (!LOGS_SHEET_API_URL) {
     console.warn('⚠️ VITE_LOGS_SHEET_API_URL not set, skipping log');
@@ -58,12 +59,12 @@ async function sendToLogsSheet(action, data) {
   }
   
   console.log(`📤 Sending to logs sheet: ${action}`, data);
-  console.log(`📤 URL: ${LOGS_SHEET_API_URL}`);
   
   try {
-    // Use fetch with proper mode to see response
-    const response = await fetch(LOGS_SHEET_API_URL, {
+    // Use no-cors mode - this is REQUIRED for Google Apps Script from browser
+    await fetch(LOGS_SHEET_API_URL, {
       method: 'POST',
+      mode: 'no-cors',
       headers: { 
         'Content-Type': 'application/json'
       },
@@ -74,22 +75,8 @@ async function sendToLogsSheet(action, data) {
       })
     });
     
-    const responseText = await response.text();
-    console.log(`📥 Response from sheet (${action}):`, responseText);
-    
-    try {
-      const result = JSON.parse(responseText);
-      if (result.success) {
-        console.log(`✅ Log sent to sheet: ${action}`);
-        return true;
-      } else {
-        console.error(`❌ Sheet returned error: ${result.error}`);
-        return false;
-      }
-    } catch (e) {
-      console.log(`📥 Response (not JSON): ${responseText.substring(0, 200)}`);
-      return true;
-    }
+    console.log(`✅ Log sent to sheet: ${action}`);
+    return true;
   } catch (error) {
     console.error(`❌ Error sending log to sheet (${action}):`, error);
     return false;
