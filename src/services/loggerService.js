@@ -1,8 +1,7 @@
 // src/services/loggerService.js - GOOGLE SHEET LOGS VERSION
-// UPDATED: All logs now go to BOTH Google Sheets
-// ✅ Using two sheet URLs for redundancy/backup
-// D1 is no longer used for logs
-// ❌ REMOVED: logUserSync - Users only synced via bulk sync
+// UPDATED: Separate URLs for different log types
+// - VITE_LOGS_SHEET_API_URL: For page_views, search_logs, file_read_logs, mock_results, quiz_results
+// - VITE_BOTH_LOGS_SHEET_API_URL: For cart, saved, purchases, payments (D1 + Sheet backup)
 
 const LOGS_SHEET_API_URL = import.meta.env.VITE_LOGS_SHEET_API_URL;
 const BOTH_LOGS_SHEET_API_URL = import.meta.env.VITE_BOTH_LOGS_SHEET_API_URL;
@@ -52,34 +51,20 @@ async function getCurrentUser() {
   }
 }
 
-// Send data to Google Sheet Logs - SENDS TO BOTH SHEETS
-async function sendToLogsSheet(action, data) {
-  let success1 = false;
-  let success2 = false;
-  
-  // Send to primary sheet
-  if (LOGS_SHEET_API_URL) {
-    success1 = await sendToSingleSheet(LOGS_SHEET_API_URL, action, data, 'primary');
-  } else {
-    console.warn('⚠️ VITE_LOGS_SHEET_API_URL not set');
-  }
-  
-  // Send to secondary sheet (both sheets version)
-  if (BOTH_LOGS_SHEET_API_URL) {
-    success2 = await sendToSingleSheet(BOTH_LOGS_SHEET_API_URL, action, data, 'secondary');
-  } else {
-    console.warn('⚠️ VITE_BOTH_LOGS_SHEET_API_URL not set');
-  }
-  
-  return success1 || success2;
-}
+// ============================================
+// SEND TO REGULAR LOGS SHEET (PageViews, Search, FileRead, Mock, Quiz)
+// ============================================
 
-// Send to a single sheet
-async function sendToSingleSheet(apiUrl, action, data, sheetName = 'sheet') {
-  console.log(`📤 Sending to ${sheetName} sheet: ${action}`, data);
+async function sendToLogsSheet(action, data) {
+  if (!LOGS_SHEET_API_URL) {
+    console.warn('⚠️ VITE_LOGS_SHEET_API_URL not set, skipping log');
+    return false;
+  }
+  
+  console.log(`📤 Sending to logs sheet: ${action}`, data);
   
   try {
-    await fetch(apiUrl, {
+    await fetch(LOGS_SHEET_API_URL, {
       method: 'POST',
       mode: 'no-cors',
       headers: { 
@@ -92,10 +77,44 @@ async function sendToSingleSheet(apiUrl, action, data, sheetName = 'sheet') {
       })
     });
     
-    console.log(`✅ Log sent to ${sheetName} sheet: ${action}`);
+    console.log(`✅ Log sent to sheet: ${action}`);
     return true;
   } catch (error) {
-    console.error(`❌ Error sending log to ${sheetName} sheet (${action}):`, error);
+    console.error(`❌ Error sending log to sheet (${action}):`, error);
+    return false;
+  }
+}
+
+// ============================================
+// SEND TO BOTH LOGS SHEET (Cart, Saved, Purchases, Payments)
+// ============================================
+
+async function sendToBothLogsSheet(action, data) {
+  if (!BOTH_LOGS_SHEET_API_URL) {
+    console.warn('⚠️ VITE_BOTH_LOGS_SHEET_API_URL not set, skipping log');
+    return false;
+  }
+  
+  console.log(`📤 Sending to both logs sheet: ${action}`, data);
+  
+  try {
+    await fetch(BOTH_LOGS_SHEET_API_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ 
+        action: action, 
+        ...data,
+        timestamp: new Date().toISOString()
+      })
+    });
+    
+    console.log(`✅ Both log sent to sheet: ${action}`);
+    return true;
+  } catch (error) {
+    console.error(`❌ Error sending both log (${action}):`, error);
     return false;
   }
 }
@@ -147,7 +166,7 @@ export async function logPageView(pagePath, pageTitle) {
       session_id: getSessionId()
     });
     
-    console.log(`📊 Page view logged to Sheets: ${pagePath}`);
+    console.log(`📊 Page view logged to Sheet: ${pagePath}`);
   } catch (error) {
     console.error('Error logging page view:', error);
   }
@@ -155,7 +174,6 @@ export async function logPageView(pagePath, pageTitle) {
 
 // ============================================
 // REACT ROUTER COMPATIBLE PAGE VIEW LOGGER
-// Call this function from App.jsx on route change
 // ============================================
 
 export function logCurrentPageView() {
@@ -166,25 +184,21 @@ export function logCurrentPageView() {
 
 // ============================================
 // INITIALIZE PAGE VIEW LOGGER
-// Works with history API (for non-React Router navigations)
 // ============================================
 
 export function initPageViewLogger() {
-  console.log('📊 Page view logger initialized (Both Google Sheets mode)');
+  console.log('📊 Page view logger initialized (Google Sheet mode)');
   
-  // Log initial page
   const path = window.location.pathname;
   const title = document.title;
   logPageView(path, title);
   
-  // Listen for popstate (back/forward buttons)
   window.addEventListener('popstate', () => {
     setTimeout(() => {
       logPageView(window.location.pathname, document.title);
     }, 100);
   });
   
-  // Log before unload (time spent on last page)
   window.addEventListener('beforeunload', async () => {
     if (currentPagePath && pageViewStartTime) {
       const timeSpent = Math.floor((Date.now() - pageViewStartTime) / 1000);
@@ -217,7 +231,7 @@ export async function logSearch(query, resultCount, pagePath = '') {
       result_count: resultCount,
       page_path: pagePath || window.location.pathname
     });
-    console.log(`🔍 Search logged to Sheets: "${query}" -> ${resultCount} results`);
+    console.log(`🔍 Search logged to Sheet: "${query}" -> ${resultCount} results`);
   } catch (error) {
     console.error('Error logging search:', error);
   }
@@ -253,7 +267,7 @@ export async function logFileViewClose() {
           pages_read: Math.floor(timeSpent / 60),
           time_spent: timeSpent
         });
-        console.log(`📄 File read logged to Sheets: ${currentFileId} -> ${timeSpent}s`);
+        console.log(`📄 File read logged to Sheet: ${currentFileId} -> ${timeSpent}s`);
       }
     }
   } catch (error) {
@@ -261,30 +275,6 @@ export async function logFileViewClose() {
   } finally {
     currentFileId = null;
     fileReadStartTime = null;
-  }
-}
-
-// ============================================
-// CART LOGGING (Both Sheets)
-// ============================================
-
-export async function logCartAction(userId, fileId, fileName, price, action) {
-  console.log('🛒 logCartAction called:', { userId, fileId, fileName, price, action });
-  
-  try {
-    const result = await sendToLogsSheet('cartLog', {
-      user_id: userId || 'guest',
-      file_id: fileId,
-      file_name: fileName,
-      price: price,
-      item_type: 'file',
-      action: action,
-      status: action === 'add_to_cart' ? 'active' : 'inactive'
-    });
-    
-    console.log(`🛒 Cart action logged to Sheets: ${action} - ${fileName}, result:`, result);
-  } catch (error) {
-    console.error('Error logging cart action:', error);
   }
 }
 
@@ -305,7 +295,7 @@ export async function logMockTestResult(data) {
       score: data.score,
       time_taken: data.timeTaken
     });
-    console.log(`📝 Mock test result logged to Sheets: ${data.testName} -> ${data.correct}/${data.totalQuestions}`);
+    console.log(`📝 Mock test result logged to Sheet: ${data.testName} -> ${data.correct}/${data.totalQuestions}`);
   } catch (error) {
     console.error('Error logging mock test result:', error);
   }
@@ -328,21 +318,107 @@ export async function logQuizResult(data) {
       score: data.score,
       time_taken: data.timeTaken
     });
-    console.log(`📝 Quiz result logged to Sheets: ${data.quizName} -> ${data.correct}/${data.totalQuestions}`);
+    console.log(`📝 Quiz result logged to Sheet: ${data.quizName} -> ${data.correct}/${data.totalQuestions}`);
   } catch (error) {
     console.error('Error logging quiz result:', error);
   }
 }
 
 // ============================================
-// PAYMENT LOGGING (Both Sheets)
+// USER LOGIN LOGGING (for tracking only - NO USER SYNC)
+// ============================================
+
+export async function logUserLogin(user) {
+  try {
+    console.log(`👤 User logged in: ${user?.email}`);
+    await logPageView('/login-success', 'Login Success');
+  } catch (error) {
+    console.error('Error logging user login:', error);
+  }
+}
+
+// ============================================
+// ============================================
+// 🔥 BOTH LOGS (D1 + Sheet) - Using Separate Sheet
+// ============================================
+// ============================================
+
+// ============================================
+// CART LOGGING (Both - D1 + Sheet)
+// ============================================
+
+export async function logCartAction(userId, fileId, fileName, price, action) {
+  console.log('🛒 logCartAction called:', { userId, fileId, fileName, price, action });
+  
+  try {
+    await sendToBothLogsSheet('cartLog', {
+      user_id: userId || 'guest',
+      file_id: fileId,
+      file_name: fileName,
+      price: price,
+      item_type: 'file',
+      action: action,
+      status: action === 'add_to_cart' ? 'active' : 'inactive'
+    });
+    
+    console.log(`🛒 Cart action logged to Both Sheet: ${action} - ${fileName}`);
+  } catch (error) {
+    console.error('Error logging cart action:', error);
+  }
+}
+
+// ============================================
+// SAVED FILE LOGGING (Both - D1 + Sheet)
+// ============================================
+
+export async function logSavedFile(data) {
+  console.log('💾 logSavedFile called:', data);
+  
+  try {
+    await sendToBothLogsSheet('savedLog', {
+      user_id: data.userId || 'guest',
+      file_id: data.fileId,
+      file_name: data.fileName,
+      action: data.action
+    });
+    console.log(`💾 Saved file logged to Both Sheet: ${data.action} - ${data.fileName}`);
+  } catch (error) {
+    console.error('Error logging saved file:', error);
+  }
+}
+
+// ============================================
+// PURCHASE LOGGING (Both - D1 + Sheet)
+// ============================================
+
+export async function logUserPurchase(data) {
+  console.log('💾 logUserPurchase called:', data);
+  
+  try {
+    await sendToBothLogsSheet('purchaseLog', {
+      user_id: data.userId || 'guest',
+      file_id: data.fileId,
+      item_type: data.itemType,
+      item_name: data.itemName,
+      price: data.price,
+      payment_id: data.paymentId,
+      order_id: data.orderId
+    });
+    console.log(`💾 User purchase logged to Both Sheet: ${data.itemName}`);
+  } catch (error) {
+    console.error('Error logging user purchase:', error);
+  }
+}
+
+// ============================================
+// PAYMENT LOGGING (Both - D1 + Sheet)
 // ============================================
 
 export async function logPaymentEvent(event, plan, amount, status, paymentId = null, orderId = null, error = null) {
   try {
     const user = await getCurrentUser();
     
-    await sendToLogsSheet('paymentLog', {
+    await sendToBothLogsSheet('paymentLog', {
       user_id: user?.uid || 'guest',
       user_email: user?.email || 'guest',
       event: event,
@@ -354,66 +430,9 @@ export async function logPaymentEvent(event, plan, amount, status, paymentId = n
       error: error
     });
     
-    console.log(`💰 Payment logged to Sheets: ${event} - ${status}`);
+    console.log(`💰 Payment logged to Both Sheet: ${event} - ${status}`);
   } catch (error) {
     console.error('Error logging payment:', error);
-  }
-}
-
-// ============================================
-// USER LOGIN LOGGING (for tracking only - NO USER SYNC)
-// ============================================
-
-export async function logUserLogin(user) {
-  try {
-    console.log(`👤 User logged in: ${user?.email}`);
-    // ❌ REMOVED: logUserSync - Users only synced via bulk sync
-    await logPageView('/login-success', 'Login Success');
-  } catch (error) {
-    console.error('Error logging user login:', error);
-  }
-}
-
-// ============================================
-// PURCHASE LOGGING (Both Sheets)
-// ============================================
-
-export async function logUserPurchase(data) {
-  try {
-    console.log('💾 logUserPurchase called:', data);
-    
-    await sendToLogsSheet('userPurchase', {
-      user_id: data.userId,
-      file_id: data.fileId,
-      item_type: data.itemType,
-      item_name: data.itemName,
-      price: data.price,
-      payment_id: data.paymentId,
-      order_id: data.orderId
-    });
-    console.log(`💾 User purchase logged to Sheets: ${data.itemName}`);
-  } catch (error) {
-    console.error('Error logging user purchase:', error);
-  }
-}
-
-// ============================================
-// SAVED FILE LOGGING (Both Sheets)
-// ============================================
-
-export async function logSavedFile(data) {
-  try {
-    console.log('💾 logSavedFile called:', data);
-    
-    await sendToLogsSheet('userSaved', {
-      user_id: data.userId,
-      file_id: data.fileId,
-      file_name: data.fileName,
-      action: data.action
-    });
-    console.log(`💾 Saved file logged to Sheets: ${data.action} - ${data.fileName}`);
-  } catch (error) {
-    console.error('Error logging saved file:', error);
   }
 }
 
