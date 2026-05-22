@@ -50,8 +50,7 @@ async function getCurrentUser() {
   }
 }
 
-// Send data to Google Sheet Logs
-// Send data to Google Sheet Logs
+// Send data to Google Sheet Logs - FINAL WORKING VERSION
 async function sendToLogsSheet(action, data) {
   if (!LOGS_SHEET_API_URL) {
     console.warn('⚠️ VITE_LOGS_SHEET_API_URL not set, skipping log');
@@ -61,7 +60,7 @@ async function sendToLogsSheet(action, data) {
   console.log(`📤 Sending to logs sheet: ${action}`, data);
   
   try {
-    // Use no-cors mode - this is REQUIRED for Google Apps Script from browser
+    // Use no-cors mode - this works with Google Apps Script
     await fetch(LOGS_SHEET_API_URL, {
       method: 'POST',
       mode: 'no-cors',
@@ -82,7 +81,6 @@ async function sendToLogsSheet(action, data) {
     return false;
   }
 }
-
 // ============================================
 // PAGE VIEW LOGGING - Main function
 // ============================================
