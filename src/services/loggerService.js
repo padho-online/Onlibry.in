@@ -1,9 +1,11 @@
 // src/services/loggerService.js - GOOGLE SHEET LOGS VERSION
-// UPDATED: All logs now go to NEW Google Sheet (VITE_LOGS_SHEET_API_URL)
+// UPDATED: All logs now go to BOTH Google Sheets
+// ✅ Using two sheet URLs for redundancy/backup
 // D1 is no longer used for logs
 // ❌ REMOVED: logUserSync - Users only synced via bulk sync
 
 const LOGS_SHEET_API_URL = import.meta.env.VITE_LOGS_SHEET_API_URL;
+const BOTH_LOGS_SHEET_API_URL = import.meta.env.VITE_BOTH_LOGS_SHEET_API_URL;
 
 // Session ID for page view tracking
 let sessionId = null;
@@ -50,18 +52,34 @@ async function getCurrentUser() {
   }
 }
 
-// Send data to Google Sheet Logs - FINAL WORKING VERSION
+// Send data to Google Sheet Logs - SENDS TO BOTH SHEETS
 async function sendToLogsSheet(action, data) {
-  if (!LOGS_SHEET_API_URL) {
-    console.warn('⚠️ VITE_LOGS_SHEET_API_URL not set, skipping log');
-    return false;
+  let success1 = false;
+  let success2 = false;
+  
+  // Send to primary sheet
+  if (LOGS_SHEET_API_URL) {
+    success1 = await sendToSingleSheet(LOGS_SHEET_API_URL, action, data, 'primary');
+  } else {
+    console.warn('⚠️ VITE_LOGS_SHEET_API_URL not set');
   }
   
-  console.log(`📤 Sending to logs sheet: ${action}`, data);
+  // Send to secondary sheet (both sheets version)
+  if (BOTH_LOGS_SHEET_API_URL) {
+    success2 = await sendToSingleSheet(BOTH_LOGS_SHEET_API_URL, action, data, 'secondary');
+  } else {
+    console.warn('⚠️ VITE_BOTH_LOGS_SHEET_API_URL not set');
+  }
+  
+  return success1 || success2;
+}
+
+// Send to a single sheet
+async function sendToSingleSheet(apiUrl, action, data, sheetName = 'sheet') {
+  console.log(`📤 Sending to ${sheetName} sheet: ${action}`, data);
   
   try {
-    // Use no-cors mode - this works with Google Apps Script
-    await fetch(LOGS_SHEET_API_URL, {
+    await fetch(apiUrl, {
       method: 'POST',
       mode: 'no-cors',
       headers: { 
@@ -74,13 +92,14 @@ async function sendToLogsSheet(action, data) {
       })
     });
     
-    console.log(`✅ Log sent to sheet: ${action}`);
+    console.log(`✅ Log sent to ${sheetName} sheet: ${action}`);
     return true;
   } catch (error) {
-    console.error(`❌ Error sending log to sheet (${action}):`, error);
+    console.error(`❌ Error sending log to ${sheetName} sheet (${action}):`, error);
     return false;
   }
 }
+
 // ============================================
 // PAGE VIEW LOGGING - Main function
 // ============================================
@@ -128,7 +147,7 @@ export async function logPageView(pagePath, pageTitle) {
       session_id: getSessionId()
     });
     
-    console.log(`📊 Page view logged to Sheet: ${pagePath}`);
+    console.log(`📊 Page view logged to Sheets: ${pagePath}`);
   } catch (error) {
     console.error('Error logging page view:', error);
   }
@@ -151,7 +170,7 @@ export function logCurrentPageView() {
 // ============================================
 
 export function initPageViewLogger() {
-  console.log('📊 Page view logger initialized (Google Sheet mode)');
+  console.log('📊 Page view logger initialized (Both Google Sheets mode)');
   
   // Log initial page
   const path = window.location.pathname;
@@ -198,7 +217,7 @@ export async function logSearch(query, resultCount, pagePath = '') {
       result_count: resultCount,
       page_path: pagePath || window.location.pathname
     });
-    console.log(`🔍 Search logged to Sheet: "${query}" -> ${resultCount} results`);
+    console.log(`🔍 Search logged to Sheets: "${query}" -> ${resultCount} results`);
   } catch (error) {
     console.error('Error logging search:', error);
   }
@@ -234,7 +253,7 @@ export async function logFileViewClose() {
           pages_read: Math.floor(timeSpent / 60),
           time_spent: timeSpent
         });
-        console.log(`📄 File read logged to Sheet: ${currentFileId} -> ${timeSpent}s`);
+        console.log(`📄 File read logged to Sheets: ${currentFileId} -> ${timeSpent}s`);
       }
     }
   } catch (error) {
@@ -246,7 +265,7 @@ export async function logFileViewClose() {
 }
 
 // ============================================
-// CART LOGGING (Both - D1 + Sheet)
+// CART LOGGING (Both Sheets)
 // ============================================
 
 export async function logCartAction(userId, fileId, fileName, price, action) {
@@ -263,7 +282,7 @@ export async function logCartAction(userId, fileId, fileName, price, action) {
       status: action === 'add_to_cart' ? 'active' : 'inactive'
     });
     
-    console.log(`🛒 Cart action logged to Sheet: ${action} - ${fileName}, result:`, result);
+    console.log(`🛒 Cart action logged to Sheets: ${action} - ${fileName}, result:`, result);
   } catch (error) {
     console.error('Error logging cart action:', error);
   }
@@ -286,7 +305,7 @@ export async function logMockTestResult(data) {
       score: data.score,
       time_taken: data.timeTaken
     });
-    console.log(`📝 Mock test result logged to Sheet: ${data.testName} -> ${data.correct}/${data.totalQuestions}`);
+    console.log(`📝 Mock test result logged to Sheets: ${data.testName} -> ${data.correct}/${data.totalQuestions}`);
   } catch (error) {
     console.error('Error logging mock test result:', error);
   }
@@ -309,14 +328,14 @@ export async function logQuizResult(data) {
       score: data.score,
       time_taken: data.timeTaken
     });
-    console.log(`📝 Quiz result logged to Sheet: ${data.quizName} -> ${data.correct}/${data.totalQuestions}`);
+    console.log(`📝 Quiz result logged to Sheets: ${data.quizName} -> ${data.correct}/${data.totalQuestions}`);
   } catch (error) {
     console.error('Error logging quiz result:', error);
   }
 }
 
 // ============================================
-// PAYMENT LOGGING (Both - D1 + Sheet)
+// PAYMENT LOGGING (Both Sheets)
 // ============================================
 
 export async function logPaymentEvent(event, plan, amount, status, paymentId = null, orderId = null, error = null) {
@@ -335,7 +354,7 @@ export async function logPaymentEvent(event, plan, amount, status, paymentId = n
       error: error
     });
     
-    console.log(`💰 Payment logged to Sheet: ${event} - ${status}`);
+    console.log(`💰 Payment logged to Sheets: ${event} - ${status}`);
   } catch (error) {
     console.error('Error logging payment:', error);
   }
@@ -356,7 +375,7 @@ export async function logUserLogin(user) {
 }
 
 // ============================================
-// PURCHASE LOGGING (Both - D1 + Sheet)
+// PURCHASE LOGGING (Both Sheets)
 // ============================================
 
 export async function logUserPurchase(data) {
@@ -372,14 +391,14 @@ export async function logUserPurchase(data) {
       payment_id: data.paymentId,
       order_id: data.orderId
     });
-    console.log(`💾 User purchase logged to Sheet: ${data.itemName}`);
+    console.log(`💾 User purchase logged to Sheets: ${data.itemName}`);
   } catch (error) {
     console.error('Error logging user purchase:', error);
   }
 }
 
 // ============================================
-// SAVED FILE LOGGING (Both - D1 + Sheet)
+// SAVED FILE LOGGING (Both Sheets)
 // ============================================
 
 export async function logSavedFile(data) {
@@ -392,7 +411,7 @@ export async function logSavedFile(data) {
       file_name: data.fileName,
       action: data.action
     });
-    console.log(`💾 Saved file logged to Sheet: ${data.action} - ${data.fileName}`);
+    console.log(`💾 Saved file logged to Sheets: ${data.action} - ${data.fileName}`);
   } catch (error) {
     console.error('Error logging saved file:', error);
   }
