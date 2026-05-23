@@ -79,7 +79,7 @@ function NotificationSlider() {
                 <div className="absolute inset-0 bg-black/40"></div>
                 <div className="relative z-10 flex flex-col justify-center h-full px-6 text-white">
                   <h2 className="text-xl md:text-2xl font-bold mb-2 line-clamp-2">{slide.title}</h2>
-                  <p className="text-sm md:text-base text-white/90 mb-4 line-clamp-3">{slide.description}</p>
+                  <p className="text-sm md:text-base text-white/90 mb-4 line-clamp-4">{slide.description}</p>
                   {slide.button_text && slide.button_text.trim() !== '' && (
   <button className="bg-white text-green-600 px-4 py-2 rounded-lg text-sm font-medium w-fit hover:bg-green-50 transition">
     {slide.button_text} →
