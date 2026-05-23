@@ -95,84 +95,106 @@ export default {
     }
     
     // ============================================
-    // 1. FILES API (WITH CACHE)
-    // ============================================
+// 1. FILES API (FIXED PAGINATION CACHE)
+// ============================================
+
+if (method === 'GET' && url.pathname === '/api/files') {
+  const page = parseInt(url.searchParams.get('page') || '1');
+  const limit = parseInt(url.searchParams.get('limit') || '20');
+  const offset = (page - 1) * limit;
+  const search = url.searchParams.get('search') || '';
+  
+  // Create UNIQUE cache key for EACH page
+  const cacheKey = search 
+    ? `files_search_${encodeURIComponent(search)}_page${page}_limit${limit}`
+    : `files_page${page}_limit${limit}`;
+  
+  // Cache only first 3 pages (no search), search results don't cache
+  const shouldCache = !search && page <= 3;
+  
+  const fetchFiles = async () => {
+    console.log(`🔍 Fetching files: page=${page}, limit=${limit}, search="${search}", offset=${offset}`);
     
-    if (method === 'GET' && url.pathname === '/api/files') {
-      const page = parseInt(url.searchParams.get('page') || '1');
-      const limit = parseInt(url.searchParams.get('limit') || '20');
-      const offset = (page - 1) * limit;
-      const search = url.searchParams.get('search') || '';
-      
-      const shouldCache = page === 1 && !search;
-      
-      if (shouldCache) {
-        const cacheKey = `files_page1`;
-        return await getCachedResponse(cacheKey, CACHE_TTL.FILES, async () => {
-          const result = await db.prepare(`
-            SELECT * FROM files WHERE show_on_website = 1 ORDER BY name ASC LIMIT ? OFFSET ?
-          `).bind(limit, offset).all();
-          
-          const totalResult = await db.prepare(`SELECT COUNT(*) as total FROM files WHERE show_on_website = 1`).first();
-          
-          return {
-            success: true,
-            files: result.results,
-            pagination: {
-              page, limit,
-              total: totalResult?.total || 0,
-              totalPages: Math.ceil((totalResult?.total || 0) / limit)
-            }
-          };
-        });
-      }
-      
-      let query = `SELECT * FROM files WHERE show_on_website = 1`;
+    try {
+      // Build WHERE clause
+      let whereClause = 'WHERE show_on_website = 1';
       let params = [];
       
-      if (search) {
-        query += ` AND (name LIKE ? OR tags LIKE ?)`;
-        params.push(`%${search}%`, `%${search}%`);
+      if (search && search.trim()) {
+        whereClause += ` AND (name LIKE ? OR tags LIKE ?)`;
+        const searchPattern = `%${search.trim()}%`;
+        params.push(searchPattern, searchPattern);
       }
       
-      query += ` ORDER BY name ASC LIMIT ? OFFSET ?`;
-      params.push(limit, offset);
+      // Get TOTAL count first
+      const countQuery = `SELECT COUNT(*) as total FROM files ${whereClause}`;
+      console.log(`📊 Count query: ${countQuery}`);
       
-      const result = await db.prepare(query).bind(...params).all();
+      const totalResult = await db.prepare(countQuery).bind(...params).first();
+      const total = totalResult?.total || 0;
+      const totalPages = Math.ceil(total / limit);
       
-      let countQuery = `SELECT COUNT(*) as total FROM files WHERE show_on_website = 1`;
-      let countParams = [];
-      if (search) {
-        countQuery += ` AND (name LIKE ? OR tags LIKE ?)`;
-        countParams.push(`%${search}%`, `%${search}%`);
-      }
-      const totalResult = await db.prepare(countQuery).bind(...countParams).first();
+      console.log(`📊 Total files: ${total}, Total pages: ${totalPages}`);
       
-      return new Response(JSON.stringify({
+      // Get paginated results
+      const dataQuery = `
+        SELECT * FROM files 
+        ${whereClause}
+        ORDER BY is_premium ASC, name ASC 
+        LIMIT ? OFFSET ?
+      `;
+      
+      const dataParams = [...params, limit, offset];
+      console.log(`📊 Data query: ${dataQuery}, Params: ${dataParams}`);
+      
+      const result = await db.prepare(dataQuery).bind(...dataParams).all();
+      
+      console.log(`📊 Returned ${result.results.length} files for page ${page}`);
+      
+      return {
         success: true,
         files: result.results,
         pagination: {
-          page, limit,
-          total: totalResult?.total || 0,
-          totalPages: Math.ceil((totalResult?.total || 0) / limit)
+          page: page,
+          limit: limit,
+          total: total,
+          totalPages: totalPages,
+          hasNext: page < totalPages,
+          hasPrev: page > 1
         }
-      }), { headers: CORS_HEADERS });
+      };
+    } catch (error) {
+      console.error('❌ Files fetch error:', error);
+      return {
+        success: false,
+        error: error.message,
+        files: [],
+        pagination: {
+          page: page,
+          limit: limit,
+          total: 0,
+          totalPages: 1
+        }
+      };
     }
-    
-    if (method === 'GET' && url.pathname.startsWith('/api/files/') && !url.pathname.includes('/sync')) {
-      const fileId = url.pathname.split('/api/files/')[1];
-      
-      try {
-        const result = await db.prepare(`SELECT * FROM files WHERE id = ? OR cloudflare_key = ?`).bind(fileId, fileId).first();
-        if (!result) {
-          return new Response(JSON.stringify({ success: false, error: 'File not found' }), { status: 404, headers: CORS_HEADERS });
-        }
-        return new Response(JSON.stringify({ success: true, file: result }), { headers: CORS_HEADERS });
-      } catch (error) {
-        return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500, headers: CORS_HEADERS });
+  };
+  
+  // Return response (with or without cache)
+  if (shouldCache) {
+    console.log(`💾 Caching page ${page}`);
+    return await getCachedResponse(cacheKey, CACHE_TTL.FILES, fetchFiles);
+  } else {
+    console.log(`🔄 No cache for page ${page}`);
+    const data = await fetchFiles();
+    return new Response(JSON.stringify(data), { 
+      headers: {
+        ...CORS_HEADERS,
+        'Cache-Control': 'no-cache' // Don't cache search results or beyond page 3
       }
-    }
-    
+    });
+  }
+}
+
     // ============================================
     // 2. CATEGORIES API (WITH CACHE)
     // ============================================
