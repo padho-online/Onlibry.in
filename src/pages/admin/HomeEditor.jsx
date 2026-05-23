@@ -65,8 +65,10 @@ function HomeEditor() {
     title: '', content: '', category_id: '', link: '', image_url: '', is_pinned: 0, status: 'published' 
   });
   const [cardForm, setCardForm] = useState({ 
-    title: '', description: '', image_url: '', link: '', button_text: 'View More', order: 0 
-  });
+  title: '', description: '', image_url: '', link: '', 
+  button_text: '',  // ✅ Empty by default
+  order: 0 
+});
 
   // Upload image to Cloudinary
   const uploadImage = async (file) => {

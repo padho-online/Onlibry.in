@@ -1,5 +1,5 @@
 // ============================================
-// ONLIBRY MAIN API WORKER - WITH D1 CACHING
+// ONLIBRY MAIN API WORKER - WITH D1 CACHING & DELETE SYNC
 // Files, Notifications, Quick Access, Slider, Categories, Logs, Purchases, CART
 // ============================================
 
@@ -416,7 +416,7 @@ export default {
     }
     
     // ============================================
-    // 🔥 9. CART API (NEW - D1 + Sheet backup)
+    // 🔥 9. CART API
     // ============================================
     
     // GET /api/cart/:userId - Get user's cart
@@ -539,13 +539,84 @@ export default {
     }
     
     // ============================================
-    // 10. ADMIN APIS (With Cache Invalidation)
+    // 🔥 10. PAYMENT LOG API (ADDED BACK)
+    // ============================================
+    
+    // POST /api/log/payment
+    if (method === 'POST' && url.pathname === '/api/log/payment') {
+      try {
+        const body = await request.json();
+        const id = generateId();
+        const now = new Date().toISOString();
+        
+        console.log('💰 Payment log received:', {
+          event: body.event,
+          userId: body.userId,
+          amount: body.amount,
+          status: body.status
+        });
+        
+        await db.prepare(`
+          INSERT INTO payment_logs (id, user_id, user_email, event, plan, amount, status, payment_id, order_id, error, timestamp)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+          id, 
+          body.userId || 'guest', 
+          body.userEmail || 'guest', 
+          body.event || 'unknown',
+          body.plan || '',
+          body.amount || 0,
+          body.status || 'pending',
+          body.paymentId || null,
+          body.orderId || null,
+          body.error || null,
+          now
+        ).run();
+        
+        console.log('✅ Payment log saved to D1');
+        return new Response(JSON.stringify({ success: true }), { headers: CORS_HEADERS });
+      } catch (error) {
+        console.error('❌ Payment log error:', error);
+        return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500, headers: CORS_HEADERS });
+      }
+    }
+    
+    // ============================================
+    // 11. ADMIN APIS (With Cache Invalidation)
     // ============================================
     
     if (!isAdminRequest(request)) {
       return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), { status: 401, headers: CORS_HEADERS });
     }
     
+    // ============================================
+// ADMIN GET ALL ENDPOINTS (ADD THESE)
+// ============================================
+
+// GET all quick access buttons (admin)
+if (method === 'GET' && url.pathname === '/api/admin/quick-access/all' && isAdminRequest(request)) {
+  const result = await db.prepare(`SELECT * FROM quick_access_buttons ORDER BY "order" ASC`).all();
+  return new Response(JSON.stringify({ success: true, buttons: result.results }), { headers: CORS_HEADERS });
+}
+
+// GET all categories (admin)
+if (method === 'GET' && url.pathname === '/api/admin/categories/all' && isAdminRequest(request)) {
+  const result = await db.prepare(`SELECT * FROM categories ORDER BY "order" ASC`).all();
+  return new Response(JSON.stringify({ success: true, categories: result.results }), { headers: CORS_HEADERS });
+}
+
+// GET all notifications (admin - including drafts)
+if (method === 'GET' && url.pathname === '/api/admin/notifications/all' && isAdminRequest(request)) {
+  const result = await db.prepare(`SELECT * FROM notifications ORDER BY published_at DESC`).all();
+  return new Response(JSON.stringify({ success: true, notifications: result.results }), { headers: CORS_HEADERS });
+}
+
+// GET all slider cards (admin)
+if (method === 'GET' && url.pathname === '/api/admin/slider-cards/all' && isAdminRequest(request)) {
+  const result = await db.prepare(`SELECT * FROM slider_cards ORDER BY "order" ASC`).all();
+  return new Response(JSON.stringify({ success: true, cards: result.results }), { headers: CORS_HEADERS });
+}
+
     // POST /api/admin/quick-access - Invalidate cache
     if (method === 'POST' && url.pathname === '/api/admin/quick-access') {
       const body = await request.json();
@@ -649,7 +720,7 @@ export default {
       const body = await request.json();
       const id = generateId();
       const now = new Date().toISOString();
-      await db.prepare(`INSERT INTO slider_cards (id, title, description, image_url, link, button_text, "order", is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(id, body.title, body.description, body.image_url, body.link, body.button_text || 'View More', body.order || 0, 1, now, now).run();
+      await db.prepare(`INSERT INTO slider_cards (id, title, description, image_url, link, button_text, "order", is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(id, body.title, body.description, body.image_url, body.link, body.button_text || null , body.order || 0, 1, now, now).run();
       await invalidateCache('slider_cards_all');
       return new Response(JSON.stringify({ success: true, id }), { headers: CORS_HEADERS });
     }
@@ -672,8 +743,19 @@ export default {
       return new Response(JSON.stringify({ success: true }), { headers: CORS_HEADERS });
     }
     
+    // POST /api/admin/slider-cards/reorder - Invalidate cache
+    if (method === 'POST' && url.pathname === '/api/admin/slider-cards/reorder') {
+      const body = await request.json();
+      const cards = body.cards;
+      for (const card of cards) {
+        await db.prepare(`UPDATE slider_cards SET "order" = ? WHERE id = ?`).bind(card.order, card.id).run();
+      }
+      await invalidateCache('slider_cards_all');
+      return new Response(JSON.stringify({ success: true }), { headers: CORS_HEADERS });
+    }
+    
     // ============================================
-    // 11. FILE SYNC (Admin) - Invalidate file cache
+    // 12. FILE SYNC (Admin) - Invalidate file cache
     // ============================================
     
     if (method === 'POST' && url.pathname === '/api/sync/files') {
@@ -703,9 +785,138 @@ export default {
     }
     
     // ============================================
-    // 12. SYNC USERS
+    // 🔥 13. MOCK TESTS SYNC (WITH DELETE SUPPORT)
     // ============================================
     
+    if (method === 'POST' && url.pathname === '/api/sync/mock-tests') {
+      const body = await request.json();
+      const tests = body.tests || [];
+      let synced = 0;
+      let updated = 0;
+      let deleted = 0;
+      const now = new Date().toISOString();
+      
+      // Get all existing test IDs from D1
+      const existingTests = await db.prepare(`SELECT id FROM mock_tests_config`).all();
+      const existingIds = new Set(existingTests.results.map(t => t.id));
+      
+      // Get IDs from incoming sync
+      const incomingIds = new Set(tests.map(t => t.id).filter(id => id));
+      
+      // Find IDs to delete (exist in D1 but not in incoming sync)
+      const idsToDelete = [...existingIds].filter(id => !incomingIds.has(id));
+      
+      // Delete tests that are no longer in Config sheet
+      for (const idToDelete of idsToDelete) {
+        await db.prepare(`DELETE FROM mock_tests_config WHERE id = ?`).bind(idToDelete).run();
+        deleted++;
+        console.log(`🗑️ Deleted mock test: ${idToDelete}`);
+      }
+      
+      // Insert or update existing tests
+      for (const test of tests) {
+        if (!test.id) continue;
+        
+        const existing = await db.prepare(`SELECT id FROM mock_tests_config WHERE id = ?`).bind(test.id).first();
+        
+        if (existing) {
+          await db.prepare(`
+            UPDATE mock_tests_config SET 
+              name = ?, display_name = ?, category = ?, sub_category = ?,
+              duration = ?, positive_mark = ?, negative_mark = ?, 
+              is_free = ?, price = ?, instructions = ?, link = ?, updated_at = ?
+            WHERE id = ?
+          `).bind(test.name, test.display_name, test.category, test.sub_category, test.duration, test.positive_mark, test.negative_mark, test.is_free ? 1 : 0, test.price || 0, test.instructions || '', test.link || '', now, test.id).run();
+          updated++;
+        } else {
+          await db.prepare(`
+            INSERT INTO mock_tests_config (id, name, display_name, category, sub_category, 
+              duration, positive_mark, negative_mark, is_free, price, instructions, link, is_active, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).bind(test.id, test.name, test.display_name, test.category, test.sub_category, test.duration, test.positive_mark, test.negative_mark, test.is_free ? 1 : 0, test.price || 0, test.instructions || '', test.link || '', 1, now, now).run();
+          synced++;
+        }
+      }
+      
+      await invalidateCache('mock_tests_all');
+      console.log(`✅ Mock tests sync: +${synced} new, ~${updated} updated, -${deleted} deleted`);
+      
+      return new Response(JSON.stringify({ 
+        success: true, 
+        synced: synced, 
+        updated: updated, 
+        deleted: deleted,
+        total: tests.length 
+      }), { headers: CORS_HEADERS });
+    }
+    
+    // ============================================
+    // 🔥 14. QUIZZES SYNC (WITH DELETE SUPPORT)
+    // ============================================
+    
+    if (method === 'POST' && url.pathname === '/api/sync/quizzes') {
+      const body = await request.json();
+      const quizzes = body.quizzes || [];
+      let synced = 0;
+      let updated = 0;
+      let deleted = 0;
+      const now = new Date().toISOString();
+      
+      // Get all existing quiz IDs from D1
+      const existingQuizzes = await db.prepare(`SELECT id FROM quizzes_config`).all();
+      const existingIds = new Set(existingQuizzes.results.map(q => q.id));
+      
+      // Get IDs from incoming sync
+      const incomingIds = new Set(quizzes.map(q => q.id).filter(id => id));
+      
+      // Find IDs to delete (exist in D1 but not in incoming sync)
+      const idsToDelete = [...existingIds].filter(id => !incomingIds.has(id));
+      
+      // Delete quizzes that are no longer in Config sheet
+      for (const idToDelete of idsToDelete) {
+        await db.prepare(`DELETE FROM quizzes_config WHERE id = ?`).bind(idToDelete).run();
+        deleted++;
+        console.log(`🗑️ Deleted quiz: ${idToDelete}`);
+      }
+      
+      // Insert or update existing quizzes
+      for (const quiz of quizzes) {
+        if (!quiz.id) continue;
+        
+        const existing = await db.prepare(`SELECT id FROM quizzes_config WHERE id = ?`).bind(quiz.id).first();
+        
+        if (existing) {
+          await db.prepare(`
+            UPDATE quizzes_config SET 
+              name = ?, display_name = ?, category = ?,
+              duration = ?, positive_mark = ?, negative_mark = ?, 
+              is_free = ?, price = ?, instructions = ?, link = ?, updated_at = ?
+            WHERE id = ?
+          `).bind(quiz.name, quiz.display_name, quiz.category, quiz.duration, quiz.positive_mark, quiz.negative_mark, quiz.is_free ? 1 : 0, quiz.price || 0, quiz.instructions || '', quiz.link || '', now, quiz.id).run();
+          updated++;
+        } else {
+          await db.prepare(`
+            INSERT INTO quizzes_config (id, name, display_name, category, 
+              duration, positive_mark, negative_mark, is_free, price, instructions, link, is_active, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).bind(quiz.id, quiz.name, quiz.display_name, quiz.category, quiz.duration, quiz.positive_mark, quiz.negative_mark, quiz.is_free ? 1 : 0, quiz.price || 0, quiz.instructions || '', quiz.link || '', 1, now, now).run();
+          synced++;
+        }
+      }
+      
+      await invalidateCache('quizzes_all');
+      console.log(`✅ Quizzes sync: +${synced} new, ~${updated} updated, -${deleted} deleted`);
+      
+      return new Response(JSON.stringify({ 
+        success: true, 
+        synced: synced, 
+        updated: updated, 
+        deleted: deleted,
+        total: quizzes.length 
+      }), { headers: CORS_HEADERS });
+    }
+    
+    // POST /api/sync/users - Sync users from Firebase to D1
     if (method === 'POST' && url.pathname === '/api/sync/users') {
       const body = await request.json();
       const users = body.users || [];
@@ -730,6 +941,7 @@ export default {
       return new Response(JSON.stringify({ success: true, synced: synced, updated: updated, total: users.length }), { headers: CORS_HEADERS });
     }
     
+    // GET /api/admin/users - Get all users from D1
     if (method === 'GET' && url.pathname === '/api/admin/users') {
       const limit = parseInt(url.searchParams.get('limit') || '500');
       const offset = parseInt(url.searchParams.get('offset') || '0');
@@ -759,10 +971,34 @@ export default {
       return new Response(JSON.stringify({ success: true, users: result.results, pagination: { total: totalResult?.total || 0, limit: limit, offset: offset } }), { headers: CORS_HEADERS });
     }
     
+    // GET /api/admin/payment-logs - Get payment logs
     if (method === 'GET' && url.pathname === '/api/admin/payment-logs') {
       const limit = parseInt(url.searchParams.get('limit') || '200');
       const result = await db.prepare(`SELECT * FROM payment_logs ORDER BY timestamp DESC LIMIT ?`).bind(limit).all();
       return new Response(JSON.stringify({ success: true, logs: result.results }), { headers: CORS_HEADERS });
+    }
+    
+    // DELETE /api/admin/files/:id - Delete file from D1
+    if (method === 'DELETE' && url.pathname.startsWith('/api/admin/files/')) {
+      const fileId = url.pathname.split('/api/admin/files/')[1];
+      if (!fileId) {
+        return new Response(JSON.stringify({ success: false, error: 'File ID required' }), { status: 400, headers: CORS_HEADERS });
+      }
+      
+      try {
+        const result = await db.prepare(`DELETE FROM files WHERE id = ? OR cloudflare_key = ?`).bind(fileId, fileId).run();
+        
+        if (result.changes > 0) {
+          console.log(`✅ File deleted from D1: ${fileId}`);
+          await invalidateCache('files_page1');
+          return new Response(JSON.stringify({ success: true, deleted: true, changes: result.changes }), { headers: CORS_HEADERS });
+        } else {
+          return new Response(JSON.stringify({ success: true, deleted: false, message: 'File not found in D1' }), { headers: CORS_HEADERS });
+        }
+      } catch (error) {
+        console.error('❌ D1 delete error:', error);
+        return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500, headers: CORS_HEADERS });
+      }
     }
     
     // 404
