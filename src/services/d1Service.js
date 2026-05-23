@@ -7,8 +7,11 @@ import { getCachedData, clearCache } from './cacheService';
 
 const D1_API_URL = import.meta.env.VITE_D1_API_URL || 'https://onlibry-main-api.mdhabibul12212141.workers.dev';
 
-// Helper function for API calls (no cache - for real-time ops)
-async function callAPI(endpoint, options = {}) {
+// Helper function for API calls with retry and timeout
+async function callAPI(endpoint, options = {}, retryCount = 0) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+  
   try {
     const response = await fetch(`${D1_API_URL}${endpoint}`, {
       ...options,
@@ -16,13 +19,29 @@ async function callAPI(endpoint, options = {}) {
         'Content-Type': 'application/json',
         ...options.headers,
       },
+      signal: controller.signal,
     });
+    
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
     
     const data = await response.json();
     return data;
   } catch (error) {
+    clearTimeout(timeoutId);
+    
+    // Retry logic for network errors (max 3 retries)
+    if ((error.name === 'AbortError' || error.message === 'Failed to fetch') && retryCount < 3) {
+      console.log(`🔄 Retrying ${endpoint} (${retryCount + 1}/3)...`);
+      await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1))); // Exponential backoff
+      return callAPI(endpoint, options, retryCount + 1);
+    }
+    
     console.error(`API Error [${endpoint}]:`, error);
-    return { success: false, error: error.message };
+    return { success: false, error: error.message, data: null };
   }
 }
 
@@ -43,16 +62,18 @@ export async function getFilesFromD1(page = 1, limit = 20, search = '', forceRef
     const result = await getCachedData('files', async () => {
       return await callAPI(`/api/files?${params.toString()}`);
     }, forceRefresh);
-    return result;
+    return result || { success: false, files: [], pagination: { total: 0, totalPages: 1 } };
   }
   
   // Search or paginated - no cache
-  return await callAPI(`/api/files?${params.toString()}`);
+  const result = await callAPI(`/api/files?${params.toString()}`);
+  return result || { success: false, files: [], pagination: { total: 0, totalPages: 1 } };
 }
 
 export async function getFileFromD1(fileId) {
-  // Single file - no cache (can be changed frequently)
-  return await callAPI(`/api/files/${encodeURIComponent(fileId)}`);
+  if (!fileId) return { success: false, error: 'File ID required' };
+  const result = await callAPI(`/api/files/${encodeURIComponent(fileId)}`);
+  return result || { success: false, file: null };
 }
 
 // ============================================
@@ -60,6 +81,9 @@ export async function getFileFromD1(fileId) {
 // ============================================
 
 export async function savePurchaseToD1(data) {
+  if (!data.userId || !data.fileId) {
+    return { success: false, error: 'userId and fileId required' };
+  }
   return await callAPI('/api/purchase/save', {
     method: 'POST',
     body: JSON.stringify(data),
@@ -67,11 +91,15 @@ export async function savePurchaseToD1(data) {
 }
 
 export async function getUserPurchasesFromD1(userId) {
-  return await callAPI(`/api/purchase/user/${encodeURIComponent(userId)}`);
+  if (!userId) return { success: true, purchases: [] };
+  const result = await callAPI(`/api/purchase/user/${encodeURIComponent(userId)}`);
+  return result || { success: true, purchases: [] };
 }
 
 export async function checkPurchasedInD1(userId, fileId) {
-  return await callAPI(`/api/purchase/check?userId=${encodeURIComponent(userId)}&fileId=${encodeURIComponent(fileId)}`);
+  if (!userId || !fileId) return { success: true, purchased: false };
+  const result = await callAPI(`/api/purchase/check?userId=${encodeURIComponent(userId)}&fileId=${encodeURIComponent(fileId)}`);
+  return result || { success: true, purchased: false };
 }
 
 // ============================================
@@ -79,6 +107,9 @@ export async function checkPurchasedInD1(userId, fileId) {
 // ============================================
 
 export async function saveFileToD1(userId, fileId, fileName) {
+  if (!userId || !fileId) {
+    return { success: false, error: 'userId and fileId required' };
+  }
   return await callAPI('/api/saved/save', {
     method: 'POST',
     body: JSON.stringify({ userId, fileId, fileName }),
@@ -86,6 +117,9 @@ export async function saveFileToD1(userId, fileId, fileName) {
 }
 
 export async function removeSavedFileFromD1(userId, fileId, fileName = '') {
+  if (!userId || !fileId) {
+    return { success: false, error: 'userId and fileId required' };
+  }
   return await callAPI('/api/saved/remove', {
     method: 'DELETE',
     body: JSON.stringify({ userId, fileId, fileName }),
@@ -93,7 +127,9 @@ export async function removeSavedFileFromD1(userId, fileId, fileName = '') {
 }
 
 export async function getUserSavedFromD1(userId) {
-  return await callAPI(`/api/saved/user/${encodeURIComponent(userId)}`);
+  if (!userId) return { success: true, saved: [] };
+  const result = await callAPI(`/api/saved/user/${encodeURIComponent(userId)}`);
+  return result || { success: true, saved: [] };
 }
 
 // ============================================
@@ -104,7 +140,7 @@ export async function getCategoriesFromD1(forceRefresh = false) {
   const result = await getCachedData('categories', async () => {
     return await callAPI('/api/categories');
   }, forceRefresh);
-  return result.success ? result.categories : [];
+  return result?.success ? result.categories : [];
 }
 
 export async function getNotificationsFromD1(page = 1, limit = 10, category = 'all', forceRefresh = false) {
@@ -120,64 +156,65 @@ export async function getNotificationsFromD1(page = 1, limit = 10, category = 'a
     const result = await getCachedData('notifications', async () => {
       return await callAPI(`/api/notifications?${params.toString()}`);
     }, forceRefresh);
-    return result.success ? result : { notifications: [], pagination: { total: 0, totalPages: 0 } };
+    return result?.success ? result : { notifications: [], pagination: { total: 0, totalPages: 0 } };
   }
   
   const result = await callAPI(`/api/notifications?${params.toString()}`);
-  return result.success ? result : { notifications: [], pagination: { total: 0, totalPages: 0 } };
+  return result?.success ? result : { notifications: [], pagination: { total: 0, totalPages: 0 } };
 }
 
 export async function getLatestNotificationsFromD1(limit = 5, forceRefresh = false) {
   const result = await getCachedData('notifications', async () => {
     return await callAPI(`/api/notifications/latest?limit=${limit}`);
   }, forceRefresh);
-  return result.success ? result.notifications : [];
+  return result?.success ? result.notifications : [];
 }
 
 export async function getNotificationByIdFromD1(id) {
-  // Single notification - no cache (views increment)
+  if (!id) return null;
   const result = await callAPI(`/api/notifications/${encodeURIComponent(id)}`);
-  return result.success ? result.notification : null;
+  return result?.success ? result.notification : null;
 }
 
 // Admin APIs (no cache - admin needs latest data)
 export async function getAllNotificationsAdminFromD1(adminKey) {
+  if (!adminKey) return [];
   const result = await callAPI('/api/admin/notifications/all', {
     headers: { 'X-Admin-Key': adminKey }
   });
-  return result.success ? result.notifications : [];
+  return result?.success ? result.notifications : [];
 }
 
 export async function createNotificationInD1(data, adminKey) {
+  if (!adminKey) return { success: false };
   const result = await callAPI('/api/admin/notifications', {
     method: 'POST',
     headers: { 'X-Admin-Key': adminKey },
     body: JSON.stringify(data),
   });
-  // Clear notifications cache after create
-  clearCache('notifications');
-  return result;
+  if (result?.success) clearCache('notifications');
+  return result || { success: false };
 }
 
 export async function updateNotificationInD1(id, data, adminKey) {
+  if (!adminKey) return { success: false };
   const result = await callAPI(`/api/admin/notifications/${encodeURIComponent(id)}`, {
     method: 'PUT',
     headers: { 'X-Admin-Key': adminKey },
     body: JSON.stringify(data),
   });
-  // Clear notifications cache after update
-  clearCache('notifications');
-  return result;
+  if (result?.success) clearCache('notifications');
+  return result || { success: false };
 }
 
 export async function deleteNotificationFromD1(id, adminKey) {
+  if (!adminKey) return { success: false };
   const result = await callAPI(`/api/admin/notifications/${encodeURIComponent(id)}`, {
     method: 'DELETE',
     headers: { 'X-Admin-Key': adminKey },
   });
-  // Clear notifications cache after delete
-  clearCache('notifications');
-  return result;
+  if (result?.success) clearCache('notifications');
+  return result || { success: false };
 }
 
 // ============================================
@@ -188,54 +225,59 @@ export async function getQuickAccessFromD1(forceRefresh = false) {
   const result = await getCachedData('quickAccess', async () => {
     return await callAPI('/api/quick-access');
   }, forceRefresh);
-  return result.success ? result.buttons : [];
+  return result?.success ? result.buttons : [];
 }
 
 // Admin APIs (no cache)
 export async function getAllQuickAccessAdminFromD1(adminKey) {
+  if (!adminKey) return [];
   const result = await callAPI('/api/admin/quick-access/all', {
     headers: { 'X-Admin-Key': adminKey }
   });
-  return result.success ? result.buttons : [];
+  return result?.success ? result.buttons : [];
 }
 
 export async function addQuickAccessButtonToD1(data, adminKey) {
+  if (!adminKey) return { success: false };
   const result = await callAPI('/api/admin/quick-access', {
     method: 'POST',
     headers: { 'X-Admin-Key': adminKey },
     body: JSON.stringify(data),
   });
-  clearCache('quickAccess');
-  return result;
+  if (result?.success) clearCache('quickAccess');
+  return result || { success: false };
 }
 
 export async function updateQuickAccessButtonInD1(id, data, adminKey) {
+  if (!adminKey) return { success: false };
   const result = await callAPI(`/api/admin/quick-access/${encodeURIComponent(id)}`, {
     method: 'PUT',
     headers: { 'X-Admin-Key': adminKey },
     body: JSON.stringify(data),
   });
-  clearCache('quickAccess');
-  return result;
+  if (result?.success) clearCache('quickAccess');
+  return result || { success: false };
 }
 
 export async function deleteQuickAccessButtonFromD1(id, adminKey) {
+  if (!adminKey) return { success: false };
   const result = await callAPI(`/api/admin/quick-access/${encodeURIComponent(id)}`, {
     method: 'DELETE',
     headers: { 'X-Admin-Key': adminKey },
   });
-  clearCache('quickAccess');
-  return result;
+  if (result?.success) clearCache('quickAccess');
+  return result || { success: false };
 }
 
 export async function reorderQuickAccessButtonsInD1(buttons, adminKey) {
+  if (!adminKey) return { success: false };
   const result = await callAPI('/api/admin/quick-access/reorder', {
     method: 'POST',
     headers: { 'X-Admin-Key': adminKey },
     body: JSON.stringify({ buttons }),
   });
-  clearCache('quickAccess');
-  return result;
+  if (result?.success) clearCache('quickAccess');
+  return result || { success: false };
 }
 
 // ============================================
@@ -246,54 +288,59 @@ export async function getSliderCardsFromD1(forceRefresh = false) {
   const result = await getCachedData('sliderCards', async () => {
     return await callAPI('/api/slider-cards');
   }, forceRefresh);
-  return result.success ? result.cards : [];
+  return result?.success ? result.cards : [];
 }
 
 // Admin APIs (no cache)
 export async function getAllSliderCardsAdminFromD1(adminKey) {
+  if (!adminKey) return [];
   const result = await callAPI('/api/admin/slider-cards/all', {
     headers: { 'X-Admin-Key': adminKey }
   });
-  return result.success ? result.cards : [];
+  return result?.success ? result.cards : [];
 }
 
 export async function addSliderCardToD1(data, adminKey) {
+  if (!adminKey) return { success: false };
   const result = await callAPI('/api/admin/slider-cards', {
     method: 'POST',
     headers: { 'X-Admin-Key': adminKey },
     body: JSON.stringify(data),
   });
-  clearCache('sliderCards');
-  return result;
+  if (result?.success) clearCache('sliderCards');
+  return result || { success: false };
 }
 
 export async function updateSliderCardInD1(id, data, adminKey) {
+  if (!adminKey) return { success: false };
   const result = await callAPI(`/api/admin/slider-cards/${encodeURIComponent(id)}`, {
     method: 'PUT',
     headers: { 'X-Admin-Key': adminKey },
     body: JSON.stringify(data),
   });
-  clearCache('sliderCards');
-  return result;
+  if (result?.success) clearCache('sliderCards');
+  return result || { success: false };
 }
 
 export async function deleteSliderCardFromD1(id, adminKey) {
+  if (!adminKey) return { success: false };
   const result = await callAPI(`/api/admin/slider-cards/${encodeURIComponent(id)}`, {
     method: 'DELETE',
     headers: { 'X-Admin-Key': adminKey },
   });
-  clearCache('sliderCards');
-  return result;
+  if (result?.success) clearCache('sliderCards');
+  return result || { success: false };
 }
 
 export async function reorderSliderCardsInD1(cards, adminKey) {
+  if (!adminKey) return { success: false };
   const result = await callAPI('/api/admin/slider-cards/reorder', {
     method: 'POST',
     headers: { 'X-Admin-Key': adminKey },
     body: JSON.stringify({ cards }),
   });
-  clearCache('sliderCards');
-  return result;
+  if (result?.success) clearCache('sliderCards');
+  return result || { success: false };
 }
 
 // ============================================
@@ -301,39 +348,43 @@ export async function reorderSliderCardsInD1(cards, adminKey) {
 // ============================================
 
 export async function getAllCategoriesAdminFromD1(adminKey) {
+  if (!adminKey) return [];
   const result = await callAPI('/api/admin/categories/all', {
     headers: { 'X-Admin-Key': adminKey }
   });
-  return result.success ? result.categories : [];
+  return result?.success ? result.categories : [];
 }
 
 export async function addCategoryToD1(data, adminKey) {
+  if (!adminKey) return { success: false };
   const result = await callAPI('/api/admin/categories', {
     method: 'POST',
     headers: { 'X-Admin-Key': adminKey },
     body: JSON.stringify(data),
   });
-  clearCache('categories');
-  return result;
+  if (result?.success) clearCache('categories');
+  return result || { success: false };
 }
 
 export async function updateCategoryInD1(id, data, adminKey) {
+  if (!adminKey) return { success: false };
   const result = await callAPI(`/api/admin/categories/${encodeURIComponent(id)}`, {
     method: 'PUT',
     headers: { 'X-Admin-Key': adminKey },
     body: JSON.stringify(data),
   });
-  clearCache('categories');
-  return result;
+  if (result?.success) clearCache('categories');
+  return result || { success: false };
 }
 
 export async function deleteCategoryFromD1(id, adminKey) {
+  if (!adminKey) return { success: false };
   const result = await callAPI(`/api/admin/categories/${encodeURIComponent(id)}`, {
     method: 'DELETE',
     headers: { 'X-Admin-Key': adminKey },
   });
-  clearCache('categories');
-  return result;
+  if (result?.success) clearCache('categories');
+  return result || { success: false };
 }
 
 // ============================================
@@ -344,73 +395,64 @@ export async function getMockTestsFromD1(forceRefresh = false) {
   const result = await getCachedData('mockTests', async () => {
     return await callAPI('/api/mock-tests');
   }, forceRefresh);
-  return result.success ? result.tests : [];
+  return result?.success ? result.tests : [];
 }
 
 export async function getMockTestFromD1(id) {
-  // Single test - no cache
+  if (!id) return null;
   const result = await callAPI(`/api/mock-tests/${encodeURIComponent(id)}`);
-  return result.success ? result.test : null;
+  return result?.success ? result.test : null;
 }
 
 export async function getQuizzesFromD1(forceRefresh = false) {
   const result = await getCachedData('quizzes', async () => {
     return await callAPI('/api/quizzes');
   }, forceRefresh);
-  return result.success ? result.quizzes : [];
+  return result?.success ? result.quizzes : [];
 }
 
 export async function getQuizFromD1(id) {
-  // Single quiz - no cache
+  if (!id) return null;
   const result = await callAPI(`/api/quizzes/${encodeURIComponent(id)}`);
-  return result.success ? result.quiz : null;
+  return result?.success ? result.quiz : null;
 }
 
 // ============================================
 // 9. LOGS API (NO CACHE - Direct to Google Sheet now)
-// NOTE: These functions are kept for compatibility but now send to Google Sheet
-// The actual implementation will be in loggerService.js
 // ============================================
 
 export async function logPaymentToD1(data) {
-  // This now goes to Google Sheet (implemented in loggerService)
-  console.log('Payment log redirected to Google Sheet');
+  console.log('Payment log redirected to Google Sheet', data);
   return { success: true };
 }
 
 export async function logPageViewToD1(data) {
-  // This now goes to Google Sheet
-  console.log('Page view log redirected to Google Sheet');
+  console.log('Page view log redirected to Google Sheet', data);
   return { success: true };
 }
 
 export async function logSearchToD1(userId, searchQuery, resultCount, pagePath = '') {
-  // This now goes to Google Sheet
-  console.log('Search log redirected to Google Sheet');
+  console.log('Search log redirected to Google Sheet', { userId, searchQuery, resultCount, pagePath });
   return { success: true };
 }
 
 export async function logFileReadToD1(userId, fileId, fileName, pagesRead, timeSpent) {
-  // This now goes to Google Sheet
-  console.log('File read log redirected to Google Sheet');
+  console.log('File read log redirected to Google Sheet', { userId, fileId, fileName, pagesRead, timeSpent });
   return { success: true };
 }
 
 export async function logCartToD1(userId, fileId, fileName, price, action) {
-  // This now goes to Google Sheet
-  console.log('Cart log redirected to Google Sheet');
+  console.log('Cart log redirected to Google Sheet', { userId, fileId, fileName, price, action });
   return { success: true };
 }
 
 export async function logMockResultToD1(userId, testName, totalQuestions, correct, incorrect, unanswered, score, timeTaken) {
-  // This now goes to Google Sheet
-  console.log('Mock result log redirected to Google Sheet');
+  console.log('Mock result log redirected to Google Sheet', { userId, testName, totalQuestions, correct, incorrect, unanswered, score, timeTaken });
   return { success: true };
 }
 
 export async function logQuizResultToD1(userId, quizName, totalQuestions, correct, incorrect, unanswered, score, timeTaken) {
-  // This now goes to Google Sheet
-  console.log('Quiz result log redirected to Google Sheet');
+  console.log('Quiz result log redirected to Google Sheet', { userId, quizName, totalQuestions, correct, incorrect, unanswered, score, timeTaken });
   return { success: true };
 }
 
@@ -419,6 +461,7 @@ export async function logQuizResultToD1(userId, quizName, totalQuestions, correc
 // ============================================
 
 export async function syncFilesToD1(adminKey) {
+  if (!adminKey) return { success: false };
   return await callAPI('/api/sync/files', {
     method: 'POST',
     headers: { 'X-Admin-Key': adminKey },
@@ -430,6 +473,7 @@ export async function syncFilesToD1(adminKey) {
 // ============================================
 
 export async function syncUsersToD1(users, adminKey) {
+  if (!adminKey) return { success: false };
   return await callAPI('/api/sync/users', {
     method: 'POST',
     headers: { 'X-Admin-Key': adminKey },
@@ -438,51 +482,40 @@ export async function syncUsersToD1(users, adminKey) {
 }
 
 export async function getUsersFromD1(adminKey, page = 1, limit = 100, search = '') {
+  if (!adminKey) return { success: false, users: [] };
   const offset = (page - 1) * limit;
   const params = new URLSearchParams();
   params.append('limit', limit);
   params.append('offset', offset);
   if (search) params.append('search', search);
   
-  return await callAPI(`/api/admin/users?${params.toString()}`, {
+  const result = await callAPI(`/api/admin/users?${params.toString()}`, {
     headers: { 'X-Admin-Key': adminKey }
   });
+  return result || { success: false, users: [] };
 }
 
 // ============================================
 // 12. CART API (D1 + Sheet backup)
 // ============================================
 
-/**
- * Get user's cart from D1
- * @param {string} userId - User UID
- * @returns {Promise<Object>} - Cart items
- */
 export async function getCartFromD1(userId) {
-  if (!userId) return { success: false, cart: [] };
+  if (!userId) return { success: true, cart: [] };
   
   try {
     const result = await callAPI(`/api/cart/${encodeURIComponent(userId)}`);
-    console.log('📦 Cart from D1:', result);
-    
-    if (result.success && result.cart) {
+    if (result?.success && result.cart) {
       return { success: true, cart: result.cart };
     }
     return { success: true, cart: [] };
   } catch (error) {
     console.error('Error getting cart from D1:', error);
-    return { success: false, cart: [], error: error.message };
+    return { success: true, cart: [] };
   }
 }
 
-/**
- * Add item to cart in D1
- * @param {string} userId - User UID
- * @param {Object} item - { id, name, price, type }
- * @returns {Promise<Object>}
- */
 export async function addToCartInD1(userId, item) {
-  if (!userId || !item || !item.id) {
+  if (!userId || !item?.id) {
     return { success: false, error: 'userId and item.id required' };
   }
   
@@ -498,21 +531,13 @@ export async function addToCartInD1(userId, item) {
         action: 'add_to_cart'
       })
     });
-    console.log(`✅ Added to cart in D1: ${item.name}`);
-    return result;
+    return result || { success: false };
   } catch (error) {
     console.error('Error adding to cart in D1:', error);
     return { success: false, error: error.message };
   }
 }
 
-/**
- * Remove item from cart in D1
- * @param {string} userId - User UID
- * @param {string} fileId - File ID
- * @param {string} fileName - File name
- * @returns {Promise<Object>}
- */
 export async function removeFromCartInD1(userId, fileId, fileName = '') {
   if (!userId || !fileId) {
     return { success: false, error: 'userId and fileId required' };
@@ -527,19 +552,13 @@ export async function removeFromCartInD1(userId, fileId, fileName = '') {
         fileName: fileName
       })
     });
-    console.log(`✅ Removed from cart in D1: ${fileId}`);
-    return result;
+    return result || { success: false };
   } catch (error) {
     console.error('Error removing from cart in D1:', error);
     return { success: false, error: error.message };
   }
 }
 
-/**
- * Clear user's entire cart in D1
- * @param {string} userId - User UID
- * @returns {Promise<Object>}
- */
 export async function clearCartInD1(userId) {
   if (!userId) {
     return { success: false, error: 'userId required' };
@@ -549,8 +568,7 @@ export async function clearCartInD1(userId) {
     const result = await callAPI(`/api/cart/clear/${encodeURIComponent(userId)}`, {
       method: 'DELETE'
     });
-    console.log(`✅ Cart cleared in D1 for user: ${userId}`);
-    return result;
+    return result || { success: false };
   } catch (error) {
     console.error('Error clearing cart in D1:', error);
     return { success: false, error: error.message };
@@ -558,7 +576,7 @@ export async function clearCartInD1(userId) {
 }
 
 // ============================================
-// 13. EXPORT CLEAR CACHE FUNCTION (for manual refresh)
+// 13. EXPORT CLEAR CACHE FUNCTION
 // ============================================
 
 export { clearCache } from './cacheService';
