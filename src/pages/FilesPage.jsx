@@ -1,4 +1,4 @@
-// src/pages/FilesPage.jsx - Fixed Pagination Version
+// src/pages/FilesPage.jsx - D1 Database Version with Search Logs to Sheet
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams, useLocation } from 'react-router-dom';
 import FileCard from '../components/FileCard';
@@ -17,7 +17,7 @@ function FilesPage() {
   const [totalCount, setTotalCount] = useState(0);
   const [error, setError] = useState(null);
   const [pagination, setPagination] = useState({
-    page: parseInt(searchParams.get('page') || '1'),
+    page: 1,
     limit: 20,
     totalPages: 1
   });
@@ -32,27 +32,18 @@ function FilesPage() {
       const result = await getFilesFromD1(pagination.page, pagination.limit, searchQuery);
       
       if (result.success) {
-        // ✅ Fixed: No frontend sorting - backend already sorts properly
-        setFiles(result.files || []);
+        const sortedFiles = (result.files || []).sort((a, b) => {
+          if (a.is_premium === b.is_premium) return 0;
+          return a.is_premium ? 1 : -1;
+        });
+        setFiles(sortedFiles);
         setTotalCount(result.pagination?.total || 0);
         setPagination(prev => ({
           ...prev,
           totalPages: result.pagination?.totalPages || 1
         }));
         
-        // Update URL with current page
-        if (pagination.page > 1) {
-          setSearchParams({ 
-            ...(searchQuery && { search: searchQuery }),
-            page: pagination.page.toString()
-          });
-        } else if (pagination.page === 1 && searchQuery) {
-          setSearchParams({ search: searchQuery });
-        } else if (pagination.page === 1 && !searchQuery) {
-          setSearchParams({});
-        }
-        
-        // Log search to Google Sheet
+        // Log search to Google Sheet (not D1 anymore)
         if (searchQuery.trim() && user && result.pagination?.total !== undefined) {
           if (debounceTimerRef.current) {
             clearTimeout(debounceTimerRef.current);
@@ -67,7 +58,7 @@ function FilesPage() {
                 result.pagination?.total || 0,
                 location.pathname
               );
-              console.log(`🔍 Search logged to Sheet: "${currentQuery}" -> ${result.pagination?.total || 0} results`);
+              console.log(`🔍 Search logged to Sheet: "${currentQuery}" on ${location.pathname} -> ${result.pagination?.total || 0} results`);
             }
           }, 800);
         }
@@ -80,12 +71,12 @@ function FilesPage() {
     } finally {
       setLoading(false);
     }
-  }, [pagination.page, pagination.limit, searchQuery, user, location.pathname, setSearchParams]);
+  }, [pagination.page, pagination.limit, searchQuery, user, location.pathname]);
 
   const handleSearch = async (e) => {
     e.preventDefault();
     if (searchQuery.trim()) {
-      setSearchParams({ search: searchQuery, page: '1' });
+      setSearchParams({ search: searchQuery });
       setPagination(prev => ({ ...prev, page: 1 }));
     } else {
       setSearchParams({});
@@ -96,7 +87,7 @@ function FilesPage() {
   const handleClearSearch = () => {
     setSearchQuery('');
     setSearchParams({});
-    setPagination({ page: 1, limit: 20, totalPages: 1 });
+    setPagination(prev => ({ ...prev, page: 1 }));
     lastLoggedQueryRef.current = '';
   };
 
@@ -106,23 +97,18 @@ function FilesPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Sync search query with URL params
-  useEffect(() => {
-    const urlSearch = searchParams.get('search') || '';
-    const urlPage = parseInt(searchParams.get('page') || '1');
-    
-    if (urlSearch !== searchQuery) {
-      setSearchQuery(urlSearch);
-    }
-    
-    if (urlPage !== pagination.page && urlPage <= pagination.totalPages) {
-      setPagination(prev => ({ ...prev, page: urlPage }));
-    }
-  }, [searchParams, searchQuery, pagination.page, pagination.totalPages]);
-
   useEffect(() => {
     loadFiles();
-  }, [pagination.page, searchQuery, loadFiles]);
+  }, [pagination.page, searchQuery]);
+
+  useEffect(() => {
+    const urlSearch = searchParams.get('search') || '';
+    if (urlSearch !== searchQuery) {
+      setSearchQuery(urlSearch);
+      setPagination(prev => ({ ...prev, page: 1 }));
+      lastLoggedQueryRef.current = '';
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     return () => {
@@ -148,15 +134,11 @@ function FilesPage() {
             className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
           />
         </div>
-        <button type="submit" className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition">
+        <button type="submit" className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium">
           Search
         </button>
         {searchQuery && (
-          <button 
-            type="button" 
-            onClick={handleClearSearch} 
-            className="px-3 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm hover:bg-gray-300 transition"
-          >
+          <button type="button" onClick={handleClearSearch} className="px-3 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm">
             <X size={16} />
           </button>
         )}
@@ -170,7 +152,7 @@ function FilesPage() {
 
       {!loading && !error && (
         <p className="text-xs text-gray-500 mb-3">
-          Showing {files.length} of {totalCount} file{totalCount !== 1 ? 's' : ''}
+          {totalCount} file{totalCount !== 1 ? 's' : ''}
         </p>
       )}
 
@@ -180,7 +162,7 @@ function FilesPage() {
         </div>
       ) : files.length > 0 ? (
         <>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 md:gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-3 md:gap-4">
             {files.map(file => (
               <FileCard 
                 key={file.id} 
@@ -200,18 +182,7 @@ function FilesPage() {
           </div>
 
           {pagination.totalPages > 1 && (
-            <div className="flex justify-center items-center gap-2 mt-8 flex-wrap">
-              <button
-                onClick={() => handlePageChange(1)}
-                disabled={pagination.page === 1}
-                className={`px-3 py-2 rounded-lg text-sm ${
-                  pagination.page === 1
-                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                First
-              </button>
+            <div className="flex justify-center items-center gap-2 mt-8">
               <button
                 onClick={() => handlePageChange(pagination.page - 1)}
                 disabled={pagination.page === 1}
@@ -223,36 +194,9 @@ function FilesPage() {
               >
                 <ChevronLeft size={14} /> Prev
               </button>
-              
-              <div className="flex gap-1">
-                {[...Array(Math.min(5, pagination.totalPages))].map((_, idx) => {
-                  let pageNum;
-                  if (pagination.totalPages <= 5) {
-                    pageNum = idx + 1;
-                  } else if (pagination.page <= 3) {
-                    pageNum = idx + 1;
-                  } else if (pagination.page >= pagination.totalPages - 2) {
-                    pageNum = pagination.totalPages - 4 + idx;
-                  } else {
-                    pageNum = pagination.page - 2 + idx;
-                  }
-                  
-                  return (
-                    <button
-                      key={pageNum}
-                      onClick={() => handlePageChange(pageNum)}
-                      className={`px-3 py-2 rounded-lg text-sm ${
-                        pagination.page === pageNum
-                          ? 'bg-green-600 text-white'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
-                    >
-                      {pageNum}
-                    </button>
-                  );
-                })}
-              </div>
-              
+              <span className="px-4 py-2 text-sm text-gray-600">
+                Page {pagination.page} of {pagination.totalPages}
+              </span>
               <button
                 onClick={() => handlePageChange(pagination.page + 1)}
                 disabled={pagination.page === pagination.totalPages}
@@ -264,30 +208,14 @@ function FilesPage() {
               >
                 Next <ChevronRight size={14} />
               </button>
-              <button
-                onClick={() => handlePageChange(pagination.totalPages)}
-                disabled={pagination.page === pagination.totalPages}
-                className={`px-3 py-2 rounded-lg text-sm ${
-                  pagination.page === pagination.totalPages
-                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                Last
-              </button>
             </div>
           )}
-          
-          {/* Page info for mobile */}
-          <div className="text-center text-xs text-gray-500 mt-4 md:hidden">
-            Page {pagination.page} of {pagination.totalPages}
-          </div>
         </>
       ) : (
         <div className="text-center py-12">
           <p className="text-gray-500">No files found.</p>
           {searchQuery && (
-            <button onClick={handleClearSearch} className="mt-3 text-green-600 text-sm hover:underline">
+            <button onClick={handleClearSearch} className="mt-3 text-green-600 text-sm">
               Clear search
             </button>
           )}
@@ -298,3 +226,4 @@ function FilesPage() {
 }
 
 export default FilesPage;
+
