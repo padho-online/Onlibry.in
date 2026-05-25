@@ -1,7 +1,7 @@
 // src/pages/ExamPage.jsx - Mobile optimized
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { getExamData, logExamResult, getAllPapers } from '../services/mockTestService';
+import { getExamData, getAllPapers } from '../services/mockTestService';
 import { logMockTestResult } from '../services/loggerService';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../config/firebase';
@@ -36,39 +36,39 @@ function ExamPage() {
     return decoded;
   };
 
- const checkPurchasedMockTest = async (userId, testId) => {
-  if (!userId) return false;
-  console.log('🔍 Checking purchase for mock test:', { userId, testId });
-  
-  try {
-    // ✅ FIRST check D1
-    const { checkPurchasedInD1 } = await import('../services/d1Service');
-    const d1Result = await checkPurchasedInD1(userId, testId);
-    console.log('📦 D1 purchase check result:', d1Result);
+  const checkPurchasedMockTest = async (userId, testId) => {
+    if (!userId) return false;
+    console.log('🔍 Checking purchase for mock test:', { userId, testId });
     
-    if (d1Result.success && d1Result.purchased) {
-      console.log('✅ Mock test found in D1 purchases');
-      return true;
+    try {
+      // ✅ FIRST check D1
+      const { checkPurchasedInD1 } = await import('../services/d1Service');
+      const d1Result = await checkPurchasedInD1(userId, testId);
+      console.log('📦 D1 purchase check result:', d1Result);
+      
+      if (d1Result.success && d1Result.purchased) {
+        console.log('✅ Mock test found in D1 purchases');
+        return true;
+      }
+      
+      // ✅ FALLBACK to Firestore (for old purchases)
+      const userDoc = await getDoc(doc(db, 'users', userId));
+      const purchasedMockTests = userDoc.data()?.purchasedMockTests || [];
+      console.log('📦 Firestore purchasedMockTests:', purchasedMockTests);
+      
+      const isPurchased = purchasedMockTests === 'all' || 
+                          (Array.isArray(purchasedMockTests) && purchasedMockTests.includes(testId));
+      
+      if (isPurchased) {
+        console.log('✅ Mock test found in Firestore purchases');
+      }
+      
+      return isPurchased;
+    } catch (error) {
+      console.error('Error checking purchased mock test:', error);
+      return false;
     }
-    
-    // ✅ FALLBACK to Firestore (for old purchases)
-    const userDoc = await getDoc(doc(db, 'users', userId));
-    const purchasedMockTests = userDoc.data()?.purchasedMockTests || [];
-    console.log('📦 Firestore purchasedMockTests:', purchasedMockTests);
-    
-    const isPurchased = purchasedMockTests === 'all' || 
-                        (Array.isArray(purchasedMockTests) && purchasedMockTests.includes(testId));
-    
-    if (isPurchased) {
-      console.log('✅ Mock test found in Firestore purchases');
-    }
-    
-    return isPurchased;
-  } catch (error) {
-    console.error('Error checking purchased mock test:', error);
-    return false;
-  }
-};
+  };
 
   const checkAccess = async (decodedName) => {
     setCheckingAccess(true);
@@ -209,26 +209,38 @@ function ExamPage() {
     return { correct, incorrect, unanswered, totalQuestions: examData.questions.length, timeTaken };
   };
 
+  // ✅ FIXED: Only log once - removed duplicate logExamResult call
   const submitExam = async () => {
     const results = calculateResults();
     const decodedName = getDecodedExamName();
     if (!decodedName) return;
     
+    // ✅ Only log to Google Sheet once
     await logMockTestResult({
-      testName: decodedName, totalQuestions: results.totalQuestions,
-      correct: results.correct, incorrect: results.incorrect, unanswered: results.unanswered,
-      score: results.correct, timeTaken: results.timeTaken
+      testName: decodedName,
+      totalQuestions: results.totalQuestions,
+      correct: results.correct,
+      incorrect: results.incorrect,
+      unanswered: results.unanswered,
+      score: results.correct,
+      timeTaken: results.timeTaken
     });
     
     const examResultPayload = {
-      score: results.correct, answeredCount: results.correct + results.incorrect,
-      unansweredCount: results.unanswered, totalQuestions: results.totalQuestions,
-      timeTaken: results.timeTaken, answers: answers, config: examData.config
+      score: results.correct,
+      answeredCount: results.correct + results.incorrect,
+      unansweredCount: results.unanswered,
+      totalQuestions: results.totalQuestions,
+      timeTaken: results.timeTaken,
+      answers: answers,
+      config: examData.config
     };
     
     localStorage.setItem(`exam_result_${decodedName}`, JSON.stringify(examResultPayload));
     localStorage.setItem('activeResultKey', `exam_result_${decodedName}`);
-    await logExamResult(examResultPayload, 'mock');
+    
+    // ❌ REMOVED: await logExamResult(examResultPayload, 'mock'); - this was causing duplicates
+    
     localStorage.removeItem(`exam_progress_${decodedName}`);
     navigate(`/mock-test-results?exam=${encodeURIComponent(decodedName)}`);
   };

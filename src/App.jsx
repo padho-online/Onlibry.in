@@ -1,6 +1,7 @@
 // src/App.jsx
 // UPDATED - Added Blog CMS Routes + Notification Routes + Home Editor Admin Route
 // 🔥 FIXED: Page view logging with React Router
+// 🆕 ADDED: Files search routes with mode and query parameters
 
 import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
@@ -85,7 +86,12 @@ function App() {
                 <Route path="/" element={<HomePage />} />
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/pricing" element={<PricingPage />} />
+                
+                {/* Files Routes - Support search with mode and query */}
                 <Route path="/files" element={<FilesPage />} />
+                <Route path="/files/search/:mode/:query*" element={<FilesPage />} />
+                <Route path="/files/search/:query*" element={<FilesPage />} />
+                
                 <Route path="/folders" element={<FoldersPage />} />
                 <Route path="/mock-tests" element={<MockTestsPage />} />
                 <Route path="/mock-test/:examName" element={<ExamPage />} />

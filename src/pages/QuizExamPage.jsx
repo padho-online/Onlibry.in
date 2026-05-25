@@ -1,7 +1,7 @@
 // src/pages/QuizExamPage.jsx - Mobile optimized
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { getQuizData, logQuizResult, getAllPapers } from '../services/quizService';
+import { getQuizData, getAllPapers } from '../services/quizService';
 import { logQuizResult as logQuizResultToLogger } from '../services/loggerService';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../config/firebase';
@@ -36,39 +36,39 @@ function QuizExamPage() {
     return decoded;
   };
 
-const checkPurchasedQuiz = async (userId, quizId) => {
-  if (!userId) return false;
-  console.log('🔍 Checking purchase for quiz:', { userId, quizId });
-  
-  try {
-    // ✅ FIRST check D1
-    const { checkPurchasedInD1 } = await import('../services/d1Service');
-    const d1Result = await checkPurchasedInD1(userId, quizId);
-    console.log('📦 D1 purchase check result:', d1Result);
+  const checkPurchasedQuiz = async (userId, quizId) => {
+    if (!userId) return false;
+    console.log('🔍 Checking purchase for quiz:', { userId, quizId });
     
-    if (d1Result.success && d1Result.purchased) {
-      console.log('✅ Quiz found in D1 purchases');
-      return true;
+    try {
+      // ✅ FIRST check D1
+      const { checkPurchasedInD1 } = await import('../services/d1Service');
+      const d1Result = await checkPurchasedInD1(userId, quizId);
+      console.log('📦 D1 purchase check result:', d1Result);
+      
+      if (d1Result.success && d1Result.purchased) {
+        console.log('✅ Quiz found in D1 purchases');
+        return true;
+      }
+      
+      // ✅ FALLBACK to Firestore (for old purchases)
+      const userDoc = await getDoc(doc(db, 'users', userId));
+      const purchasedQuizzes = userDoc.data()?.purchasedQuizzes || [];
+      console.log('📦 Firestore purchasedQuizzes:', purchasedQuizzes);
+      
+      const isPurchased = purchasedQuizzes === 'all' || 
+                          (Array.isArray(purchasedQuizzes) && purchasedQuizzes.includes(quizId));
+      
+      if (isPurchased) {
+        console.log('✅ Quiz found in Firestore purchases');
+      }
+      
+      return isPurchased;
+    } catch (error) {
+      console.error('Error checking purchased quiz:', error);
+      return false;
     }
-    
-    // ✅ FALLBACK to Firestore (for old purchases)
-    const userDoc = await getDoc(doc(db, 'users', userId));
-    const purchasedQuizzes = userDoc.data()?.purchasedQuizzes || [];
-    console.log('📦 Firestore purchasedQuizzes:', purchasedQuizzes);
-    
-    const isPurchased = purchasedQuizzes === 'all' || 
-                        (Array.isArray(purchasedQuizzes) && purchasedQuizzes.includes(quizId));
-    
-    if (isPurchased) {
-      console.log('✅ Quiz found in Firestore purchases');
-    }
-    
-    return isPurchased;
-  } catch (error) {
-    console.error('Error checking purchased quiz:', error);
-    return false;
-  }
-};
+  };
 
   const checkAccess = async (decodedName) => {
     setCheckingAccess(true);
@@ -209,27 +209,34 @@ const checkPurchasedQuiz = async (userId, quizId) => {
     return { correct, incorrect, unanswered, totalQuestions: quizData.questions.length, timeTaken };
   };
 
+  // ✅ FIXED: Only log once - removed duplicate logQuizResult call
   const submitQuiz = async () => {
     const results = calculateResults();
     const decodedName = getDecodedQuizName();
     if (!decodedName) return;
     
+    // ✅ Only log to Google Sheet once
     await logQuizResultToLogger({
-      quizName: decodedName, totalQuestions: results.totalQuestions,
-      correct: results.correct, incorrect: results.incorrect, unanswered: results.unanswered,
-      score: results.correct, timeTaken: Math.floor(results.timeTaken / 60),
+      quizName: decodedName,
+      totalQuestions: results.totalQuestions,
+      correct: results.correct,
+      incorrect: results.incorrect,
+      unanswered: results.unanswered,
+      score: results.correct,
+      timeTaken: Math.floor(results.timeTaken / 60),
       percentage: ((results.correct / results.totalQuestions) * 100).toFixed(2)
     });
-    await logQuizResult({
-      quizName: decodedName, totalQuestions: results.totalQuestions,
-      correct: results.correct, incorrect: results.incorrect, unanswered: results.unanswered,
-      score: results.correct, timeTaken: Math.floor(results.timeTaken / 60)
-    });
+    
+    // ❌ REMOVED: await logQuizResult({ ... }) - this was causing duplicates
     
     const quizResultPayload = {
-      score: results.correct, answeredCount: results.correct + results.incorrect,
-      unansweredCount: results.unanswered, totalQuestions: results.totalQuestions,
-      timeTaken: results.timeTaken, answers: answers, config: quizData.config
+      score: results.correct,
+      answeredCount: results.correct + results.incorrect,
+      unansweredCount: results.unanswered,
+      totalQuestions: results.totalQuestions,
+      timeTaken: results.timeTaken,
+      answers: answers,
+      config: quizData.config
     };
     
     localStorage.setItem(`quiz_result_${decodedName}`, JSON.stringify(quizResultPayload));

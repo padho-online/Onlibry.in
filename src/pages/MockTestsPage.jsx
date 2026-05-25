@@ -1,6 +1,6 @@
-// src/pages/MockTestsPage.jsx - with Search Logs to Sheet + Debounce + Page Path
+// src/pages/MockTestsPage.jsx - with Search Logs to Sheet + Debounce + Page Path + URL Params
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { getAllPapers, getAllCategories, getSubCategoriesForCategory } from '../services/mockTestService';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
@@ -12,14 +12,15 @@ import { Search, ChevronDown, ShoppingCart, Trash2, Play, Lock } from 'lucide-re
 function MockTestsPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user, isSubscribed } = useAuth();
   const { addToCart, isInCart, removeFromCart } = useCart();
   const [papers, setPapers] = useState([]);
   const [filteredPapers, setFilteredPapers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('all');
-  const [selectedSubCategory, setSelectedSubCategory] = useState('all');
+  const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
+  const [selectedCategory, setSelectedCategory] = useState(searchParams.get('category') || 'all');
+  const [selectedSubCategory, setSelectedSubCategory] = useState(searchParams.get('subcategory') || 'all');
   const [categories, setCategories] = useState([]);
   const [subCategories, setSubCategories] = useState([]);
   const [cartStatus, setCartStatus] = useState({});
@@ -27,15 +28,22 @@ function MockTestsPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [showTooltipId, setShowTooltipId] = useState(null);
   
-  // Debounce timer ref
   const debounceTimerRef = useRef(null);
   const lastLoggedQueryRef = useRef('');
+
+  // Update URL when filters change
+  const updateURLParams = (search, category, subcategory) => {
+    const params = {};
+    if (search && search.trim()) params.search = search.trim();
+    if (category && category !== 'all') params.category = category;
+    if (subcategory && subcategory !== 'all') params.subcategory = subcategory;
+    setSearchParams(params, { replace: true });
+  };
 
   // Check purchased mock test from D1 first, then Firestore
   const checkPurchasedMockTest = async (userId, testId) => {
     if (!userId) return false;
     try {
-      // ✅ FIRST check D1
       const { checkPurchasedInD1 } = await import('../services/d1Service');
       const d1Result = await checkPurchasedInD1(userId, testId);
       
@@ -44,7 +52,6 @@ function MockTestsPage() {
         return true;
       }
       
-      // ✅ FALLBACK to Firestore
       const userDoc = await getDoc(doc(db, 'users', userId));
       const purchasedMockTests = userDoc.data()?.purchasedMockTests || [];
       const isPurchased = purchasedMockTests === 'all' || purchasedMockTests.includes(testId);
@@ -89,6 +96,7 @@ function MockTestsPage() {
 
   useEffect(() => { loadData(); }, []);
 
+  // Apply filters and update URL
   useEffect(() => {
     let filtered = [...papers];
     if (selectedCategory !== 'all') filtered = filtered.filter(p => p.category === selectedCategory);
@@ -100,23 +108,20 @@ function MockTestsPage() {
     filtered.sort((a, b) => a.isFree === b.isFree ? 0 : a.isFree ? -1 : 1);
     setFilteredPapers(filtered);
     
-    // 🔥 Log search to Google Sheet with debounce and page path
+    // Update URL
+    updateURLParams(searchQuery, selectedCategory, selectedSubCategory);
+    
+    // Log search to Google Sheet
     if (searchQuery.trim() && user) {
-      // Clear previous timer
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
       }
       
-      // Set new timer
       debounceTimerRef.current = setTimeout(async () => {
         const currentQuery = searchQuery.trim();
         if (lastLoggedQueryRef.current !== currentQuery) {
           lastLoggedQueryRef.current = currentQuery;
-          await logSearch(
-            currentQuery,
-            filtered.length,
-            location.pathname
-          );
+          await logSearch(currentQuery, filtered.length, location.pathname);
           console.log(`🔍 Search logged to Sheet: "${currentQuery}" on ${location.pathname} -> ${filtered.length} results`);
         }
       }, 800);
@@ -140,6 +145,26 @@ function MockTestsPage() {
       }
     };
   }, []);
+
+  const handleSearchChange = (e) => {
+    const value = e.target.value;
+    setSearchQuery(value);
+  };
+
+  const handleCategoryChange = (category) => {
+    setSelectedCategory(category);
+  };
+
+  const handleSubCategoryChange = (subcategory) => {
+    setSelectedSubCategory(subcategory);
+  };
+
+  const clearFilters = () => {
+    setSearchQuery('');
+    setSelectedCategory('all');
+    setSelectedSubCategory('all');
+    setSearchParams({});
+  };
 
   const handleTestAction = (paper) => {
     const hasAccess = paper.isFree || isSubscribed || purchasedStatus[paper.id];
@@ -186,23 +211,34 @@ function MockTestsPage() {
       <div className="flex gap-2 mb-3">
         <div className="flex-1 relative">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search..." className="w-full pl-9 pr-3 py-2 text-sm border rounded-lg" />
+          <input 
+            type="text" 
+            value={searchQuery} 
+            onChange={handleSearchChange} 
+            placeholder="Search tests..." 
+            className="w-full pl-9 pr-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-green-500"
+          />
         </div>
         <button onClick={() => setShowFilters(!showFilters)} className="px-3 py-2 bg-gray-100 rounded-lg text-sm flex items-center gap-1">
           Filters <ChevronDown size={14} className={showFilters ? 'rotate-180' : ''} />
         </button>
+        {(searchQuery || selectedCategory !== 'all' || selectedSubCategory !== 'all') && (
+          <button onClick={clearFilters} className="px-3 py-2 bg-gray-200 rounded-lg text-sm">
+            Clear
+          </button>
+        )}
       </div>
 
       {showFilters && (
         <div className="mb-4 p-3 bg-gray-50 rounded-lg">
           <div className="flex flex-wrap gap-2 mb-2">
-            <button onClick={() => setSelectedCategory('all')} className={`px-3 py-1 rounded-full text-xs ${selectedCategory === 'all' ? 'bg-green-600 text-white' : 'bg-gray-200'}`}>All</button>
-            {categories.map(cat => <button key={cat} onClick={() => setSelectedCategory(cat)} className={`px-3 py-1 rounded-full text-xs ${selectedCategory === cat ? 'bg-green-600 text-white' : 'bg-gray-200'}`}>{cat}</button>)}
+            <button onClick={() => handleCategoryChange('all')} className={`px-3 py-1 rounded-full text-xs ${selectedCategory === 'all' ? 'bg-green-600 text-white' : 'bg-gray-200'}`}>All</button>
+            {categories.map(cat => <button key={cat} onClick={() => handleCategoryChange(cat)} className={`px-3 py-1 rounded-full text-xs ${selectedCategory === cat ? 'bg-green-600 text-white' : 'bg-gray-200'}`}>{cat}</button>)}
           </div>
           {subCategories.length > 0 && (
             <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-200">
-              <button onClick={() => setSelectedSubCategory('all')} className={`px-2 py-0.5 rounded-full text-[10px] ${selectedSubCategory === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}>All</button>
-              {subCategories.map(sub => <button key={sub} onClick={() => setSelectedSubCategory(sub)} className={`px-2 py-0.5 rounded-full text-[10px] ${selectedSubCategory === sub ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}>{sub}</button>)}
+              <button onClick={() => handleSubCategoryChange('all')} className={`px-2 py-0.5 rounded-full text-[10px] ${selectedSubCategory === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}>All</button>
+              {subCategories.map(sub => <button key={sub} onClick={() => handleSubCategoryChange(sub)} className={`px-2 py-0.5 rounded-full text-[10px] ${selectedSubCategory === sub ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}>{sub}</button>)}
             </div>
           )}
         </div>
