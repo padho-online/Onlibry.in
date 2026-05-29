@@ -186,7 +186,7 @@ const handleSaveToggle = async (e) => {
     }
     if (tags.length === 0) return null;
     return (
-      <div className="flex flex-wrap gap-1 mb-4">
+      <div className="flex flex-wrap gap-1 mb-3">
         {tags.slice(0, 5).map((tag, idx) => (
           <span key={idx} className="px-1.5 py-0.5 text-[9px] bg-gray-100 text-gray-500 rounded-full truncate max-w-[80px]">
             {tag.trim()}
