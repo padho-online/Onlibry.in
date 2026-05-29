@@ -182,12 +182,12 @@ const handleSaveToggle = async (e) => {
   const renderTags = () => {
     let tags = file.tagsList || [];
     if (tags.length === 0 && file.tagsString) {
-      tags = file.tagsString.split(',').slice(0, 2);
+      tags = file.tagsString.split(',').slice(0, 8);
     }
     if (tags.length === 0) return null;
     return (
-      <div className="flex flex-wrap gap-1 mb-2">
-        {tags.slice(0, 2).map((tag, idx) => (
+      <div className="flex flex-wrap gap-1 mb-8">
+        {tags.slice(0, 8).map((tag, idx) => (
           <span key={idx} className="px-1.5 py-0.5 text-[9px] bg-gray-100 text-gray-500 rounded-full truncate max-w-[80px]">
             {tag.trim()}
           </span>
