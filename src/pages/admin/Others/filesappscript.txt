@@ -1,0 +1,1365 @@
+// Onlibry - Complete Google Sheet API
+// FIXED: Resumable sync, No onEdit, Smaller batches, Bug fixes
+// IMPROVED: Hourly INCREMENTAL sync (only changed files)
+// ADDED: Sync Stats Sheet for monitoring
+
+const MAIN_SHEET_NAME = "Files";
+const LOGS_SHEET_NAME = "UploadLogs";
+const STATS_SHEET_NAME = "ActivityStats";
+const EDITOR_SHEET_NAME = "Editor";
+const FOLDERS_SHEET_NAME = "Folders";
+const SYNC_STATS_SHEET_NAME = "SyncStats";
+const WEBSITE_URL = "https://onlibry.in";
+const WORKER_URL = "https://onlibry.mdhabibul12212141.workers.dev";
+
+// ============================================
+// D1 SYNC CONFIGURATION
+// ============================================
+const D1_API_URL = 'https://onlibry-main-api.mdhabibul12212141.workers.dev';
+const ADMIN_KEY = 'HabibulAdmin@2025';
+const SHEET_ID = '1eyGXaKcs06En9tF29mtmwSUXq5yRxpmrihoDHtk3HrY';
+const D1_SHEET_NAME = 'Files';
+
+// ============================================
+// SYNC STATE KEYS
+// ============================================
+const SYNC_LAST_COMPLETE_KEY = 'last_sync_complete_timestamp';
+const SYNC_RESUME_INDEX_KEY = 'sync_resume_index';
+const SYNC_TOTAL_FILES_KEY = 'sync_total_files';
+
+// ============================================
+// HELPER: Create JSON response
+// ============================================
+function createResponse(data) {
+  return ContentService
+    .createTextOutput(JSON.stringify(data))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+// ============================================
+// DO GET - Handle ALL GET requests
+// ============================================
+function doGet(e) {
+  const action = e?.parameter?.action;
+  
+  if (action === "getEditorData") return getEditorData();
+  if (action === "getFolders") return getFolders();
+  if (action === "add") return addFileViaGet(e.parameter);
+  if (action === "update") return updateFileViaGet(e.parameter);
+  if (action === "delete") return deleteFileViaGet(e.parameter);
+  if (action === "clearEditor") return clearEditor();
+  if (action === "bulkUpdate") return bulkUpdateFromEditor({});
+  
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(MAIN_SHEET_NAME);
+  if (!sheet) return createResponse({ success: false, error: "Sheet not found" });
+  
+  const data = getSheetDataOptimized(sheet);
+  const rows = data.slice(1);
+  const isAdminRequest = e?.parameter?.admin === "true";
+  const files = [];
+  
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const status = row[12];
+    if (status === "deleted") continue;
+    
+    if (!isAdminRequest) {
+      const showOnWebsite = row[6] === true || row[6] === "TRUE";
+      if (!showOnWebsite) continue;
+    }
+    
+    let tagsObject = {};
+    let tagsString = "";
+    
+    if (row[7]) {
+      tagsString = row[7].toString();
+      const tagPairs = tagsString.split(',');
+      tagPairs.forEach(pair => {
+        const trimmedPair = pair.trim();
+        if (trimmedPair.includes(':')) {
+          const colonIndex = trimmedPair.indexOf(':');
+          const key = trimmedPair.substring(0, colonIndex).trim();
+          const value = trimmedPair.substring(colonIndex + 1).trim();
+          if (key && value) {
+            if (!tagsObject[key]) tagsObject[key] = [];
+            tagsObject[key].push(value);
+          }
+        }
+      });
+    }
+    
+    files.push({
+      id: row[0],
+      name: row[1],
+      size: row[2],
+      mimeType: row[3],
+      price: row[4],
+      isPremium: row[5] === true || row[5] === "TRUE",
+      showOnWebsite: row[6] === true || row[6] === "TRUE",
+      tags: tagsObject,
+      tagsString: tagsString,
+      createdAt: row[8],
+      cloudflareKey: row[9],
+      actualFileLink: row[10],
+      websiteViewLink: row[11]
+    });
+  }
+  
+  return createResponse({ success: true, files: files });
+}
+
+// ============================================
+// OPTIMIZED: Get sheet data (faster)
+// ============================================
+function getSheetDataOptimized(sheet) {
+  const lastRow = sheet.getLastRow();
+  const lastCol = sheet.getLastColumn();
+  if (lastRow <= 1) return [];
+  return sheet.getRange(1, 1, lastRow, lastCol).getValues();
+}
+
+// ============================================
+// DO POST - Handle POST requests
+// ============================================
+function doPost(e) {
+  try {
+    const data = JSON.parse(e.postData.contents);
+    const action = data.action;
+    
+    switch(action) {
+      case "add": return addFile(data);
+      case "update": return updateFile(data);
+      case "delete": return deleteFile(data);
+      case "log": return addLog(data);
+      case "bulkUpdate": return bulkUpdateFromEditor(data);
+      case "getEditorData": return getEditorData();
+      case "clearEditor": return clearEditor();
+      case "incrementView": return incrementViewCount(data);
+      case "incrementDownload": return incrementDownloadCount(data);
+      default: return createResponse({ success: false, message: "Unknown action: " + action });
+    }
+  } catch (error) {
+    return createResponse({ success: false, error: error.toString() });
+  }
+}
+
+// ============================================
+// ADD FILE VIA GET
+// ============================================
+function addFileViaGet(params) {
+  const data = {
+    fileId: params.fileId,
+    fileName: params.fileName,
+    fileSize: params.fileSize,
+    mimeType: params.mimeType,
+    price: params.price,
+    isPremium: params.isPremium === 'true',
+    showOnWebsite: params.showOnWebsite === 'true',
+    tags: params.tags || '',
+    cloudflareKey: params.cloudflareKey,
+    uploadedBy: params.uploadedBy,
+    uploadedByName: params.uploadedByName,
+    userIp: params.userIp,
+    userAgent: params.userAgent
+  };
+  return addFile(data);
+}
+
+// ============================================
+// UPDATE FILE VIA GET
+// ============================================
+function updateFileViaGet(params) {
+  const data = { fileId: params.fileId };
+  
+  if (params.fileName && params.fileName.toString().trim() !== '') {
+    data.fileName = params.fileName.toString().trim();
+  }
+  if (params.price && params.price.toString().trim() !== '') {
+    data.price = Number(params.price);
+  }
+  if (params.tags && params.tags.toString().trim() !== '') {
+    data.tags = params.tags.toString().trim();
+  }
+  if (params.isPremium !== undefined && params.isPremium !== null && params.isPremium.toString().trim() !== '') {
+    data.isPremium = (params.isPremium.toString().toLowerCase().trim() === 'true');
+  }
+  if (params.showOnWebsite !== undefined && params.showOnWebsite !== null && params.showOnWebsite.toString().trim() !== '') {
+    data.showOnWebsite = (params.showOnWebsite.toString().toLowerCase().trim() === 'true');
+  }
+  
+  data.updatedBy = params.updatedBy;
+  data.updatedByName = params.updatedByName;
+  data.userIp = params.userIp;
+  data.userAgent = params.userAgent;
+  
+  return updateFile(data);
+}
+
+// ============================================
+// DELETE FILE VIA GET
+// ============================================
+function deleteFileViaGet(params) {
+  const data = {
+    fileId: params.fileId,
+    fileName: params.fileName,
+    deletedBy: params.deletedBy,
+    deletedByName: params.deletedByName,
+    userIp: params.userIp,
+    userAgent: params.userAgent,
+    reason: params.reason || 'Manual delete'
+  };
+  return deleteFile(data);
+}
+
+// ============================================
+// GET FOLDERS
+// ============================================
+function getFolders() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(FOLDERS_SHEET_NAME);
+  
+  if (!sheet) {
+    const newSheet = SpreadsheetApp.getActiveSpreadsheet().insertSheet(FOLDERS_SHEET_NAME);
+    newSheet.appendRow(["level1", "level2", "level3", "level4", "level5", "level6", "level7", "level8", "level9", "level10", "link"]);
+    return createResponse({ success: true, folders: [] });
+  }
+  
+  const data = getSheetDataOptimized(sheet);
+  const rows = data.slice(1);
+  const folders = [];
+  
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    folders.push({
+      level1: row[0] || "",
+      level2: row[1] || "",
+      level3: row[2] || "",
+      level4: row[3] || "",
+      level5: row[4] || "",
+      level6: row[5] || "",
+      level7: row[6] || "",
+      level8: row[7] || "",
+      level9: row[8] || "",
+      level10: row[9] || "",
+      link: row[10] || ""
+    });
+  }
+  
+  return createResponse({ success: true, folders: folders });
+}
+
+// ============================================
+// GET EDITOR DATA
+// ============================================
+function getEditorData() {
+  try {
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(EDITOR_SHEET_NAME);
+    
+    if (!sheet) {
+      const newSheet = SpreadsheetApp.getActiveSpreadsheet().insertSheet(EDITOR_SHEET_NAME);
+      newSheet.appendRow(["fileId", "fileName", "fileSize", "mimeType", "price", "isPremium", "showOnWebsite", "tags", "status"]);
+      return createResponse({ success: true, files: [] });
+    }
+    
+    const data = getSheetDataOptimized(sheet);
+    
+    if (!data || data.length <= 1) {
+      return createResponse({ success: true, files: [] });
+    }
+    
+    const rows = data.slice(1);
+    const validRows = [];
+    
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const fileId = row[0];
+      
+      if (fileId && fileId.toString().trim() !== "" && fileId !== "fileId") {
+        validRows.push({
+          fileId: row[0] ? row[0].toString() : "",
+          fileName: row[1] ? row[1].toString() : "",
+          fileSize: row[2] ? row[2].toString() : "",
+          mimeType: row[3] ? row[3].toString() : "",
+          price: row[4] !== undefined && row[4] !== null && row[4].toString().trim() !== "" ? row[4].toString() : "",
+          isPremium: row[5] !== undefined && row[5] !== null && row[5].toString().trim() !== "" ? row[5].toString() : "",
+          showOnWebsite: row[6] !== undefined && row[6] !== null && row[6].toString().trim() !== "" ? row[6].toString() : "",
+          tags: row[7] !== undefined && row[7] !== null && row[7].toString().trim() !== "" ? row[7].toString() : "",
+          status: row[8] !== undefined && row[8] !== null && row[8].toString().trim() !== "" ? row[8].toString().toLowerCase() : ""
+        });
+      }
+    }
+    
+    return createResponse({ success: true, files: validRows });
+    
+  } catch (error) {
+    Logger.log(`❌ Error in getEditorData: ${error.toString()}`);
+    return createResponse({ success: false, error: error.toString() });
+  }
+}
+
+// ============================================
+// ADD NEW FILE (NO AUTO SYNC)
+// ============================================
+function addFile(data) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(MAIN_SHEET_NAME);
+  
+  const websiteViewLink = `${WEBSITE_URL}/viewer/${data.cloudflareKey}`;
+  const actualFileLink = `${WORKER_URL}/${encodeURIComponent(data.cloudflareKey)}`;
+  
+  let isPremiumValue = data.isPremium === true || data.isPremium === "true" || data.isPremium === "TRUE";
+  let showOnWebsiteValue = data.showOnWebsite === true || data.showOnWebsite === "true" || data.showOnWebsite === "TRUE";
+  
+  let tagsValue = "";
+  if (data.tags) {
+    tagsValue = typeof data.tags === 'string' ? data.tags : JSON.stringify(data.tags);
+  }
+  
+  sheet.appendRow([
+    data.fileId,
+    data.fileName,
+    data.fileSize,
+    data.mimeType,
+    Number(data.price) || 0,
+    isPremiumValue,
+    showOnWebsiteValue,
+    tagsValue,
+    new Date().toISOString(),
+    data.cloudflareKey,
+    actualFileLink,
+    websiteViewLink,
+    "active"
+  ]);
+  
+  addLog({
+    fileId: data.fileId,
+    fileName: data.fileName,
+    action: "upload",
+    performedBy: data.uploadedBy,
+    performedByName: data.uploadedByName,
+    changes: `Initial upload. Price: ₹${data.price || 0}, Premium: ${isPremiumValue}`,
+    ipAddress: data.userIp,
+    userAgent: data.userAgent
+  });
+  
+  initStats(data.fileId, data.fileName);
+  
+  return createResponse({ success: true, message: "File added successfully", websiteViewLink: websiteViewLink });
+}
+
+// ============================================
+// UPDATE SINGLE FILE (NO AUTO SYNC)
+// ============================================
+function updateFile(data) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(MAIN_SHEET_NAME);
+  const range = sheet.getDataRange();
+  const values = range.getValues();
+  
+  let changes = [];
+  let found = false;
+  let rowIndex = -1;
+  
+  for (let i = 1; i < values.length; i++) {
+    if (values[i][0] === data.fileId) {
+      rowIndex = i;
+      found = true;
+      break;
+    }
+  }
+  
+  if (!found) {
+    return createResponse({ success: false, error: "File not found: " + data.fileId });
+  }
+  
+  if (data.hasOwnProperty('fileName') && data.fileName !== undefined && data.fileName !== null && data.fileName !== '') {
+    const oldValue = values[rowIndex][1];
+    if (data.fileName !== oldValue) {
+      sheet.getRange(rowIndex + 1, 2).setValue(data.fileName);
+      changes.push(`name: "${oldValue}" → "${data.fileName}"`);
+    }
+  }
+  
+  if (data.hasOwnProperty('price') && data.price !== undefined && !isNaN(data.price)) {
+    const oldValue = values[rowIndex][4];
+    if (data.price !== oldValue) {
+      sheet.getRange(rowIndex + 1, 5).setValue(data.price);
+      changes.push(`price: ₹${oldValue} → ₹${data.price}`);
+    }
+  }
+  
+  if (data.hasOwnProperty('isPremium') && data.isPremium !== undefined && typeof data.isPremium === 'boolean') {
+    const oldValue = values[rowIndex][5];
+    if (data.isPremium !== oldValue) {
+      sheet.getRange(rowIndex + 1, 6).setValue(data.isPremium);
+      changes.push(`premium: ${oldValue ? "Yes" : "No"} → ${data.isPremium ? "Yes" : "No"}`);
+    }
+  }
+  
+  if (data.hasOwnProperty('showOnWebsite') && data.showOnWebsite !== undefined && typeof data.showOnWebsite === 'boolean') {
+    const oldValue = values[rowIndex][6];
+    if (data.showOnWebsite !== oldValue) {
+      sheet.getRange(rowIndex + 1, 7).setValue(data.showOnWebsite);
+      changes.push(`visibility: ${oldValue ? "Visible" : "Hidden"} → ${data.showOnWebsite ? "Visible" : "Hidden"}`);
+    }
+  }
+  
+  if (data.hasOwnProperty('tags') && data.tags !== undefined && data.tags !== null && data.tags !== '') {
+    const oldValue = values[rowIndex][7];
+    if (data.tags !== oldValue) {
+      sheet.getRange(rowIndex + 1, 8).setValue(data.tags);
+      changes.push(`tags: "${oldValue}" → "${data.tags}"`);
+    }
+  }
+  
+  if (changes.length > 0) {
+    addLog({
+      fileId: data.fileId,
+      fileName: data.fileName || values[rowIndex][1],
+      action: "edit",
+      performedBy: data.updatedBy,
+      performedByName: data.updatedByName,
+      changes: changes.join(" | "),
+      ipAddress: data.userIp,
+      userAgent: data.userAgent
+    });
+  }
+  
+  return createResponse({ success: true, message: "File updated", changes: changes });
+}
+
+// ============================================
+// BULK UPDATE FROM EDITOR SHEET
+// ============================================
+function bulkUpdateFromEditor(data) {
+  try {
+    const editorSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(EDITOR_SHEET_NAME);
+    
+    if (!editorSheet) {
+      return createResponse({ success: false, error: "Editor sheet not found" });
+    }
+    
+    const editorData = getSheetDataOptimized(editorSheet);
+    
+    if (editorData.length <= 1) {
+      return createResponse({ success: false, error: "No data in Editor sheet" });
+    }
+    
+    const rows = editorData.slice(1);
+    const mainSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(MAIN_SHEET_NAME);
+    const mainValues = getSheetDataOptimized(mainSheet);
+    
+    let updatedCount = 0;
+    let errors = [];
+    let allChanges = [];
+    
+    function hasValue(cell) {
+      if (cell === undefined || cell === null) return false;
+      if (typeof cell === 'boolean') return true;
+      const str = cell.toString().trim();
+      return str !== "";
+    }
+    
+    for (let i = 0; i < rows.length; i++) {
+      const editorRow = rows[i];
+      const fileId = editorRow[0] ? editorRow[0].toString().trim() : "";
+      
+      if (!fileId) {
+        errors.push(`Row ${i + 2}: No fileId provided`);
+        continue;
+      }
+      
+      let mainRowIndex = -1;
+      for (let j = 1; j < mainValues.length; j++) {
+        if (mainValues[j][0] && mainValues[j][0].toString() === fileId) {
+          mainRowIndex = j;
+          break;
+        }
+      }
+      
+      if (mainRowIndex === -1) {
+        errors.push(`Row ${i + 2}: File ID "${fileId}" not found`);
+        continue;
+      }
+      
+      let changes = [];
+      
+      if (hasValue(editorRow[1])) {
+        const newValue = editorRow[1].toString().trim();
+        const oldValue = mainValues[mainRowIndex][1];
+        if (newValue !== oldValue) {
+          mainSheet.getRange(mainRowIndex + 1, 2).setValue(newValue);
+          changes.push(`name: "${oldValue}" → "${newValue}"`);
+        }
+      }
+      
+      if (hasValue(editorRow[2])) {
+        const newValue = editorRow[2].toString().trim();
+        const oldValue = mainValues[mainRowIndex][2];
+        if (newValue !== oldValue) {
+          mainSheet.getRange(mainRowIndex + 1, 3).setValue(newValue);
+          changes.push(`size: "${oldValue}" → "${newValue}"`);
+        }
+      }
+      
+      if (hasValue(editorRow[3])) {
+        const newValue = editorRow[3].toString().trim();
+        const oldValue = mainValues[mainRowIndex][3];
+        if (newValue !== oldValue) {
+          mainSheet.getRange(mainRowIndex + 1, 4).setValue(newValue);
+          changes.push(`mimeType: "${oldValue}" → "${newValue}"`);
+        }
+      }
+      
+      if (hasValue(editorRow[4])) {
+        const newValue = Number(editorRow[4]);
+        const oldValue = mainValues[mainRowIndex][4];
+        if (!isNaN(newValue) && newValue !== oldValue) {
+          mainSheet.getRange(mainRowIndex + 1, 5).setValue(newValue);
+          changes.push(`price: ₹${oldValue} → ₹${newValue}`);
+        }
+      }
+      
+      if (hasValue(editorRow[5])) {
+        const val = editorRow[5].toString().toLowerCase().trim();
+        const newValue = (val === 'true' || val === 'yes' || val === '1');
+        const oldValue = mainValues[mainRowIndex][5];
+        if (newValue !== oldValue) {
+          mainSheet.getRange(mainRowIndex + 1, 6).setValue(newValue);
+          changes.push(`premium: ${oldValue ? "Yes" : "No"} → ${newValue ? "Yes" : "No"}`);
+        }
+      }
+      
+      if (hasValue(editorRow[6])) {
+        const val = editorRow[6].toString().toLowerCase().trim();
+        let newValue = (val === 'true' || val === 'yes' || val === '1');
+        const oldValue = mainValues[mainRowIndex][6];
+        if (newValue !== oldValue) {
+          mainSheet.getRange(mainRowIndex + 1, 7).setValue(newValue);
+          changes.push(`visibility: ${oldValue ? "Visible" : "Hidden"} → ${newValue ? "Visible" : "Hidden"}`);
+        }
+      }
+      
+      if (hasValue(editorRow[7])) {
+        const newValue = editorRow[7].toString().trim();
+        const oldValue = mainValues[mainRowIndex][7];
+        if (newValue !== oldValue) {
+          mainSheet.getRange(mainRowIndex + 1, 8).setValue(newValue);
+          changes.push(`tags: "${oldValue}" → "${newValue}"`);
+        }
+      }
+      
+      if (hasValue(editorRow[8])) {
+        const newValue = editorRow[8].toString().toLowerCase().trim();
+        const oldValue = mainValues[mainRowIndex][12];
+        if (newValue !== oldValue) {
+          mainSheet.getRange(mainRowIndex + 1, 13).setValue(newValue);
+          changes.push(`status: "${oldValue}" → "${newValue}"`);
+        }
+      }
+      
+      if (changes.length > 0) {
+        updatedCount++;
+        allChanges.push({ fileId: fileId, changes: changes });
+        addLog({
+          fileId: fileId,
+          fileName: hasValue(editorRow[1]) ? editorRow[1] : mainValues[mainRowIndex][1],
+          action: "bulk_edit",
+          performedBy: data?.updatedBy || "system",
+          performedByName: data?.updatedByName || "Bulk Update",
+          changes: changes.join(" | "),
+          ipAddress: data?.userIp || "",
+          userAgent: data?.userAgent || ""
+        });
+      }
+    }
+    
+    const lastRow = editorSheet.getLastRow();
+    if (lastRow > 1) {
+      editorSheet.deleteRows(2, lastRow - 1);
+    }
+    
+    return createResponse({ 
+      success: true, 
+      message: `Updated ${updatedCount} files`, 
+      updatedCount: updatedCount,
+      changes: allChanges,
+      errors: errors.length > 0 ? errors : undefined
+    });
+    
+  } catch (error) {
+    Logger.log(`❌ Error in bulkUpdateFromEditor: ${error.toString()}`);
+    return createResponse({ success: false, error: error.toString() });
+  }
+}
+
+// ============================================
+// DELETE FILE (Soft delete) - NO AUTO SYNC
+// ============================================
+function deleteFile(data) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(MAIN_SHEET_NAME);
+  const range = sheet.getDataRange();
+  const values = range.getValues();
+  
+  let found = false;
+  
+  for (let i = 1; i < values.length; i++) {
+    if (values[i][0] === data.fileId) {
+      sheet.getRange(i+1, 13).setValue("deleted");
+      found = true;
+      break;
+    }
+  }
+  
+  if (!found) {
+    return createResponse({ success: false, error: "File not found: " + data.fileId });
+  }
+  
+  addLog({
+    fileId: data.fileId,
+    fileName: data.fileName,
+    action: "delete",
+    performedBy: data.deletedBy,
+    performedByName: data.deletedByName,
+    changes: `File deleted. Reason: ${data.reason || "Manual delete"}`,
+    ipAddress: data.userIp,
+    userAgent: data.userAgent
+  });
+  
+  return createResponse({ success: true, message: "File deleted" });
+}
+
+// ============================================
+// CLEAR EDITOR SHEET
+// ============================================
+function clearEditor() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(EDITOR_SHEET_NAME);
+  if (!sheet) {
+    return createResponse({ success: false, error: "Editor sheet not found" });
+  }
+  
+  const lastRow = sheet.getLastRow();
+  if (lastRow > 1) {
+    sheet.deleteRows(2, lastRow - 1);
+  }
+  
+  return createResponse({ success: true, message: "Editor sheet cleared" });
+}
+
+// ============================================
+// ADD LOG
+// ============================================
+function addLog(data) {
+  let sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(LOGS_SHEET_NAME);
+  
+  if (!sheet) {
+    sheet = SpreadsheetApp.getActiveSpreadsheet().insertSheet(LOGS_SHEET_NAME);
+    sheet.appendRow(["logId", "fileId", "fileName", "action", "performedBy", "performedByName", "performedAt", "changes", "ipAddress", "userAgent"]);
+  }
+  
+  const logId = `log_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+  
+  sheet.appendRow([
+    logId,
+    data.fileId || "",
+    data.fileName || "",
+    data.action || "unknown",
+    data.performedBy || "unknown",
+    data.performedByName || "unknown",
+    new Date().toISOString(),
+    data.changes || "",
+    data.ipAddress || "",
+    data.userAgent || ""
+  ]);
+}
+
+// ============================================
+// INIT STATS
+// ============================================
+function initStats(fileId, fileName) {
+  let sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(STATS_SHEET_NAME);
+  
+  if (!sheet) {
+    sheet = SpreadsheetApp.getActiveSpreadsheet().insertSheet(STATS_SHEET_NAME);
+    sheet.appendRow(["fileId", "fileName", "viewCount", "downloadCount", "editCount", "lastViewedAt", "lastDownloadedAt"]);
+  }
+  
+  sheet.appendRow([fileId, fileName, 0, 0, 0, "", ""]);
+}
+
+// ============================================
+// INCREMENT VIEW COUNT
+// ============================================
+function incrementViewCount(data) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(STATS_SHEET_NAME);
+  if (!sheet) return;
+  
+  const values = getSheetDataOptimized(sheet);
+  
+  for (let i = 1; i < values.length; i++) {
+    if (values[i][0] === data.fileId) {
+      const currentCount = Number(values[i][2]) || 0;
+      sheet.getRange(i+1, 3).setValue(currentCount + 1);
+      sheet.getRange(i+1, 6).setValue(new Date().toISOString());
+      break;
+    }
+  }
+}
+
+// ============================================
+// INCREMENT DOWNLOAD COUNT
+// ============================================
+function incrementDownloadCount(data) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(STATS_SHEET_NAME);
+  if (!sheet) return;
+  
+  const values = getSheetDataOptimized(sheet);
+  
+  for (let i = 1; i < values.length; i++) {
+    if (values[i][0] === data.fileId) {
+      const currentCount = Number(values[i][3]) || 0;
+      sheet.getRange(i+1, 4).setValue(currentCount + 1);
+      sheet.getRange(i+1, 7).setValue(new Date().toISOString());
+      break;
+    }
+  }
+}
+
+// ============================================
+// SYNC STATS SHEET FUNCTIONS
+// ============================================
+
+function getSyncStatsSheet() {
+  let sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SYNC_STATS_SHEET_NAME);
+  if (!sheet) {
+    sheet = SpreadsheetApp.getActiveSpreadsheet().insertSheet(SYNC_STATS_SHEET_NAME);
+    sheet.appendRow(["Timestamp", "Sync Type", "Files Synced", "Files Updated", "Files Deleted", "Status", "Duration (sec)", "Details"]);
+    sheet.getRange("A1:H1").setFontWeight("bold");
+    sheet.setColumnWidths(1, 8, 180);
+  }
+  return sheet;
+}
+
+function addSyncStatsEntry(syncType, synced, updated, deleted, status, durationSeconds, details) {
+  try {
+    const sheet = getSyncStatsSheet();
+    sheet.appendRow([
+      new Date().toISOString(),
+      syncType,
+      synced || 0,
+      updated || 0,
+      deleted || 0,
+      status,
+      durationSeconds || 0,
+      details || ""
+    ]);
+    
+    // Keep only last 100 entries
+    const lastRow = sheet.getLastRow();
+    if (lastRow > 101) {
+      sheet.deleteRows(2, lastRow - 101);
+    }
+  } catch(e) {
+    console.error("Failed to add sync stats:", e);
+  }
+}
+
+function showSyncStats() {
+  try {
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SYNC_STATS_SHEET_NAME);
+    if (!sheet) {
+      SpreadsheetApp.getUi().alert("No sync stats available yet. Run a sync first.");
+      return;
+    }
+    
+    // Activate and show the sheet
+    sheet.activate();
+    const ui = SpreadsheetApp.getUi();
+    const lastRow = sheet.getLastRow();
+    const summary = `📊 Sync Statistics\n\nTotal sync runs: ${lastRow - 1}\n\nLast sync: ${sheet.getRange(lastRow, 1).getValue()}\nLast status: ${sheet.getRange(lastRow, 6).getValue()}`;
+    ui.alert("Sync Statistics", summary, ui.ButtonSet.OK);
+    
+  } catch(e) {
+    SpreadsheetApp.getUi().alert("Error showing stats: " + e.toString());
+  }
+}
+
+// ============================================
+// INCREMENTAL SYNC (Only changed files)
+// ============================================
+
+function getLastSyncTime() {
+  const props = PropertiesService.getScriptProperties();
+  const lastSync = props.getProperty(SYNC_LAST_COMPLETE_KEY);
+  return lastSync ? new Date(lastSync) : null;
+}
+
+function updateLastSyncTime() {
+  const props = PropertiesService.getScriptProperties();
+  props.setProperty(SYNC_LAST_COMPLETE_KEY, new Date().toISOString());
+}
+
+function syncChangedFilesOnly() {
+  const startTime = new Date();
+  let syncType = "INCREMENTAL";
+  let synced = 0, updated = 0, deleted = 0;
+  let status = "SUCCESS";
+  let errorMsg = "";
+  
+  try {
+    console.log('🔄 Starting INCREMENTAL sync (only changed files)...');
+    
+    const lastSyncTime = getLastSyncTime();
+    
+    if (!lastSyncTime) {
+      console.log('⚠️ First sync - running FULL sync instead');
+      const result = fullSyncToD1();
+      addSyncStatsEntry("FULL", result.synced, result.updated, result.deleted, result.success ? "SUCCESS" : "FAILED", 
+        (new Date() - startTime) / 1000, result.error || "");
+      return result;
+    }
+    
+    console.log(`📅 Last sync: ${lastSyncTime}`);
+    
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const sheet = ss.getSheetByName(D1_SHEET_NAME);
+    if (!sheet) throw new Error(`Sheet '${D1_SHEET_NAME}' not found`);
+    
+    const data = getSheetDataOptimized(sheet);
+    const headers = data[0];
+    const rows = data.slice(1);
+    
+    const findCol = (possibleNames) => {
+      for (const name of possibleNames) {
+        const index = headers.findIndex(h => String(h || '').toLowerCase().trim() === name.toLowerCase().trim());
+        if (index !== -1) return index;
+      }
+      return -1;
+    };
+    
+    const idCol = findCol(['fileId', 'id', 'file_id']);
+    const nameCol = findCol(['fileName', 'name', 'file_name']);
+    const sizeCol = findCol(['fileSize', 'size', 'file_size']);
+    const mimeCol = findCol(['mimeType', 'mime_type']);
+    const priceCol = findCol(['price']);
+    const premiumCol = findCol(['isPremium', 'is_premium', 'premium']);
+    const showCol = findCol(['showOnWebsite', 'show_on_website', 'visible']);
+    const tagsCol = findCol(['tags', 'tag']);
+    const cloudflareCol = findCol(['cloudflareKey', 'cloudflare_key']);
+    const createdAtCol = findCol(['createdAt', 'created_at', 'uploadedAt']);
+    const statusCol = findCol(['status']);
+    const updatedAtCol = findCol(['updatedAt', 'updated_at', 'lastModified']);
+    
+    const changedFiles = [];
+    const deletedFileIds = [];
+    
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      if (!row || row.length === 0) continue;
+      
+      const fileStatus = statusCol !== -1 ? String(row[statusCol] || '').toLowerCase() : '';
+      
+      let fileId = '';
+      if (idCol !== -1 && row[idCol]) fileId = String(row[idCol]).trim();
+      else if (cloudflareCol !== -1 && row[cloudflareCol]) fileId = String(row[cloudflareCol]).trim();
+      else if (row[0]) fileId = String(row[0]).trim();
+      
+      if (!fileId) continue;
+      
+      let needsSync = false;
+      
+      if (fileStatus === 'deleted') {
+        needsSync = true;
+        deletedFileIds.push(fileId);
+      } else {
+        if (updatedAtCol !== -1 && row[updatedAtCol]) {
+          try {
+            const fileModifiedTime = new Date(row[updatedAtCol]);
+            if (fileModifiedTime > lastSyncTime) {
+              needsSync = true;
+            }
+          } catch(e) {}
+        }
+        
+        if (!needsSync && createdAtCol !== -1 && row[createdAtCol]) {
+          try {
+            const fileCreatedTime = new Date(row[createdAtCol]);
+            if (fileCreatedTime > lastSyncTime) {
+              needsSync = true;
+            }
+          } catch(e) {}
+        }
+      }
+      
+      if (needsSync && fileStatus !== 'deleted') {
+        let showOnWebsite = true;
+        if (showCol !== -1) {
+          const val = row[showCol];
+          showOnWebsite = (val === true || val === 'TRUE' || val === 'true' || val === '1');
+        }
+        
+        let isPremium = false;
+        if (premiumCol !== -1) {
+          const val = row[premiumCol];
+          isPremium = (val === true || val === 'TRUE' || val === 'true' || val === '1');
+        }
+        
+        let price = 29;
+        if (priceCol !== -1 && row[priceCol]) {
+          const p = Number(row[priceCol]);
+          if (!isNaN(p)) price = p;
+        }
+        
+        let size = 0;
+        if (sizeCol !== -1 && row[sizeCol]) {
+          const s = Number(row[sizeCol]);
+          if (!isNaN(s)) size = s;
+        }
+        
+        changedFiles.push({
+          id: fileId,
+          name: nameCol !== -1 ? String(row[nameCol] || '').trim() : '',
+          size: size,
+          mimeType: mimeCol !== -1 ? String(row[mimeCol] || 'application/pdf') : 'application/pdf',
+          price: price,
+          isPremium: isPremium,
+          showOnWebsite: showOnWebsite,
+          tags: tagsCol !== -1 ? String(row[tagsCol] || '') : '',
+          cloudflareKey: cloudflareCol !== -1 ? String(row[cloudflareCol] || '') : fileId,
+          createdAt: createdAtCol !== -1 && row[createdAtCol] ? String(row[createdAtCol]) : new Date().toISOString()
+        });
+      }
+    }
+    
+    console.log(`📊 Changed files: ${changedFiles.length}, Deleted: ${deletedFileIds.length}`);
+    
+    if (changedFiles.length === 0 && deletedFileIds.length === 0) {
+      console.log('✅ No changes detected since last sync');
+      updateLastSyncTime();
+      addSyncStatsEntry(syncType, 0, 0, 0, "NO_CHANGES", (new Date() - startTime) / 1000, "");
+      return { success: true, message: 'No changes', synced: 0, updated: 0, deleted: 0 };
+    }
+    
+    const BATCH_SIZE = 100;
+    for (let i = 0; i < changedFiles.length; i += BATCH_SIZE) {
+      const batch = changedFiles.slice(i, i + BATCH_SIZE);
+      const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+      const totalBatches = Math.ceil(changedFiles.length / BATCH_SIZE);
+      
+      console.log(`📤 Sending incremental batch ${batchNum}/${totalBatches}: ${batch.length} files`);
+      
+      try {
+        const options = {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Admin-Key': ADMIN_KEY },
+          muteHttpExceptions: true,
+          payload: JSON.stringify({ files: batch })
+        };
+        
+        const response = UrlFetchApp.fetch(`${D1_API_URL}/api/sync/files`, options);
+        const result = JSON.parse(response.getContentText());
+        
+        synced += result.synced || 0;
+        updated += result.updated || 0;
+        
+        console.log(`✅ Incremental batch ${batchNum} complete: +${result.synced} new, ~${result.updated} updated`);
+        
+        Utilities.sleep(200);
+      } catch (err) {
+        console.error(`❌ Incremental batch ${batchNum} failed: ${err.toString()}`);
+        errorMsg = err.toString();
+      }
+    }
+    
+    for (const fileId of deletedFileIds) {
+      try {
+        const options = {
+          method: 'DELETE',
+          headers: { 'X-Admin-Key': ADMIN_KEY },
+          muteHttpExceptions: true
+        };
+        const response = UrlFetchApp.fetch(`${D1_API_URL}/api/admin/files/${encodeURIComponent(fileId)}`, options);
+        const result = JSON.parse(response.getContentText());
+        if (result.success) deleted++;
+      } catch (err) {
+        console.error(`Failed to delete ${fileId}: ${err.toString()}`);
+      }
+    }
+    
+    updateLastSyncTime();
+    
+    const duration = (new Date() - startTime) / 1000;
+    console.log(`🎉 INCREMENTAL SYNC COMPLETE: +${synced} new, ~${updated} updated, -${deleted} deleted in ${duration}s`);
+    
+    addSyncStatsEntry(syncType, synced, updated, deleted, status, duration, errorMsg || "");
+    
+    return { success: true, synced: synced, updated: updated, deleted: deleted };
+    
+  } catch (error) {
+    status = "FAILED";
+    errorMsg = error.toString();
+    console.error(`❌ Incremental sync error: ${errorMsg}`);
+    addSyncStatsEntry(syncType, synced, updated, deleted, status, (new Date() - startTime) / 1000, errorMsg);
+    return { success: false, error: errorMsg };
+  }
+}
+
+// ============================================
+// RESUMABLE FULL SYNC (For first time or manual)
+// ============================================
+
+function getSyncProgress() {
+  const props = PropertiesService.getScriptProperties();
+  return {
+    resumeIndex: parseInt(props.getProperty(SYNC_RESUME_INDEX_KEY) || '0'),
+    totalFiles: parseInt(props.getProperty(SYNC_TOTAL_FILES_KEY) || '0')
+  };
+}
+
+function saveSyncProgress(index, total) {
+  const props = PropertiesService.getScriptProperties();
+  props.setProperty(SYNC_RESUME_INDEX_KEY, index.toString());
+  props.setProperty(SYNC_TOTAL_FILES_KEY, total.toString());
+}
+
+function clearSyncProgress() {
+  const props = PropertiesService.getScriptProperties();
+  props.deleteProperty(SYNC_RESUME_INDEX_KEY);
+  props.deleteProperty(SYNC_TOTAL_FILES_KEY);
+}
+
+function syncFilesToD1() {
+  const startTime = new Date();
+  let syncType = "FULL";
+  let synced = 0, updated = 0, deleted = 0;
+  let status = "SUCCESS";
+  let errorMsg = "";
+  
+  try {
+    console.log('🔄 Starting RESUMABLE full sync to D1...');
+    
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const sheet = ss.getSheetByName(D1_SHEET_NAME);
+    if (!sheet) throw new Error(`Sheet '${D1_SHEET_NAME}' not found`);
+    
+    const data = getSheetDataOptimized(sheet);
+    const headers = data[0];
+    const rows = data.slice(1);
+    
+    const findCol = (possibleNames) => {
+      for (const name of possibleNames) {
+        const index = headers.findIndex(h => String(h || '').toLowerCase().trim() === name.toLowerCase().trim());
+        if (index !== -1) return index;
+      }
+      return -1;
+    };
+    
+    const idCol = findCol(['fileId', 'id', 'file_id']);
+    const nameCol = findCol(['fileName', 'name', 'file_name']);
+    const sizeCol = findCol(['fileSize', 'size', 'file_size']);
+    const mimeCol = findCol(['mimeType', 'mime_type']);
+    const priceCol = findCol(['price']);
+    const premiumCol = findCol(['isPremium', 'is_premium', 'premium']);
+    const showCol = findCol(['showOnWebsite', 'show_on_website', 'visible']);
+    const tagsCol = findCol(['tags', 'tag']);
+    const cloudflareCol = findCol(['cloudflareKey', 'cloudflare_key']);
+    const createdAtCol = findCol(['createdAt', 'created_at', 'uploadedAt']);
+    const statusCol = findCol(['status']);
+    
+    const allFiles = [];
+    const deletedFileIds = [];
+    
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      if (!row || row.length === 0) continue;
+      
+      const fileStatus = statusCol !== -1 ? String(row[statusCol] || '').toLowerCase() : '';
+      
+      let fileId = '';
+      if (idCol !== -1 && row[idCol]) fileId = String(row[idCol]).trim();
+      else if (cloudflareCol !== -1 && row[cloudflareCol]) fileId = String(row[cloudflareCol]).trim();
+      else if (row[0]) fileId = String(row[0]).trim();
+      
+      if (!fileId) continue;
+      
+      if (fileStatus === 'deleted') {
+        deletedFileIds.push(fileId);
+        continue;
+      }
+      
+      let showOnWebsite = true;
+      if (showCol !== -1) {
+        const val = row[showCol];
+        showOnWebsite = (val === true || val === 'TRUE' || val === 'true' || val === '1');
+      }
+      
+      let isPremium = false;
+      if (premiumCol !== -1) {
+        const val = row[premiumCol];
+        isPremium = (val === true || val === 'TRUE' || val === 'true' || val === '1');
+      }
+      
+      let price = 29;
+      if (priceCol !== -1 && row[priceCol]) {
+        const p = Number(row[priceCol]);
+        if (!isNaN(p)) price = p;
+      }
+      
+      let size = 0;
+      if (sizeCol !== -1 && row[sizeCol]) {
+        const s = Number(row[sizeCol]);
+        if (!isNaN(s)) size = s;
+      }
+      
+      allFiles.push({
+        id: fileId,
+        name: nameCol !== -1 ? String(row[nameCol] || '').trim() : '',
+        size: size,
+        mimeType: mimeCol !== -1 ? String(row[mimeCol] || 'application/pdf') : 'application/pdf',
+        price: price,
+        isPremium: isPremium,
+        showOnWebsite: showOnWebsite,
+        tags: tagsCol !== -1 ? String(row[tagsCol] || '') : '',
+        cloudflareKey: cloudflareCol !== -1 ? String(row[cloudflareCol] || '') : fileId,
+        createdAt: createdAtCol !== -1 && row[createdAtCol] ? String(row[createdAtCol]) : new Date().toISOString()
+      });
+    }
+    
+    console.log(`📊 Total files to sync: ${allFiles.length}`);
+    
+    let { resumeIndex } = getSyncProgress();
+    if (resumeIndex === 0) {
+      saveSyncProgress(0, allFiles.length);
+    }
+    
+    const BATCH_SIZE = 100;
+    
+    console.log(`📍 Resuming from index: ${resumeIndex}`);
+    
+    for (let i = resumeIndex; i < allFiles.length; i += BATCH_SIZE) {
+      const batch = allFiles.slice(i, i + BATCH_SIZE);
+      const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+      const totalBatches = Math.ceil(allFiles.length / BATCH_SIZE);
+      
+      console.log(`📤 Sending batch ${batchNum}/${totalBatches}: ${batch.length} files`);
+      
+      try {
+        const options = {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Admin-Key': ADMIN_KEY },
+          muteHttpExceptions: true,
+          payload: JSON.stringify({ files: batch })
+        };
+        
+        const response = UrlFetchApp.fetch(`${D1_API_URL}/api/sync/files`, options);
+        const result = JSON.parse(response.getContentText());
+        
+        synced += result.synced || 0;
+        updated += result.updated || 0;
+        
+        console.log(`✅ Batch ${batchNum} complete: +${result.synced} new, ~${result.updated} updated`);
+        
+        saveSyncProgress(i + BATCH_SIZE, allFiles.length);
+        Utilities.sleep(500);
+        
+      } catch (err) {
+        console.error(`❌ Batch ${batchNum} failed: ${err.toString()}`);
+        saveSyncProgress(i, allFiles.length);
+        errorMsg = err.toString();
+        throw err;
+      }
+    }
+    
+    for (const fileId of deletedFileIds) {
+      try {
+        const options = {
+          method: 'DELETE',
+          headers: { 'X-Admin-Key': ADMIN_KEY },
+          muteHttpExceptions: true
+        };
+        const response = UrlFetchApp.fetch(`${D1_API_URL}/api/admin/files/${encodeURIComponent(fileId)}`, options);
+        const result = JSON.parse(response.getContentText());
+        if (result.success) deleted++;
+      } catch (err) {}
+    }
+    
+    clearSyncProgress();
+    updateLastSyncTime();
+    
+    const duration = (new Date() - startTime) / 1000;
+    console.log(`🎉 FULL SYNC COMPLETE: +${synced} new, ~${updated} updated, -${deleted} deleted in ${duration}s`);
+    
+    addSyncStatsEntry(syncType, synced, updated, deleted, status, duration, errorMsg || "");
+    
+    return { success: true, synced: synced, updated: updated, deleted: deleted, totalFiles: allFiles.length };
+    
+  } catch (error) {
+    status = "FAILED";
+    errorMsg = error.toString();
+    console.error(`❌ Sync error: ${errorMsg}`);
+    addSyncStatsEntry(syncType, synced, updated, deleted, status, (new Date() - startTime) / 1000, errorMsg);
+    return { success: false, error: errorMsg, resumable: true };
+  }
+}
+
+function continueSync() {
+  const progress = getSyncProgress();
+  if (progress.resumeIndex > 0 && progress.resumeIndex < progress.totalFiles) {
+    console.log(`🔄 Resuming sync from ${progress.resumeIndex}/${progress.totalFiles}`);
+    return syncFilesToD1();
+  }
+  return { success: false, message: 'No sync in progress' };
+}
+
+function syncDeletedFilesToD1() {
+  const startTime = new Date();
+  let deleted = 0;
+  
+  try {
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const sheet = ss.getSheetByName(D1_SHEET_NAME);
+    const data = getSheetDataOptimized(sheet);
+    const rows = data.slice(1);
+    const headers = data[0];
+    const statusCol = headers.findIndex(h => String(h || '').toLowerCase() === 'status');
+    const idCol = headers.findIndex(h => String(h || '').toLowerCase() === 'fileid');
+    const cloudflareCol = headers.findIndex(h => String(h || '').toLowerCase() === 'cloudflarekey');
+    
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const status = statusCol !== -1 ? String(row[statusCol] || '').toLowerCase() : '';
+      if (status === 'deleted') {
+        let fileId = '';
+        if (idCol !== -1 && row[idCol]) fileId = String(row[idCol]).trim();
+        else if (cloudflareCol !== -1 && row[cloudflareCol]) fileId = String(row[cloudflareCol]).trim();
+        else if (row[0]) fileId = String(row[0]).trim();
+        
+        if (fileId) {
+          const options = {
+            method: 'DELETE',
+            headers: { 'X-Admin-Key': ADMIN_KEY },
+            muteHttpExceptions: true
+          };
+          const response = UrlFetchApp.fetch(`${D1_API_URL}/api/admin/files/${encodeURIComponent(fileId)}`, options);
+          const result = JSON.parse(response.getContentText());
+          if (result.success) deleted++;
+        }
+      }
+    }
+    
+    const duration = (new Date() - startTime) / 1000;
+    addSyncStatsEntry("DELETE_ONLY", 0, 0, deleted, "SUCCESS", duration, "");
+    
+    return { success: true, deleted: deleted };
+  } catch (error) {
+    addSyncStatsEntry("DELETE_ONLY", 0, 0, 0, "FAILED", (new Date() - startTime) / 1000, error.toString());
+    return { success: false, error: error.toString() };
+  }
+}
+
+function fullSyncToD1() {
+  clearSyncProgress();
+  return syncFilesToD1();
+}
+
+// ============================================
+// TRIGGER SETUP - HOURLY INCREMENTAL SYNC
+// ============================================
+
+function setupAllTriggers() {
+  const triggers = ScriptApp.getProjectTriggers();
+  triggers.forEach(trigger => ScriptApp.deleteTrigger(trigger));
+  
+  // HOURLY INCREMENTAL SYNC (Only changed files - FAST!)
+  ScriptApp.newTrigger('syncChangedFilesOnly')
+    .timeBased()
+    .everyHours(1)
+    .create();
+  
+  // Midnight cleanup for deleted files
+  ScriptApp.newTrigger('syncDeletedFilesToD1')
+    .timeBased()
+    .atHour(0)
+    .nearMinute(0)
+    .create();
+  
+  // Create Sync Stats sheet
+  getSyncStatsSheet();
+  
+  console.log('✅ Triggers setup:');
+  console.log('   - Hourly INCREMENTAL sync (only changed files)');
+  console.log('   - Midnight cleanup for deleted files');
+  console.log('   - Sync Stats sheet created');
+}
+
+function removeAllTriggers() {
+  ScriptApp.getProjectTriggers().forEach(t => ScriptApp.deleteTrigger(t));
+  console.log('✅ All triggers removed');
+}
+
+// ============================================
+// CHECK STATUS - Now shows stats sheet
+// ============================================
+
+function checkSyncStatus() {
+  try {
+    const progress = getSyncProgress();
+    const lastSync = getLastSyncTime();
+    
+    const options = { 
+      method: 'GET', 
+      muteHttpExceptions: true, 
+      headers: { 'X-Admin-Key': ADMIN_KEY } 
+    };
+    const response = UrlFetchApp.fetch(`${D1_API_URL}/api/health`, options);
+    const result = JSON.parse(response.getContentText());
+    
+    const triggers = ScriptApp.getProjectTriggers().map(t => ({ 
+      function: t.getHandlerFunction(), 
+      type: t.getEventType() 
+    }));
+    
+    // Show the stats sheet when clicking check status
+    showSyncStats();
+    
+    return { 
+      success: true, 
+      lastSync: lastSync,
+      syncInProgress: progress.resumeIndex > 0 && progress.resumeIndex < progress.totalFiles,
+      syncProgress: progress,
+      d1Status: result, 
+      triggers: triggers, 
+      timestamp: new Date().toISOString() 
+    };
+  } catch (error) {
+    SpreadsheetApp.getUi().alert("Error checking status: " + error.toString());
+    return { success: false, error: error.toString() };
+  }
+}
+
+// ============================================
+// MENU
+// ============================================
+
+function onOpen() {
+  const ui = SpreadsheetApp.getUi();
+  ui.createMenu('🔄 Onlibry Sync')
+    .addItem('📤 Full Sync (All Files - First Time)', 'fullSyncToD1')
+    .addItem('⚡ Incremental Sync (Only Changed)', 'syncChangedFilesOnly')
+    .addItem('▶️ Continue Previous Sync', 'continueSync')
+    .addSeparator()
+    .addItem('🗑️ Sync Deleted Files Only', 'syncDeletedFilesToD1')
+    .addSeparator()
+    .addItem('📊 View Sync Stats Sheet', 'showSyncStats')
+    .addItem('⏰ Setup Auto-Triggers (Hourly Incremental)', 'setupAllTriggers')
+    .addItem('🛑 Remove All Triggers', 'removeAllTriggers')
+    .addSeparator()
+    .addItem('📊 Check Sync Status', 'checkSyncStatus')
+    .addToUi();
+}
+
+function testBulkUpdate() {
+  const result = bulkUpdateFromEditor({});
+  Logger.log(JSON.stringify(result));
+}
+
+function manualSync() {
+  return fullSyncToD1();
+}

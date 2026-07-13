@@ -76,7 +76,7 @@ function NotificationSlider() {
                     onError={(e) => { e.target.style.display = 'none'; }}
                   />
                 )}
-                <div className="absolute inset-0 bg-black/40"></div>
+                <div className="absolute inset-0 bg-transparent"></div>
                 <div className="relative z-10 flex flex-col justify-center h-full px-6 text-white">
                   <h2 className="text-xl md:text-2xl font-bold mb-2 line-clamp-2">{slide.title}</h2>
                   {/* <p className="text-sm md:text-base text-white/90 mb-4 line-clamp-4">{slide.description}</p> */}
@@ -98,13 +98,13 @@ function NotificationSlider() {
         <>
           <button 
             onClick={(e) => { e.stopPropagation(); goToPrev(); }} 
-            className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 text-white p-2 rounded-full transition hover:bg-black/70 z-10 md:opacity-0 md:group-hover:opacity-100 opacity-100"
+            className="absolute left-2 top-1/2 -translate-y-1/2 bg-transparent text-white p-2 rounded-full transition hover:bg-black/70 z-10 md:opacity-0 md:group-hover:opacity-100 opacity-100"
           >
             ◀
           </button>
           <button 
             onClick={(e) => { e.stopPropagation(); goToNext(); }} 
-            className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 text-white p-2 rounded-full transition hover:bg-black/70 z-10 md:opacity-0 md:group-hover:opacity-100 opacity-100"
+            className="absolute right-2 top-1/2 -translate-y-1/2 bg-transparent text-white p-2 rounded-full transition hover:bg-black/70 z-10 md:opacity-0 md:group-hover:opacity-100 opacity-100"
           >
             ▶
           </button>
@@ -119,7 +119,7 @@ function NotificationSlider() {
               key={index} 
               onClick={(e) => { e.stopPropagation(); goToSlide(index); }} 
               className={`w-2 h-2 rounded-full transition-all ${
-                index === currentIndex ? 'bg-white w-4' : 'bg-white/50'
+                index === currentIndex ? 'bg-black w-4' : 'bg-black/50'
               }`}
             />
           ))}
