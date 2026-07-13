@@ -93,7 +93,7 @@ function NotificationSlider() {
         </div>
       </div>
 
-      {/* Navigation Arrows */}
+      {/* Navigation Arrowss */}
       {slides.length > 1 && (
         <>
           <button 
