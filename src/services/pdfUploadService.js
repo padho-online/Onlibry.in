@@ -26,7 +26,7 @@ async function addWatermarkToPDF(fileBuffer, fileName) {
     // ============================================
     // 1. TOP-LEFT STRIP - Full width white header background
     // ============================================
-    const headerHeight = 35;
+    const headerHeight = 20;
     const headerY = height - headerHeight;
     
     // Draw white background strip that covers the entire header area
