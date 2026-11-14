@@ -1,5 +1,5 @@
 // src/components/FileViewer.jsx
-// UPDATED - Handles preview mode from URL params
+// UPDATED - Handles preview mode from URL params + Ad Gate for free files
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
@@ -8,6 +8,7 @@ import { getFileById } from '../services/fileService';
 import PdfViewer from '../viewer/PdfViewer';
 import { db } from '../config/firebase';
 import { doc, getDoc } from 'firebase/firestore';
+import { loadRewardedAd, showRewardedAd } from '../services/adManagerService';
 
 const WORKER_URL = import.meta.env.VITE_CLOUDFLARE_WORKER_URL;
 
@@ -24,6 +25,7 @@ function FileViewer() {
   const [canView, setCanView] = useState(false);
   const [isPurchased, setIsPurchased] = useState(false);
   const [checkingAccess, setCheckingAccess] = useState(true);
+  const [showAdGate, setShowAdGate] = useState(false);
   
   // 🔥 Get preview mode from URL param
   const isPreviewMode = searchParams.get('preview') === 'true';
@@ -82,6 +84,11 @@ const checkPurchasedFile = async (userId, fileIdentifier) => {
       setLoading(false);
     }
   }, [actualFileId, isSubscribed]);
+
+  // Ad ko pehle se load karo
+  useEffect(() => {
+    loadRewardedAd();
+  }, []);
 
   const loadFile = async () => {
     setLoading(true);
@@ -146,6 +153,39 @@ setCanView(hasAccess);
       setCheckingAccess(false);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleView = () => {
+    if (!user) {
+      navigate('/login', { state: { from: { pathname: '/files', fileId: file.id } } });
+      return;
+    }
+
+    // Check karo: kya file free hai? (Premium nahi, aur user subscribed/purchased bhi nahi)
+    const isFreeFile = !file.isPremium;
+    const isPremiumUser = isSubscribed;
+    const isPurchasedFile = isPurchased;
+
+    // Agar FREE file hai aur user premium nahi hai
+    if (isFreeFile && !isPremiumUser && !isPurchasedFile) {
+      // Ad dikhao
+      setShowAdGate(true);
+      showRewardedAd(
+        () => {
+          // Reward mil gaya! Ab file kholo
+          setShowAdGate(false);
+          navigate(`/viewer/${file.id}`);
+        },
+        () => {
+          // Ad fail ho gaya (koi ad nahi mila)
+          setShowAdGate(false);
+          alert('Ad could not be loaded. Please try again later.');
+        }
+      );
+    } else {
+      // Paid/Purchased/Premium file - seedha kholo
+      navigate(`/viewer/${file.id}`);
     }
   };
 
@@ -321,6 +361,17 @@ setCanView(hasAccess);
     
     return (
       <div className="fixed inset-0 bg-black z-50 flex flex-col">
+        {/* AD GATE OVERLAY - Jab ad chal raha ho */}
+        {showAdGate && (
+          <div className="fixed inset-0 bg-black/80 z-[9999] flex items-center justify-center">
+            <div className="bg-white p-6 rounded-lg text-center">
+              <div className="w-12 h-12 border-4 border-green-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+              <p className="text-gray-700">Loading ad...</p>
+              <p className="text-xs text-gray-400 mt-2">Please wait</p>
+            </div>
+          </div>
+        )}
+
         {/* Close button */}
         <div className="bg-gray-900 text-white p-2 flex justify-end">
           <button

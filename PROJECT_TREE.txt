@@ -1,0 +1,204 @@
+﻿Onlibry.in
+|-- .vercel
+|   |-- project.json
+|   \-- README.txt
+|-- api
+|   |-- create-order.js
+|   |-- razorpay-webhook.js
+|   \-- sync-users.js
+|-- blog-api
+|   |-- .wrangler
+|   |   |-- state
+|   |   |   \-- v3
+|   |   |       |-- cache
+|   |   |       |   \-- miniflare-CacheObject
+|   |   |       |       |-- metadata.sqlite
+|   |   |       |       |-- metadata.sqlite-shm
+|   |   |       |       \-- metadata.sqlite-wal
+|   |   |       |-- d1
+|   |   |       |   \-- miniflare-D1DatabaseObject
+|   |   |       |       |-- d6e42bc2beec882d8f07e45ded1b5e438ee871da97b1c622bbafd87d66c1c8de.sqlite
+|   |   |       |       |-- d6e42bc2beec882d8f07e45ded1b5e438ee871da97b1c622bbafd87d66c1c8de.sqlite-shm
+|   |   |       |       |-- d6e42bc2beec882d8f07e45ded1b5e438ee871da97b1c622bbafd87d66c1c8de.sqlite-wal
+|   |   |       |       |-- metadata.sqlite
+|   |   |       |       |-- metadata.sqlite-shm
+|   |   |       |       \-- metadata.sqlite-wal
+|   |   |       \-- workflows
+|   |   \-- tmp
+|   |-- src
+|   |   \-- index.js
+|   |-- package.json
+|   |-- package-lock.json
+|   |-- schema.sql
+|   \-- wrangler.toml
+|-- public
+|   |-- habibul.html
+|   |-- index.html
+|   |-- pdf-sample.html
+|   \-- pdf-viewer.html
+|-- src
+|   |-- assets
+|   |   |-- hero.png
+|   |   |-- logo.png
+|   |   |-- react.svg
+|   |   \-- vite.svg
+|   |-- blogger
+|   |   |-- components
+|   |   |   |-- BlockRenderer.jsx
+|   |   |   |-- BlogCard.jsx
+|   |   |   |-- BlogPreview.jsx
+|   |   |   |-- ColorPicker.jsx
+|   |   |   |-- Editor.jsx
+|   |   |   |-- HtmlEditor.jsx
+|   |   |   |-- ImageEditorModal.jsx
+|   |   |   |-- ImageUploader.jsx
+|   |   |   |-- PublishPanel.jsx
+|   |   |   |-- SeoPanel.jsx
+|   |   |   \-- Toolbar.jsx
+|   |   |-- hooks
+|   |   |   \-- useAutoSave.js
+|   |   |-- pages
+|   |   |   |-- BlogDashboard.jsx
+|   |   |   |-- BlogHome.jsx
+|   |   |   |-- BlogPage.jsx
+|   |   |   |-- CreatePost.jsx
+|   |   |   \-- EditPost.jsx
+|   |   |-- services
+|   |   |   |-- blogService.js
+|   |   |   |-- seoService.js
+|   |   |   \-- uploadService.js
+|   |   |-- styles
+|   |   |   \-- blogger.css
+|   |   \-- utils
+|   |       |-- customStarterKit.js
+|   |       |-- generateSlug.js
+|   |       |-- htmlToBlocks.js
+|   |       \-- readingTime.js
+|   |-- components
+|   |   |-- AdminGuard.jsx
+|   |   |-- FileCard.jsx
+|   |   |-- FileViewer.jsx
+|   |   |-- FolderTree.jsx
+|   |   |-- Footer.jsx
+|   |   |-- Header.jsx
+|   |   |-- IconPicker.jsx
+|   |   |-- NotificationCard.jsx
+|   |   |-- NotificationSection.jsx
+|   |   |-- NotificationSlider.jsx
+|   |   |-- OnlibryLogo.css
+|   |   |-- OnlibryLogo.jsx
+|   |   |-- ProtectedRoute.jsx
+|   |   |-- QuickAccessButtons.jsx
+|   |   \-- SecurePDFViewer.jsx
+|   |-- config
+|   |   \-- firebase.js
+|   |-- contexts
+|   |   |-- AuthContext.jsx
+|   |   |-- CartContext.jsx
+|   |   \-- ThemeContext.jsx
+|   |-- Info
+|   |   |-- index.js
+|   |   \-- InfoHub.jsx
+|   |-- layouts
+|   |   \-- MainLayout.jsx
+|   |-- pages
+|   |   |-- admin
+|   |   |   |-- Others
+|   |   |   |   |-- filesappscript.txt
+|   |   |   |   \-- Worker.txt
+|   |   |   |-- AdminDashboard.jsx
+|   |   |   |-- FilesManager.jsx
+|   |   |   |-- FileUploadManager.jsx
+|   |   |   |-- HomeEditor.jsx
+|   |   |   |-- PaymentLogs.jsx
+|   |   |   |-- PlansEditor.jsx
+|   |   |   \-- UsersManagement.jsx
+|   |   |-- ExamPage.jsx
+|   |   |-- ExamResultsPage.jsx
+|   |   |-- FilesPage.jsx
+|   |   |-- FoldersPage.jsx
+|   |   |-- HomePage.jsx
+|   |   |-- LoginPage.jsx
+|   |   |-- MockTestsPage.jsx
+|   |   |-- NotFoundPage.jsx
+|   |   |-- NotificationDetailPage.jsx
+|   |   |-- NotificationsPage.jsx
+|   |   |-- PricingPage.jsx
+|   |   |-- QuizExamPage.jsx
+|   |   |-- QuizResultsPage.jsx
+|   |   |-- QuizzesPage.jsx
+|   |   |-- SavedFilesPage.jsx
+|   |   \-- ViewerPage.jsx
+|   |-- services
+|   |   |-- cacheService.js
+|   |   |-- categoryService.js
+|   |   |-- cloudflareFileService.js
+|   |   |-- d1Service.js
+|   |   |-- fileService.js
+|   |   |-- firebaseLogger.js
+|   |   |-- folderService.js
+|   |   |-- index.js
+|   |   |-- loggerService.js
+|   |   |-- mockTestService.js
+|   |   |-- notificationService.js
+|   |   |-- paymentLogService.js
+|   |   |-- pdfUploadService.js
+|   |   |-- purchaseService.js
+|   |   |-- quickAccessService.js
+|   |   |-- quizService.js
+|   |   |-- razorpay.js
+|   |   \-- sliderService.js
+|   |-- utils
+|   |   \-- helpers.js
+|   |-- viewer
+|   |   |-- components
+|   |   |   |-- LoadingSkeleton.jsx
+|   |   |   |-- OutlineNavigation.jsx
+|   |   |   |-- PdfPage.jsx
+|   |   |   |-- PdfViewer.jsx
+|   |   |   |-- SearchBar.jsx
+|   |   |   |-- ThumbnailSidebar.jsx
+|   |   |   |-- Toolbar.jsx
+|   |   |   \-- WatermarkLayer.jsx
+|   |   |-- hooks
+|   |   |   |-- useFullscreen.js
+|   |   |   |-- usePdfDocument.js
+|   |   |   |-- usePdfPages.js
+|   |   |   |-- useSearch.js
+|   |   |   |-- useTouchGestures.js
+|   |   |   |-- useVirtualScroll.js
+|   |   |   \-- useZoom.js
+|   |   |-- services
+|   |   |   |-- cacheService.js
+|   |   |   |-- pdfService.js
+|   |   |   \-- securityService.js
+|   |   |-- styles
+|   |   |   \-- viewer.css
+|   |   |-- utils
+|   |   |   |-- constants.js
+|   |   |   |-- pdfWorker.js
+|   |   |   \-- renderingUtils.js
+|   |   |-- workers
+|   |   |   \-- pdf.worker.js
+|   |   |-- index.js
+|   |   \-- PdfViewer.jsx
+|   |-- App.jsx
+|   |-- index.css
+|   \-- main.jsx
+|-- .env
+|-- .env.local
+|-- .gitignore
+|-- eslint.config.js
+|-- firebase.json
+|-- firestore.indexes.json
+|-- firestore.rules
+|-- index.html
+|-- logo transparent.png
+|-- logo.png
+|-- package.json
+|-- package-lock.json
+|-- README.md
+|-- server.js
+|-- vercel.json
+|-- vite.config.js
+\-- worker-notifications.js
