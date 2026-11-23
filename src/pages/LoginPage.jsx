@@ -46,7 +46,7 @@ function LoginPage() {
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8 max-w-md w-full mx-4">
         <div className="text-center mb-8">
           <img 
-            src="../assets/logo.png" 
+            src="https://onlibry.in/assets/logo-pcShX1yL.png" 
             alt="Onlibry" 
             className="h-16 mx-auto mb-4"
           />
