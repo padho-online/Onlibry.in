@@ -43,6 +43,8 @@ function HomeEditor() {
   // Quick Access Buttons State
   const [buttons, setButtons] = useState([]);
   const [editingButton, setEditingButton] = useState(null);
+  const isCompact = activeTab === 'smallLinks';
+  const visibleButtons = buttons.filter(b => (b.icon === '__compact_link__') === isCompact);
   
   // Categories State
   const [categories, setCategories] = useState([]);
@@ -163,7 +165,7 @@ function HomeEditor() {
       alert('Enter a label and a valid internal path or HTTP(S) URL.');
       return;
     }
-    const payload = { ...buttonForm, label, path };
+    const payload = { ...buttonForm, label, path, icon: isCompact ? '__compact_link__' : buttonForm.icon };
     const result = editingButton
       ? await updateQuickAccessButtonInD1(editingButton.id, payload, ADMIN_KEY)
       : await addQuickAccessButtonToD1(payload, ADMIN_KEY);
@@ -190,38 +192,27 @@ function HomeEditor() {
     });
   };
 
-  // Move button up (decrease order)
-  const moveButtonUp = async (index) => {
-    if (index === 0) return;
-    
-    const newButtons = [...buttons];
-    const temp = newButtons[index];
-    newButtons[index] = newButtons[index - 1];
-    newButtons[index - 1] = temp;
-    
-    const updatedButtons = newButtons.map((btn, idx) => ({ ...btn, order: idx + 1 }));
-    setButtons(updatedButtons);
-    
+  const moveButton = async (index, delta) => {
+    const other = index + delta;
+    if (other < 0 || other >= visibleButtons.length || reordering) return;
+    const reordered = [...visibleButtons];
+    [reordered[index], reordered[other]] = [reordered[other], reordered[index]];
+    const updated = reordered.map((btn, idx) => ({ ...btn, order: idx + 1 }));
     setReordering(true);
-    await reorderQuickAccessButtonsInD1(updatedButtons, ADMIN_KEY);
-    setReordering(false);
+    try {
+      await reorderQuickAccessButtonsInD1(updated, ADMIN_KEY);
+      await loadButtons();
+    } catch (err) { alert('Unable to save order.'); }
+    finally { setReordering(false); }
+  };
+  const moveButtonUp = index => moveButton(index, -1);
+  const moveButtonDown = index => moveButton(index, 1);
+  const openButtonTab = tab => {
+    setEditingButton(null);
+    setButtonForm({ label: '', icon: 'Folder', path: '', order: 0 });
+    setActiveTab(tab);
   };
 
-  const moveButtonDown = async (index) => {
-    if (index === buttons.length - 1) return;
-    
-    const newButtons = [...buttons];
-    const temp = newButtons[index];
-    newButtons[index] = newButtons[index + 1];
-    newButtons[index + 1] = temp;
-    
-    const updatedButtons = newButtons.map((btn, idx) => ({ ...btn, order: idx + 1 }));
-    setButtons(updatedButtons);
-    
-    setReordering(true);
-    await reorderQuickAccessButtonsInD1(updatedButtons, ADMIN_KEY);
-    setReordering(false);
-  };
 
   // ============================================
   // CATEGORIES CRUD
@@ -370,8 +361,11 @@ function HomeEditor() {
 
       {/* Tabs - Horizontal Scrollable for Mobile */}
       <div className="flex gap-2 mb-6 border-b border-gray-200 pb-3 overflow-x-auto scrollbar-thin">
-        <button onClick={() => setActiveTab('buttons')} className={`px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap ${activeTab === 'buttons' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+        <button onClick={() => openButtonTab('buttons')} className={`px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap ${activeTab === 'buttons' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
           🔘 Quick Access Buttons
+        </button>
+        <button onClick={() => openButtonTab('smallLinks')} className={`px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap ${isCompact ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+          🔗 Small Links
         </button>
         <button onClick={() => setActiveTab('categories')} className={`px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap ${activeTab === 'categories' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
           🏷️ Categories
@@ -387,7 +381,7 @@ function HomeEditor() {
       {/* ============================================ */}
       {/* QUICK ACCESS BUTTONS TAB */}
       {/* ============================================ */}
-      {activeTab === 'buttons' && (
+      {(activeTab === 'buttons' || isCompact) && (
         <div>
           {reordering && (
             <div className="mb-4 p-2 bg-blue-100 text-blue-700 rounded-lg text-sm text-center">
@@ -397,7 +391,7 @@ function HomeEditor() {
 
           <div className="bg-gray-50 rounded-lg p-4 mb-6 border border-gray-200">
             <h3 className="font-semibold text-gray-800 mb-3">
-              {editingButton ? '✏️ Edit Button' : '➕ Add New Button'}
+              {isCompact ? (editingButton ? 'Edit Small Link' : 'Add Small Link') : (editingButton ? '✏️ Edit Button' : '➕ Add New Button')}
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <input
@@ -408,11 +402,7 @@ function HomeEditor() {
                 className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
               />
               
-              <select aria-label="Button placement" value={buttonForm.icon === '__compact_link__' ? 'compact' : 'regular'} onChange={e => setButtonForm({ ...buttonForm, icon: e.target.value === 'compact' ? '__compact_link__' : 'Folder' })} className="px-3 py-2 border rounded-lg">
-                <option value="regular">Regular quick access</option>
-                <option value="compact">Small link below Welcome</option>
-              </select>
-              {buttonForm.icon !== '__compact_link__' && <IconPicker
+              {!isCompact && <IconPicker
                 value={buttonForm.icon}
                 onChange={(iconName) => setButtonForm({ ...buttonForm, icon: iconName })}
                 placeholder="Select Icon"
@@ -448,14 +438,14 @@ function HomeEditor() {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="p-3 text-left">Order</th>
-                  <th className="p-3 text-left">Icon</th>
+                  {!isCompact && <th className="p-3 text-left">Icon</th>}
                   <th className="p-3 text-left">Label</th>
                   <th className="p-3 text-left">Path</th>
                   <th className="p-3 text-left">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {buttons.map((btn, idx) => {
+                {visibleButtons.map((btn, idx) => {
                   const IconComponent = getIconComponent(btn.icon);
                   return (
                     <tr key={btn.id} className="border-b border-gray-200 hover:bg-gray-50">
@@ -473,7 +463,7 @@ function HomeEditor() {
                             </button>
                             <button
                               onClick={() => moveButtonDown(idx)}
-                              disabled={idx === buttons.length - 1 || reordering}
+                              disabled={idx === visibleButtons.length - 1 || reordering}
                               className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30"
                               title="Move Down"
                             >
@@ -482,9 +472,9 @@ function HomeEditor() {
                           </div>
                         </div>
                       </td>
-                      <td className="p-3">
+                      {!isCompact && <td className="p-3">
                         {btn.icon === '__compact_link__' ? <span className="text-xs text-green-700">Small link</span> : IconComponent ? <IconComponent size={20} className="text-green-600" /> : <Icons.Folder size={20} className="text-green-600" />}
-                      </td>
+                      </td>}
                       <td className="p-3 font-medium">{btn.label}</td>
                       <td className="p-3 text-gray-500">{btn.path}</td>
                       <td className="p-3">
@@ -498,9 +488,9 @@ function HomeEditor() {
             </table>
           </div>
           
-          {buttons.length === 0 && (
+          {visibleButtons.length === 0 && (
             <div className="text-center py-8 text-gray-500">
-              No buttons added yet. Click "Add New Button" to create one.
+              {isCompact ? "No small links added yet." : "No buttons added yet."}
             </div>
           )}
         </div>

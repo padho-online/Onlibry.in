@@ -21,6 +21,7 @@ function HomePage() {
       
       {/* 🔥 QUICK ACCESS BUTTONS - Dynamic from Admin */}
       <QuickAccessButtons />
+      <CompactHomeLinks />
 
         {/* Hero Section */}
       <section className="text-center py-8 md:py-12">
@@ -31,7 +32,6 @@ function HomePage() {
         <p className="text-sm md:text-base text-gray-500 max-w-md mx-auto mb-6">
           Your one-stop platform for educational resources, mock tests, and study materials
         </p>
-        <CompactHomeLinks />
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
           <Link
             to="/files"
@@ -50,8 +50,7 @@ function HomePage() {
 
       
 
-      {/* 📢 NOTIFICATIONS SECTION - Dynamic from Admin */}
-  
+
 
     
 
