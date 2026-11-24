@@ -49,7 +49,7 @@ function Footer() {
               <li><a href="/info/contact" className="text-[11px] text-gray-500 hover:text-green-600 flex items-center gap-1"><House size={11} /> Contact Us</a></li>
               <li><a href="/info/feedback" className="text-[11px] text-gray-500 hover:text-green-600 flex items-center gap-1"><MessageSquareHeart size={11} /> Feedback</a></li>
               <li><Link to="/pricing" className="text-[11px] text-gray-500 hover:text-green-600 flex items-center gap-1"><CreditCard size={11} /> Pricing</Link></li>
-              <li><Link to="/habibul.html" className="text-[11px] text-gray-500 hover:text-green-600 flex items-center gap-1"><CircleUserRound size={11} /> Developer Info</Link></li>
+              <li><Link to="https://md-habibul.vercel.app" className="text-[11px] text-gray-500 hover:text-green-600 flex items-center gap-1"><CircleUserRound size={11} /> Developer Info</Link></li>
             </ul>
           </div>
 
