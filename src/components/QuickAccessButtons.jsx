@@ -15,7 +15,7 @@ function QuickAccessButtons() {
   const loadButtons = async () => {
     setLoading(true);
     const data = await getQuickAccessFromD1();
-    setButtons(data);
+    setButtons(data.filter(btn => btn.icon !== '__compact_link__'));
     setLoading(false);
   };
 

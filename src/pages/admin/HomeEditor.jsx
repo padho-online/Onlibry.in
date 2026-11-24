@@ -157,11 +157,17 @@ function HomeEditor() {
   // ============================================
   
   const handleSaveButton = async () => {
-    if (editingButton) {
-      await updateQuickAccessButtonInD1(editingButton.id, buttonForm, ADMIN_KEY);
-    } else {
-      await addQuickAccessButtonToD1(buttonForm, ADMIN_KEY);
+    const path = buttonForm.path.trim();
+    const label = buttonForm.label.trim();
+    if (!label || !(/^(\/(?![\/\\])|https?:\/\/)/i.test(path)) || /[\\\s]/.test(path)) {
+      alert('Enter a label and a valid internal path or HTTP(S) URL.');
+      return;
     }
+    const payload = { ...buttonForm, label, path };
+    const result = editingButton
+      ? await updateQuickAccessButtonInD1(editingButton.id, payload, ADMIN_KEY)
+      : await addQuickAccessButtonToD1(payload, ADMIN_KEY);
+    if (!result?.success) { alert('Unable to save button.'); return; }
     setEditingButton(null);
     setButtonForm({ label: '', icon: 'Folder', path: '', order: 0 });
     await loadButtons();
@@ -402,7 +408,11 @@ function HomeEditor() {
                 className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
               />
               
-              <IconPicker
+              <select aria-label="Button placement" value={buttonForm.icon === '__compact_link__' ? 'compact' : 'regular'} onChange={e => setButtonForm({ ...buttonForm, icon: e.target.value === 'compact' ? '__compact_link__' : 'Folder' })} className="px-3 py-2 border rounded-lg">
+                <option value="regular">Regular quick access</option>
+                <option value="compact">Small link below Welcome</option>
+              </select>
+              {buttonForm.icon !== '__compact_link__' && <IconPicker
                 value={buttonForm.icon}
                 onChange={(iconName) => setButtonForm({ ...buttonForm, icon: iconName })}
                 placeholder="Select Icon"
@@ -411,7 +421,7 @@ function HomeEditor() {
                 pickerWidth="w-96"
                 pickerColumns={6}
                 iconsList={AVAILABLE_ICONS}
-              />
+              />}
               
               <input
                 type="text"
@@ -473,7 +483,7 @@ function HomeEditor() {
                         </div>
                       </td>
                       <td className="p-3">
-                        {IconComponent ? <IconComponent size={20} className="text-green-600" /> : <Icons.Folder size={20} className="text-green-600" />}
+                        {btn.icon === '__compact_link__' ? <span className="text-xs text-green-700">Small link</span> : IconComponent ? <IconComponent size={20} className="text-green-600" /> : <Icons.Folder size={20} className="text-green-600" />}
                       </td>
                       <td className="p-3 font-medium">{btn.label}</td>
                       <td className="p-3 text-gray-500">{btn.path}</td>

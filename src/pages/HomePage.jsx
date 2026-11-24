@@ -1,10 +1,11 @@
 // src/pages/HomePage.jsx
 import React from 'react';
+import CompactHomeLinks from '../components/CompactHomeLinks';
 import RecentPosts from '../components/RecentPosts';
+import RecentNotices from '../components/RecentNotices';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import QuickAccessButtons from '../components/QuickAccessButtons';
-import NotificationSection from '../components/NotificationSection';
 import NotificationSlider from '../components/NotificationSlider';
 import { FileText, CreditCard, BookOpen, SquarePen, TrendingUp, Shield, Zap } from 'lucide-react';
 
@@ -12,7 +13,7 @@ function HomePage() {
   const { user } = useAuth();
 
   return (
-    <div className="py-4 md:py-8 max-w-7xl mx-auto px-4 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(280px,340px)] lg:gap-x-6 lg:items-start">
+    <div className="w-full py-4 md:py-8 lg:grid lg:grid-cols-[minmax(0,7fr)_minmax(280px,3fr)] lg:grid-rows-[min-content_1fr] lg:gap-x-4 lg:items-start">
       <div className="min-w-0 lg:col-start-1 lg:row-start-1">
 
       {/* 🎠 CARDS SLIDER - Dynamic from Admin */}
@@ -30,6 +31,7 @@ function HomePage() {
         <p className="text-sm md:text-base text-gray-500 max-w-md mx-auto mb-6">
           Your one-stop platform for educational resources, mock tests, and study materials
         </p>
+        <CompactHomeLinks />
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
           <Link
             to="/files"
@@ -49,13 +51,16 @@ function HomePage() {
       
 
       {/* 📢 NOTIFICATIONS SECTION - Dynamic from Admin */}
-      <NotificationSection />
+  
 
     
 
 
       </div>
-      <RecentPosts />
+      <aside className="min-w-0 space-y-4 lg:col-start-2 lg:row-start-1 lg:row-span-2 lg:self-start">
+        <RecentPosts />
+        <RecentNotices />
+      </aside>
       <div className="min-w-0 lg:col-start-1 lg:row-start-2">
       {/* Features Section */}
       <section className="py-6">
