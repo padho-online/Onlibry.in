@@ -1,5 +1,6 @@
 // src/pages/HomePage.jsx
 import React from 'react';
+import RecentPosts from '../components/RecentPosts';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import QuickAccessButtons from '../components/QuickAccessButtons';
@@ -11,7 +12,8 @@ function HomePage() {
   const { user } = useAuth();
 
   return (
-    <div className="py-4 md:py-8 max-w-7xl mx-auto px-4">
+    <div className="py-4 md:py-8 max-w-7xl mx-auto px-4 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(280px,340px)] lg:gap-x-6 lg:items-start">
+      <div className="min-w-0 lg:col-start-1 lg:row-start-1">
 
       {/* 🎠 CARDS SLIDER - Dynamic from Admin */}
       <NotificationSlider />
@@ -52,6 +54,9 @@ function HomePage() {
     
 
 
+      </div>
+      <RecentPosts />
+      <div className="min-w-0 lg:col-start-1 lg:row-start-2">
       {/* Features Section */}
       <section className="py-6">
         <h2 className="text-lg md:text-2xl font-bold text-center text-gray-800 mb-5">Why Choose Onlibry?</h2>
@@ -97,6 +102,7 @@ function HomePage() {
           </Link>
         </section>
       )}
+      </div>
     </div>
   );
 }
