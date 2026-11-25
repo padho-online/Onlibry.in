@@ -93,12 +93,12 @@ function Header() {
           {/* DESKTOP NAVIGATION */}
           <nav className="hidden md:flex items-center gap-1">
             <NavLink to="/" icon={Home} label="Home" />
+            <NavLink to="/exam-updates" icon={BellRing} label="Exam Updates" />
             <NavLink to="/files" icon={SquareLibrary} label="Files" />
             <NavLink to="/folders" icon={Folder} label="Folders" />
             <NavLink to="/mock-tests" icon={SquarePen} label="Mock Tests" />
             <NavLink to="/quizzes" icon={NotebookPen} label="Quiz" />
             <NavLink to="/notifications" icon={BellRing} label="Notice" />
-            <NavLink to="/exam-updates" icon={SquarePen} label="Exam Updates" />
             {user && <NavLink to="/saved-files" icon={Bookmark} label="Saved" />}
             <NavLink to="/pricing" icon={CreditCard} label="Pricing" />
           </nav>
@@ -151,7 +151,7 @@ function Header() {
                 }`}
               >
                 <BellRing size={20} className={isActive('/quizzes') ? 'text-green-600' : 'text-gray-700'} />
-              </Link>
+              </Link> 
             </div>
 
             {/* CART ICON */}
