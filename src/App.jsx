@@ -40,6 +40,7 @@ import CreatePost from './blogger/pages/CreatePost';
 import EditPost from './blogger/pages/EditPost';
 
 // Notification Pages
+import ExamUpdatesPage from './pages/ExamUpdatesPage';
 import NotificationsPage from './pages/NotificationsPage';
 import NotificationDetailPage from './pages/NotificationDetailPage';
 
@@ -105,6 +106,7 @@ function App() {
                 <Route path="/blog/:slug" element={<BlogPage />} />
 
                 {/* Notification Routes */}
+                <Route path="/exam-updates" element={<ExamUpdatesPage />} />
                 <Route path="/notifications" element={<NotificationsPage />} />
                 <Route path="/notification/:id" element={<NotificationDetailPage />} />
 

@@ -98,6 +98,7 @@ function Header() {
             <NavLink to="/mock-tests" icon={SquarePen} label="Mock Tests" />
             <NavLink to="/quizzes" icon={NotebookPen} label="Quiz" />
             <NavLink to="/notifications" icon={BellRing} label="Notice" />
+            <NavLink to="/exam-updates" icon={SquarePen} label="Exam Updates" />
             {user && <NavLink to="/saved-files" icon={Bookmark} label="Saved" />}
             <NavLink to="/pricing" icon={CreditCard} label="Pricing" />
           </nav>

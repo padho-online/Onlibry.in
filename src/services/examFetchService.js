@@ -1,0 +1,3 @@
+let cached,expires=0,pending;
+export const safeUrl=v=>{try{const u=new URL(v);return ['http:','https:'].includes(u.protocol)?u.href:'';}catch{return '';}};
+export async function getExamUpdates(){if(cached&&Date.now()<expires)return cached;if(pending)return pending;pending=(async()=>{const r=await fetch('/api/exam-updates');if(!r.ok)throw Error('Exam updates temporarily unavailable');const x=await r.json();if(!Array.isArray(x.records))throw Error('Invalid exam data');cached=[...new Map(x.records.filter(r=>r.id&&r.title).map(r=>[r.id,{...r,url:safeUrl(r.url),source:safeUrl(r.source),sortDate:r.sortDate||r.published||r.examPeriod||''}])).values()];expires=Date.now()+300000;return cached;})();try{return await pending;}finally{pending=null;}}

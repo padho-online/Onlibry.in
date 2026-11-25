@@ -1,6 +1,6 @@
 // src/pages/NotificationsPage.jsx - D1 Database Version
 import React, { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { getNotificationsFromD1, getCategoriesFromD1 } from '../services/d1Service';
 import NotificationCard from '../components/NotificationCard';
 import { getIconComponent } from '../components/IconPicker';
@@ -21,7 +21,10 @@ const getCategoryColorClass = (color) => {
   return colorMap[color] || colorMap.gray;
 };
 
+import {getExamUpdates} from '../services/examFetchService';
+import ExamUpdateCard from '../components/ExamUpdateCard';
 function NotificationsPage() {
+  const [examError,setExamError]=useState('');
   const [searchParams, setSearchParams] = useSearchParams();
   const [notifications, setNotifications] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -46,20 +49,27 @@ function NotificationsPage() {
   }, []);
 
   useEffect(() => {
-    loadNotifications();
-  }, [pagination.page, activeCategory]);
+    let cancelled=false;
+    const run=async()=>{
+      setLoading(true);setExamError('');
+      const page=pagination.page,limit=pagination.limit;
+      const include=activeCategory==='all'||activeCategory==='exam-update'||categories.some(c=>c.slug===activeCategory&&/exam update/i.test(c.name));
+      try{
+        if(!include){const r=await getNotificationsFromD1(page,limit,activeCategory);if(!cancelled){setNotifications(r.notifications||[]);setPagination({...r.pagination,page,limit});}return;}
+        const examPromise=getExamUpdates().catch(()=>{if(!cancelled)setExamError('Automatic exam updates temporarily unavailable.');return [];});
+        const first=await getNotificationsFromD1(1,100,activeCategory,true);
+        const manual=[...(first.notifications||[])];
+        for(let i=2;i<=Number(first.pagination?.totalPages||1);i++){const r=await getNotificationsFromD1(i,100,activeCategory);manual.push(...(r.notifications||[]));}
+        const exams=await examPromise;
+        const merged=[...new Map(manual.map(r=>[r.id,r])).values(),...exams.map(r=>({...r,id:'examfetch:'+r.id,examRecord:r}))].sort((a,b)=>String(b.examRecord?.sortDate||b.published_at||'').localeCompare(String(a.examRecord?.sortDate||a.published_at||'')));
+        if(!cancelled){setNotifications(merged.slice((page-1)*limit,page*limit));setPagination({page,limit,total:merged.length,totalPages:Math.ceil(merged.length/limit)});}
+      }catch(e){if(!cancelled){setExamError('Unable to load notifications.');setNotifications([]);setPagination({page,limit,total:0,totalPages:0});}}finally{if(!cancelled)setLoading(false);}
+    };run();return()=>{cancelled=true;};
+  }, [pagination.page, activeCategory, categories]);
 
   const loadCategories = async () => {
     const data = await getCategoriesFromD1();
-    setCategories(data);
-  };
-
-  const loadNotifications = async () => {
-    setLoading(true);
-    const result = await getNotificationsFromD1(pagination.page, pagination.limit, activeCategory);
-    setNotifications(result.notifications || []);
-    setPagination(result.pagination || { page: 1, limit: 10, total: 0, totalPages: 0 });
-    setLoading(false);
+    setCategories(data.some(c=>/exam update/i.test(c.name))?data:[...data,{id:'examfetch-category',slug:'exam-update',name:'Exam Update',color:'green',icon:'Bell'}]);
   };
 
   const handleCategoryChange = (categorySlug) => {
@@ -82,6 +92,8 @@ function NotificationsPage() {
         </h1>
       </div>
 
+      <Link to="/exam-updates" className="block mb-4 text-green-700 font-medium">Browse all exam updates →</Link>
+      {examError&&<p role="status" className="text-sm text-red-600 mb-3">{examError}</p>}
       {/* Category Tabs */}
       <div className="mb-6">
         <div className="overflow-x-auto scrollbar-thin pb-2">
@@ -161,7 +173,7 @@ function NotificationsPage() {
       ) : (
         <div className="space-y-3">
           {notifications.map((notification) => (
-            <NotificationCard key={notification.id} notification={notification} compact={false} />
+            notification.examRecord ? <ExamUpdateCard key={notification.id} record={notification.examRecord}/> : <NotificationCard key={notification.id} notification={notification} compact={false} />
           ))}
         </div>
       )}
