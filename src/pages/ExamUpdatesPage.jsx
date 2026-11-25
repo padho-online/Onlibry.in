@@ -1,6 +1,19 @@
-import React,{useEffect,useState} from 'react';
-import {getExamUpdates} from '../services/examFetchService';
+import React, { useEffect, useMemo, useState } from 'react';
+import { getExamUpdates, rankExamUpdates } from '../services/examFetchService';
 import ExamUpdateCard from '../components/ExamUpdateCard';
-const fields=[['university','University'],['courses','Course'],['semester','Semester'],['type','Type'],['year','Year'],['month','Month']];
-const values=(r,k)=>k==='year'?[r.sortDate.slice(0,4)]:k==='month'?[r.sortDate.slice(5,7)]:String(r[k]||'').split(', ').filter(Boolean);
-export default function ExamUpdatesPage(){const [data,setData]=useState([]),[filters,setFilters]=useState({}),[q,setQ]=useState(''),[sort,setSort]=useState('new'),[limit,setLimit]=useState(30),[status,setStatus]=useState('Loading…');function load(){setStatus('Loading…');getExamUpdates().then(r=>{setData(r);setStatus('');}).catch(e=>setStatus(e.message));}useEffect(load,[]);const list=data.filter(r=>[r.title,r.university,r.courses,r.type].join(' ').toLowerCase().includes(q.toLowerCase())&&fields.every(([k])=>!filters[k]||values(r,k).includes(filters[k]))).sort((a,b)=>!a.sortDate?(!b.sortDate?0:1):!b.sortDate?-1:(sort==='new'?b.sortDate.localeCompare(a.sortDate):a.sortDate.localeCompare(b.sortDate)));return <main className="max-w-5xl mx-auto p-4 space-y-4"><h1 className="text-3xl font-bold text-gray-800">Exam Updates</h1><p className="text-sm text-gray-600">University examination notices · Powered by ExamFetchX</p><div className="grid grid-cols-2 md:grid-cols-3 gap-2"><input className="border rounded p-2 col-span-2" placeholder="Search notices" value={q} onChange={e=>{setQ(e.target.value);setLimit(30);}}/>{fields.map(([k,label])=><select key={k} aria-label={label} className="border rounded p-2 bg-white" value={filters[k]||''} onChange={e=>{setFilters({...filters,[k]:e.target.value});setLimit(30);}}><option value="">All {label}s</option>{[...new Set(data.flatMap(r=>values(r,k)))].filter(Boolean).sort().map(v=><option key={v} value={v}>{k==='month'?new Date(2000,Number(v)-1,1).toLocaleString('en',{month:'long'}):v}</option>)}</select>)}<select className="border rounded p-2" value={sort} onChange={e=>setSort(e.target.value)}><option value="new">Latest first</option><option value="old">Oldest first</option></select><button className="border rounded p-2" onClick={()=>{setFilters({});setQ('');setLimit(30);}}>Reset</button></div><p role="status">{status||`Showing ${Math.min(limit,list.length)} of ${list.length} notices`}</p>{status&&status!=='Loading…'&&<button onClick={load}>Retry</button>}{list.slice(0,limit).map(r=><ExamUpdateCard key={r.id} record={r}/>)}{limit<list.length&&<button className="border rounded p-3" onClick={()=>setLimit(limit+30)}>Load more</button>}</main>}
+import { Search } from 'lucide-react';
+export default function ExamUpdatesPage() {
+  const [data,setData]=useState([]), [q,setQ]=useState(''), [limit,setLimit]=useState(30), [status,setStatus]=useState('Loading…'), [attempt,setAttempt]=useState(0);
+  useEffect(()=>{let active=true;setStatus('Loading…');getExamUpdates().then(r=>{if(active){setData(r);setStatus('');}}).catch(e=>{if(active)setStatus(e.message);});return()=>{active=false;};},[attempt]);
+  const list=useMemo(()=>rankExamUpdates(data,q),[data,q]);
+  return <main className="max-w-5xl mx-auto p-4 space-y-4">
+    <h1 className="text-3xl font-bold text-gray-800">Exam Updates</h1>
+    <p className="text-sm text-gray-600">University examination notices · Powered by ExamFetchX</p>
+    <div className="flex items-center gap-2 border rounded-lg bg-white p-3"><Search size={18} className="text-gray-500"/><input type="search" aria-label="Search exam notices" className="w-full min-w-0 outline-none" placeholder="Search by keywords, e.g. MBA Osmania December" value={q} onChange={e=>{setQ(e.target.value);setLimit(30);}}/></div>
+    <p role="status" className="text-sm text-gray-600">{status||`Showing ${Math.min(limit,list.length)} of ${list.length} notices`}</p>
+    {status&&status!=='Loading…'&&<button onClick={()=>setAttempt(a=>a+1)}>Retry</button>}
+    {!status&&!list.length&&<p>No matching notices found.</p>}
+    {list.slice(0,limit).map(r=><ExamUpdateCard key={r.id} record={r}/>)}
+    {limit<list.length&&<button className="border rounded p-3" onClick={()=>setLimit(limit+30)}>Load more</button>}
+  </main>;
+}

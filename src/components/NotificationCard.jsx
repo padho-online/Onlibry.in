@@ -1,5 +1,6 @@
 // src/components/NotificationCard.jsx
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { getIconComponent } from './IconPicker';
 
 // Get color class for category dot
@@ -37,25 +38,17 @@ function NotificationCard({ notification, compact = false }) {
     return text.substring(0, maxLength) + '...';
   };
   
-  const handleClick = () => {
-    if (notification.link && notification.link.trim() !== '') {
-      if (notification.link.startsWith('/')) {
-        window.location.href = notification.link;
-      } else {
-        window.open(notification.link, '_blank');
-      }
-    }
-  };
-  
+  const detailUrl = `/notification/${encodeURIComponent(notification.id)}`;
+
   const CategoryIcon = getIconComponent(notification.category_icon);
   const dotColor = getCategoryDotColor(notification.category_color);
   
   if (compact) {
     return (
-      <div 
-        onClick={handleClick}
-        className={`bg-white rounded-lg p-3 mb-2 cursor-pointer hover:shadow-md transition border border-gray-200 ${!notification.link ? 'cursor-default' : ''}`}
-        style={{ cursor: notification.link ? 'pointer' : 'default' }}
+      <Link
+        to={detailUrl}
+        className={`bg-white rounded-lg p-3 mb-2 cursor-pointer hover:shadow-md transition border border-gray-200 `}
+        style={{ cursor: 'pointer', display: 'block' }}
       >
         <div className="flex items-start gap-2">
           <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${dotColor}`}></div>
@@ -77,15 +70,15 @@ function NotificationCard({ notification, compact = false }) {
             </div>
           </div>
         </div>
-      </div>
+      </Link>
     );
   }
   
   return (
-    <div 
-      onClick={handleClick}
-      className={`bg-white rounded-xl shadow-sm p-4 mb-3 hover:shadow-md transition border border-gray-200 ${!notification.link ? 'cursor-default' : ''}`}
-      style={{ cursor: notification.link ? 'pointer' : 'default' }}
+    <Link
+      to={detailUrl}
+      className={`bg-white rounded-xl shadow-sm p-4 mb-3 hover:shadow-md transition border border-gray-200 `}
+      style={{ cursor: 'pointer', display: 'block' }}
     >
       <div className="flex items-start gap-3">
         <div className="flex flex-col items-center gap-1">
@@ -103,13 +96,13 @@ function NotificationCard({ notification, compact = false }) {
             <span className="text-xs text-gray-400">
               📅 {formatDate(notification.published_at)}
             </span>
-            {notification.link && (
+            {notification.id && (
               <span className="text-green-600 text-sm">Read More →</span>
             )}
           </div>
         </div>
       </div>
-    </div>
+    </Link>
   );
 }
 

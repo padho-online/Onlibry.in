@@ -1,6 +1,8 @@
 // src/pages/NotificationDetailPage.jsx
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { getExamUpdates } from '../services/examFetchService';
+import ExamUpdateCard from '../components/ExamUpdateCard';
 import { getNotificationByIdFromD1 } from '../services/d1Service';
 import { getCategoryColorClass } from '../services/categoryService';
 
@@ -13,21 +15,17 @@ function NotificationDetailPage() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    loadNotification();
+    let active = true;
+    setLoading(true); setError(null); setNotification(null);
+    (async () => {
+      try {
+        const data = id.startsWith('examfetch:') ? (await getExamUpdates()).find(r => String(r.id) === id.slice(10)) : await getNotificationByIdFromD1(id);
+        if (active) { setNotification(data || null); if (!data) setError('Notification not found'); }
+      } catch { if (active) setError('Unable to load notification'); }
+      finally { if (active) setLoading(false); }
+    })();
+    return () => { active = false; };
   }, [id]);
-
-  const loadNotification = async () => {
-  setLoading(true);
-  setError(null);
-  const data = await getNotificationByIdFromD1(id);
-  
-  if (data) {
-    setNotification(data);
-  } else {
-    setError('Notification not found');
-  }
-  setLoading(false);
-};
 
   const formatDate = (dateString) => {
     if (!dateString) return '';
@@ -72,6 +70,8 @@ function NotificationDetailPage() {
       </div>
     );
   }
+
+  if (id.startsWith('examfetch:')) return <main className="py-4 md:py-6 max-w-3xl mx-auto space-y-4"><button onClick={() => navigate('/notifications')} className="text-green-700 text-sm">← Back to Notifications</button><ExamUpdateCard record={notification} detail /></main>;
 
   return (
     <div className="py-4 md:py-6 max-w-3xl mx-auto">
