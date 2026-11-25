@@ -30,7 +30,7 @@ function ViewerPage() {
     );
   }
 
-  return <FileViewer />;
+  return <FileViewer key={`${actualFileId}:${searchParams.get('preview')}`} />;
 }
 
 export default ViewerPage;

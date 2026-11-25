@@ -3,6 +3,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useCart } from '../contexts/CartContext';
 import { useAuth } from '../contexts/AuthContext';
 import { getFileById } from '../services/fileService';
 import PdfViewer from '../viewer/PdfViewer';
@@ -17,6 +18,7 @@ function FileViewer() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { user, isSubscribed } = useAuth();
+  const { addToCart, isInCart } = useCart();
   
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -56,14 +58,10 @@ const checkPurchasedFile = async (userId, fileIdentifier) => {
     
     // Check in all purchase arrays
     const purchasedFiles = userData?.purchasedFiles || [];
-    const purchasedMockTests = userData?.purchasedMockTests || [];
-    const purchasedQuizzes = userData?.purchasedQuizzes || [];
     
-    const isPurchased = purchasedFiles.includes(fileIdentifier) ||
-                        purchasedMockTests.includes(fileIdentifier) ||
-                        purchasedQuizzes.includes(fileIdentifier) ||
-                        purchasedMockTests === 'all' ||
-                        purchasedQuizzes === 'all';
+    
+    
+    const isPurchased = Array.isArray(purchasedFiles) && purchasedFiles.includes(fileIdentifier);
     
     if (isPurchased) {
       console.log('✅ File found in Firestore purchases');
@@ -83,7 +81,7 @@ const checkPurchasedFile = async (userId, fileIdentifier) => {
       setError('No file specified');
       setLoading(false);
     }
-  }, [actualFileId, isSubscribed]);
+  }, [actualFileId, isSubscribed, user?.uid, isPreviewMode]);
 
   // Ad ko pehle se load karo
   useEffect(() => {
@@ -94,6 +92,10 @@ const checkPurchasedFile = async (userId, fileIdentifier) => {
     setLoading(true);
     setError(null);
     setCheckingAccess(true);
+    setPdfUrl('');
+    setCanView(false);
+    setIsPurchased(false);
+    setFile(null);
     
     try {
       const fileData = await getFileById(actualFileId);
@@ -116,7 +118,7 @@ const checkPurchasedFile = async (userId, fileIdentifier) => {
         setCheckingAccess(false);
         
         const workerFileId = fileData.cloudflareKey || fileData.id;
-        const viewUrl = `${WORKER_URL}/view/${workerFileId}`;
+        const viewUrl = `${WORKER_URL}/view/${encodeURIComponent(workerFileId)}`;
         setPdfUrl(viewUrl);
         setLoading(false);
         return;
@@ -143,7 +145,7 @@ setCanView(hasAccess);
       
       if (hasAccess) {
         const workerFileId = fileData.cloudflareKey || fileData.id;
-        const viewUrl = `${WORKER_URL}/view/${workerFileId}`;
+        const viewUrl = `${WORKER_URL}/view/${encodeURIComponent(workerFileId)}`;
         setPdfUrl(viewUrl);
       }
       
@@ -212,15 +214,15 @@ setCanView(hasAccess);
   };
 
   // 🔥 Handle subscribe from masked page (add to cart and open cart)
-  const handleSubscribeFromMasked = () => {
+  const handleSubscribeFromMasked = async () => {
     if (!user) {
       navigate('/login', { state: { from: `/viewer/${actualFileId}` } });
       return;
     }
     
     // Add to cart
-    const { addToCart } = require('../contexts/CartContext').useCart();
-    addToCart({
+    
+    const added = isInCart(actualFileId) || await addToCart({
       id: actualFileId,
       name: file?.name || previewFileName,
       price: file?.price || parseInt(previewPrice) || 29,
@@ -229,6 +231,7 @@ setCanView(hasAccess);
       cloudflareKey: file?.cloudflareKey || actualFileId
     });
     
+    if (!added) { alert('Could not add file to cart. Please retry.'); return; }
     // Redirect to cart tab
     navigate('/pricing', { state: { activeTab: 'cart' } });
   };
@@ -245,7 +248,7 @@ setCanView(hasAccess);
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh]">
         <div className="w-12 h-12 border-4 border-green-500 border-t-transparent rounded-full animate-spin"></div>
-        <p className="mt-4 text-gray-600 dark:text-gray-400">Loading file...</p>
+        <p className="mt-4 text-gray-600">Loading file...</p>
       </div>
     );
   }
@@ -254,8 +257,8 @@ setCanView(hasAccess);
     return (
       <div className="text-center py-20">
         <div className="text-red-500 text-6xl mb-4">⚠️</div>
-        <h2 className="text-xl font-semibold text-gray-800 dark:text-white mb-2">Error</h2>
-        <p className="text-gray-600 dark:text-gray-400 mb-6">{error}</p>
+        <h2 className="text-xl font-semibold text-gray-800 mb-2">Error</h2>
+        <p className="text-gray-600 mb-6">{error}</p>
         <button onClick={handleRetry} className="px-6 py-2 bg-green-600 text-white rounded-lg mr-3">
           🔄 Retry
         </button>
@@ -271,8 +274,8 @@ setCanView(hasAccess);
     return (
       <div className="text-center py-20 max-w-md mx-auto">
         <div className="text-yellow-500 text-6xl mb-4">🔒</div>
-        <h2 className="text-xl font-semibold text-gray-800 dark:text-white mb-2">Login Required</h2>
-        <p className="text-gray-600 dark:text-gray-400 mb-4">
+        <h2 className="text-xl font-semibold text-gray-800 mb-2">Login Required</h2>
+        <p className="text-gray-600 mb-4">
           Please login to view sample preview.
         </p>
         <div className="flex gap-3 justify-center">
@@ -296,8 +299,8 @@ setCanView(hasAccess);
       return (
         <div className="text-center py-20 max-w-md mx-auto">
           <div className="text-yellow-500 text-6xl mb-4">🔒</div>
-          <h2 className="text-xl font-semibold text-gray-800 dark:text-white mb-2">Login Required</h2>
-          <p className="text-gray-600 dark:text-gray-400 mb-4">
+          <h2 className="text-xl font-semibold text-gray-800 mb-2">Login Required</h2>
+          <p className="text-gray-600 mb-4">
             Please login to access this file.
           </p>
           <div className="flex gap-3 justify-center">
@@ -318,15 +321,15 @@ setCanView(hasAccess);
     return (
       <div className="text-center py-20 max-w-md mx-auto">
         <div className="text-yellow-500 text-6xl mb-4">🔒</div>
-        <h2 className="text-xl font-semibold text-gray-800 dark:text-white mb-2">Premium Content</h2>
-        <p className="text-gray-600 dark:text-gray-400 mb-4">
+        <h2 className="text-xl font-semibold text-gray-800 mb-2">Premium Content</h2>
+        <p className="text-gray-600 mb-4">
           This file is only available for premium subscribers or individual purchase.
         </p>
         {file && file.price && <p className="text-sm text-green-600 mb-4">₹{file.price}</p>}
         <div className="flex gap-3 justify-center flex-wrap">
           <button
             onClick={() => {
-              const { addToCart } = require('../contexts/CartContext').useCart();
+              
               addToCart({
                 id: actualFileId,
                 name: file?.name,
@@ -360,10 +363,10 @@ setCanView(hasAccess);
     const showDownloadButton = isSubscribed === true && !isPreviewMode;
     
     return (
-      <div className="fixed inset-0 bg-black z-50 flex flex-col">
+      <div className="fixed inset-0 bg-white text-slate-900 z-50 flex flex-col">
         {/* AD GATE OVERLAY - Jab ad chal raha ho */}
         {showAdGate && (
-          <div className="fixed inset-0 bg-black/80 z-[9999] flex items-center justify-center">
+          <div className="fixed inset-0 bg-white/90 z-[9999] flex items-center justify-center">
             <div className="bg-white p-6 rounded-lg text-center">
               <div className="w-12 h-12 border-4 border-green-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
               <p className="text-gray-700">Loading ad...</p>
@@ -372,18 +375,8 @@ setCanView(hasAccess);
           </div>
         )}
 
-        {/* Close button */}
-        <div className="bg-gray-900 text-white p-2 flex justify-end">
-          <button
-            onClick={handleGoBack}
-            className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition text-sm"
-          >
-            ✕ Close
-          </button>
-        </div>
-        
         {/* PDF Viewer */}
-        <div className="flex-1">
+        <div className="flex-1 min-h-0">
           <PdfViewer
             key={pdfUrl}
             pdfUrl={pdfUrl}
@@ -394,7 +387,9 @@ setCanView(hasAccess);
             userEmail={user?.email}
             onDownload={handleDownload}
             onPageChange={(page) => console.log('Page changed:', page)}
-            onSubscribe={handleSubscribeFromMasked}
+            onClose={handleGoBack}
+            onBuyFile={handleSubscribeFromMasked}
+            onSubscribe={() => navigate('/pricing', { state: { activeTab: 'subscription' } })}
           />
         </div>
       </div>
