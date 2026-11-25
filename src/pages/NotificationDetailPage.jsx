@@ -71,10 +71,10 @@ function NotificationDetailPage() {
     );
   }
 
-  if (id.startsWith('examfetch:')) return <main className="py-4 md:py-6 max-w-3xl mx-auto space-y-4"><button onClick={() => navigate('/notifications')} className="text-green-700 text-sm">← Back to Notifications</button><ExamUpdateCard record={notification} detail /></main>;
+  if (id.startsWith('examfetch:')) return <div className="bg-white rounded-xl p-4 md:p-6 max-w-3xl mx-auto space-y-4"><button onClick={() => navigate('/notifications')} className="text-green-700 text-sm">← Back to Notifications</button><ExamUpdateCard record={notification} detail /></div>;
 
   return (
-    <div className="py-4 md:py-6 max-w-3xl mx-auto">
+    <div className="bg-white rounded-xl p-4 md:p-6 max-w-3xl mx-auto">
       {/* Back Button */}
       <button
         onClick={() => navigate('/notifications')}
@@ -84,9 +84,9 @@ function NotificationDetailPage() {
       </button>
 
       {/* Notification Card */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden border border-gray-200 dark:border-gray-700">
+      <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-200">
         {/* Header with Category */}
-        <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+        <div className="p-6 border-b border-gray-200">
           <div className="flex items-center gap-3 mb-4 flex-wrap">
             <span className={`text-xs px-3 py-1 rounded-full ${categoryColorClass}`}>
               <span className="mr-1">{notification.category_icon}</span>
@@ -102,20 +102,20 @@ function NotificationDetailPage() {
             </span>
           </div>
           
-          <h1 className="text-xl md:text-2xl font-bold text-gray-800 dark:text-white mb-3">
+          <h1 className="text-xl md:text-2xl font-bold text-gray-800 mb-3">
             {notification.title}
           </h1>
           
-          <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
+          <div className="flex items-center gap-4 text-xs text-gray-500">
             <span>📅 {formatDate(notification.published_at)}</span>
           </div>
         </div>
 
         {/* Content */}
         <div className="p-6">
-          <div className="prose prose-sm max-w-none dark:prose-invert">
+          <div className="prose prose-sm max-w-none">
             {notification.content.split('\n').map((paragraph, idx) => (
-              <p key={idx} className="text-gray-700 dark:text-gray-300 mb-3 leading-relaxed">
+              <p key={idx} className="text-gray-700 mb-3 leading-relaxed">
                 {paragraph}
               </p>
             ))}
@@ -123,7 +123,7 @@ function NotificationDetailPage() {
         </div>
 
         {/* Footer with Actions */}
-        <div className="p-6 bg-gray-50 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700">
+        <div className="p-6 bg-white border-t border-gray-200">
           <div className="flex flex-wrap gap-3">
             {notification.link && (
               <a
@@ -137,7 +137,7 @@ function NotificationDetailPage() {
             )}
             <button
               onClick={handleShare}
-              className="px-5 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium hover:bg-gray-300 dark:hover:bg-gray-600 transition"
+              className="px-5 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300 transition"
             >
               📢 Share
             </button>
