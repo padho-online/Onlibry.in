@@ -60,6 +60,18 @@ export default function PdfViewer({pdfUrl, fileName='Document', isSubscribed=fal
   const go=(n)=>{if(!doc)return;const p=Math.max(1,Math.min(doc.numPages,Number(n)||1));scroll.current?.querySelector(`[data-page="${p}"]`)?.scrollIntoView({block:'start'});setJump(String(p));};
   const onScroll=()=>{const el=scroll.current;if(!el)return;const top=el.getBoundingClientRect().top;const pages=el.querySelectorAll('[data-page]');let lo=0,hi=pages.length-1;while(lo<hi){const mid=(lo+hi)>>1;if(pages[mid].getBoundingClientRect().bottom<=top+20)lo=mid+1;else hi=mid;}const n=Number(pages[lo]?.dataset.page);if(n&&n!==currentRef.current){currentRef.current=n;setCurrent(n);setJump(String(n));callback.current?.(n);}};
   const btn='inline-flex items-center justify-center gap-1 px-2 py-1.5 rounded border border-slate-200 bg-white text-slate-900 text-sm';
+  const tools = <>
+    <button className={btn} aria-label="Previous page" title="Previous page" onClick={()=>go(current-1)}>‹</button>
+    <form className="flex items-center gap-1" onSubmit={e=>{e.preventDefault();go(jump);}}><input aria-label="Page number" className="w-14 border rounded px-1" type="number" min="1" max={doc?.numPages||1} value={jump} onChange={e=>setJump(e.target.value)}/><span className="text-xs"> / {doc?.numPages||0}</span></form>
+    <button className={btn} aria-label="Next page" title="Next page" onClick={()=>go(current+1)}>›</button>
+    <button className={btn} aria-label="Zoom out" title="Zoom out" onClick={()=>setZoom(z=>Math.max(.5,z-.25))}>−</button>
+    <span className="text-xs">{Math.round(zoom*100)}%</span>
+    <button className={btn} aria-label="Zoom in" title="Zoom in" onClick={()=>setZoom(z=>Math.min(3,z+.25))}>+</button>
+    <button className={btn} aria-label="Fit width" title="Fit width" onClick={()=>setZoom(1)}><ToolIcon name="fit"/></button>
+    <button className={btn} aria-label="Rotate" title="Rotate" onClick={()=>setRotation(r=>(r+90)%360)}><ToolIcon name="rotate"/></button>
+    <button className={btn} aria-label="Fullscreen" title="Fullscreen" onClick={()=>{if(document.fullscreenElement)document.exitFullscreen?.().catch(()=>{});else root.current?.requestFullscreen?.().catch(()=>{});}}><ToolIcon name="fullscreen"/></button>
+    <button className={btn} aria-label="Retry pages" title="Retry pages" onClick={()=>setPageRetry(r=>r+1)}><ToolIcon name="retry"/></button>
+  </>;
   return <div ref={root} className="h-full min-h-0 flex flex-col bg-white text-slate-900" style={{colorScheme: 'light'}}>
     <div ref={header} className="relative shrink-0 px-2 py-1 border-b border-slate-200 flex items-center gap-2 min-w-0">
       <strong className="min-w-0 flex-1 truncate text-sm" title={fileName}>{fileName}</strong>
