@@ -16,3 +16,19 @@ export function rankExamUpdates(data, query) {
     return {r, score: tokens.filter(t => hay.includes(t)).length};
   }).filter(x => !tokens.length || x.score > 0).sort((a,b) => b.score-a.score || confirmedPublished(b.r).localeCompare(confirmedPublished(a.r)) || String(b.r.sortDate || '').localeCompare(String(a.r.sortDate || '')) || String(a.r.id).localeCompare(String(b.r.id))).map(x=>x.r);
 }
+
+// Rolling one-year publication window, plus current/future inferred exam periods.
+export function recentExamUpdates(data, now = new Date()) {
+  const today = new Intl.DateTimeFormat('en-CA', {timeZone:'Asia/Kolkata',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(now);
+  const part = key => today.find(p => p.type === key).value;
+  const date = `${part('year')}-${part('month')}-${part('day')}`;
+  const year = Number(part('year')) - 1, month = Number(part('month'));
+  const day = Math.min(Number(part('day')), new Date(Date.UTC(year,month,0)).getUTCDate());
+  const cutoff = `${year}-${part('month')}-${String(day).padStart(2,'0')}`;
+  return data.filter(r => {
+    const published = confirmedPublished(r);
+    if (published) return published >= cutoff && published <= date;
+    const period = String(r.examPeriod || '');
+    return /^\d{4}-(0[1-9]|1[0-2])$/.test(period) && period >= date.slice(0,7);
+  });
+}
