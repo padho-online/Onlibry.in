@@ -1,9 +1,10 @@
+import { sanitizeHtml } from '../utils/sanitizeHtml';
 // src/blogger/pages/BlogPage.jsx
 // Professional White Mode with Native Share API
 
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { getBlogPostBySlug } from '../services/blogService';
+import { getBlogPostBySlug, getAllBlogPosts, calculateReadingTime } from '../services/blogService';
 import { formatDate } from '../services/blogService';
 import { Calendar, Clock, User, Share2 } from 'lucide-react';
 
@@ -12,6 +13,11 @@ function BlogPage() {
   const [post, setPost] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [related,setRelated]=useState([]);
+  const [progress,setProgress]=useState(0);
+  const [headings,setHeadings]=useState([]);
+  useEffect(()=>{let active=true;getAllBlogPosts(50).then(items=>{if(active)setRelated(items.filter(p=>p.slug!==slug));});return()=>{active=false}},[slug]);
+  useEffect(()=>{if(!post||loading)return;const root=document.getElementById('onlibry-article-body');if(!root)return;setHeadings(Array.from(root.querySelectorAll('h2,h3,h4')).map((el,i)=>{el.id='article-section-'+i;return {id:el.id,text:el.textContent};}));const update=()=>{const r=root.getBoundingClientRect();setProgress(Math.max(0,Math.min(100,100*(window.innerHeight-r.top)/Math.max(1,r.height))));};update();window.addEventListener('scroll',update,{passive:true});return()=>window.removeEventListener('scroll',update);},[post,loading]);
 
   useEffect(() => {
     loadPost();
@@ -20,6 +26,7 @@ function BlogPage() {
 
   const loadPost = async () => {
     setLoading(true);
+    setError(null);
     try {
       const data = await getBlogPostBySlug(slug);
       if (data) {
@@ -99,12 +106,15 @@ function BlogPage() {
       <meta property="og:description" content={post.meta?.description} />
       <meta property="og:image" content={post.meta?.ogImage} />
       <meta property="og:url" content={window.location.href} />
+      <link rel="canonical" href={`https://onlibry.in/blog/${encodeURIComponent(post.slug)}`} />
       <meta name="twitter:card" content="summary_large_image" />
 
       {/* Professional White Background */}
       <div className="min-h-screen bg-white">
+        <div className="sticky top-0 z-10 h-1 bg-gray-100"><div className="h-full bg-green-600" style={{width:progress+'%'}}/></div>
         <article className="max-w-4xl mx-auto px-4 py-12 md:py-16">
           
+          <Link to="/blog" className="text-green-700 text-sm">← All articles</Link>
           {/* Title */}
           <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-gray-900 mb-8 text-center md:text-left leading-tight">
             {post.title}
@@ -121,9 +131,10 @@ function BlogPage() {
             </div>
           )}
 
+          {headings.length>0 && <nav aria-label="Table of contents" className="border rounded-xl p-4 mb-6"><h2 className="font-bold mb-2">Contents</h2>{headings.map(h=><a key={h.id} href={'#'+h.id} className="block text-green-700 py-1">{h.text}</a>)}</nav>}
           {/* Content - Professional Typography */}
           <div 
-            className="prose prose-lg max-w-none 
+            id="onlibry-article-body" className="prose prose-lg max-w-none break-words overflow-x-auto [&_img]:max-w-full [&_img]:h-auto [&_pre]:overflow-x-auto 
                        prose-headings:text-gray-900 
                        prose-headings:font-bold 
                        prose-p:text-gray-700 
@@ -140,7 +151,7 @@ function BlogPage() {
                        prose-pre:bg-gray-900
                        prose-pre:text-gray-100
                        mb-10" 
-            dangerouslySetInnerHTML={{ __html: post.content }} 
+            dangerouslySetInnerHTML={{ __html: sanitizeHtml(post.content) }} 
           />
 
           {/* Divider */}
@@ -159,7 +170,7 @@ function BlogPage() {
               </div>
               <div className="flex items-center gap-2">
                 <Clock size={15} className="text-gray-400" />
-                <span className="text-gray-700">{post.readingTime?.text || '5 min read'}</span>
+                <span className="text-gray-700">{post.readingTime?.text || calculateReadingTime(post.content||'').text}</span>
               </div>
             </div>
             
@@ -185,6 +196,7 @@ function BlogPage() {
               ))}
             </div>
           )}
+        <section className="border-t mt-10 pt-6"><h2 className="text-xl font-bold mb-4">More articles</h2>{related.slice(0,4).map(p=><Link key={p.id} to={'/blog/'+p.slug} className="block py-3 border-b text-green-700">{p.title}</Link>)}</section>
         </article>
       </div>
     </>

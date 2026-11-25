@@ -1,390 +1,87 @@
-// src/blogger/components/HtmlEditor.jsx
-// ✅ FINAL FIX: Apply & Preview working 100%
+import React, { useEffect, useRef, useState } from 'react';
+import { Jodit } from 'jodit';
+import 'jodit/es2021/jodit.min.css';
+import { sanitizeHtml } from '../utils/sanitizeHtml';
 
-import React, { useState, useRef, useEffect } from 'react';
-import ImageUploader from './ImageUploader';
-import ImageEditorModal from './ImageEditorModal';
-import ColorPicker from './ColorPicker';
-
-const HtmlEditor = ({ content, onChange, placeholder = "Write your blog post here..." }) => {
-  const editorRef = useRef(null);
-  const [isHtmlMode, setIsHtmlMode] = useState(false);
-  const [htmlContent, setHtmlContent] = useState('');
-  const [showImageUploader, setShowImageUploader] = useState(false);
-  const [showImageEditor, setShowImageEditor] = useState(false);
-  const [editingImageUrl, setEditingImageUrl] = useState('');
-  const [showColorPicker, setShowColorPicker] = useState(false);
-  const [colorPickerType, setColorPickerType] = useState('text');
-  const [currentColor, setCurrentColor] = useState('#000000');
-
-  // Store editor reference
-  const editorElementRef = useRef(null);
-
-  // Initialize editor content
+// Keep the existing HTML-based publishing contract; Jodit owns the editable DOM.
+export default function HtmlEditor({ content = '', onChange, placeholder = 'Write your blog post here...', editorRef, draftKey, onSaveDraft }) {
+  const host = useRef(null), instance = useRef(null), latest = useRef(content), emitted = useRef(content);
+  const callbacks = useRef({ onChange, onSaveDraft });
+  callbacks.current = { onChange, onSaveDraft };
+  const dirty = useRef(false), timer = useRef(null), applying = useRef(false);
+  const [notice, setNotice] = useState(''), [recovery, setRecovery] = useState(null), [saved, setSaved] = useState('');
+  const [changed, setChanged] = useState(false);
+  const backup = () => {
+    if (!draftKey || !dirty.current) return;
+    try { localStorage.setItem(draftKey, JSON.stringify({html: latest.current, time: new Date().toISOString()})); }
+    catch { setNotice('Local backup failed. Save your draft manually.'); }
+  };
   useEffect(() => {
-    if (editorElementRef.current && !isHtmlMode) {
-      const currentContent = editorElementRef.current.innerHTML;
-      if (currentContent !== (content || '')) {
-        editorElementRef.current.innerHTML = content || '';
+    const api = import.meta.env.VITE_BLOG_API_URL;
+    const editor = Jodit.make(host.current, {
+      height: 580, minHeight: 350, width: '100%', theme: 'default',
+      placeholder, toolbarAdaptive: true, toolbarSticky: true, spellcheck: true,
+      showCharsCounter: true, showWordsCounter: true, showXPathInStatusbar: false,
+      askBeforePasteHTML: true, askBeforePasteFromWord: true,
+      uploader: {
+        url: api ? `${api.replace(/\/$/, '')}/api/upload` : '',
+        insertImageAsBase64URI: false, filesVariableName: () => 'file',
+        prepareData(form) {
+          // Existing Worker accepts exactly one multipart field named file.
+          const files = Array.from(form.entries()).filter(([, v]) => v instanceof File);
+          if (!api || files.length !== 1 || !/^image\/(png|jpeg|gif|webp|avif)$/.test(files[0]?.[1]?.type || '') || files[0][1].size > 5 * 1024 * 1024) {
+            throw new Error('Select one PNG, JPEG, GIF, WebP or AVIF image up to 5 MB; upload API must be configured.');
+          }
+          const payload = new FormData(); payload.append('file', files[0][1]); return payload;
+        },
+        isSuccess: response => Boolean(response?.success && /^https:\/\//i.test(response.url || '')),
+        getMessage: response => response?.error || 'Image upload failed',
+        process: response => ({files: [response.url], path: '', baseurl: '', error: 0, msg: ''}),
+        defaultHandlerSuccess(data) { for (const url of data.files || []) this.j.s.insertImage(url); },
+        defaultHandlerError(error) { setNotice(error?.message || String(error || 'Image upload failed')); }
       }
-    }
-  }, [content, isHtmlMode]);
-
-  // Focus editor on mount
+    });
+    instance.current = editor;
+    applying.current = true; editor.value = sanitizeHtml(latest.current); latest.current = editor.value; applying.current = false;
+    const change = () => {
+      if (applying.current) return;
+      latest.current = editor.value; dirty.current = true; setChanged(true);
+      clearTimeout(timer.current);
+      timer.current = setTimeout(() => { emitted.current = latest.current; callbacks.current.onChange?.(latest.current); }, 150);
+    };
+    editor.events.on('change', change);
+    const shortcut = event => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's' && host.current?.parentElement?.contains(document.activeElement)) {
+        event.preventDefault(); callbacks.current.onSaveDraft?.();
+      }
+    };
+    document.addEventListener('keydown', shortcut);
+    return () => { clearTimeout(timer.current); document.removeEventListener('keydown', shortcut); editor.events.off('change', change); editor.destruct(); instance.current = null; };
+  }, [placeholder]);
   useEffect(() => {
-    if (editorElementRef.current && !isHtmlMode) {
-      editorElementRef.current.focus();
-    }
-  }, [isHtmlMode]);
-
-  const setEditorRef = (el) => {
-    editorElementRef.current = el;
-    editorRef.current = el;
-  };
-
-  const execCommand = (command, value = null) => {
-    if (!editorElementRef.current) return;
-    editorElementRef.current.focus();
-    document.execCommand(command, false, value);
-    if (onChange) {
-      onChange(editorElementRef.current.innerHTML);
-    }
-  };
-
-  const formatBlock = (tag) => {
-    if (!editorElementRef.current) return;
-    editorElementRef.current.focus();
-    document.execCommand('formatBlock', false, tag);
-    if (onChange) {
-      onChange(editorElementRef.current.innerHTML);
-    }
-  };
-
-  const insertHtml = (html) => {
-    if (!editorElementRef.current) return;
-    editorElementRef.current.focus();
-    document.execCommand('insertHTML', false, html);
-    if (onChange) {
-      onChange(editorElementRef.current.innerHTML);
-    }
-  };
-
-  const insertTable = () => {
-    const rows = prompt('Enter number of rows:', '4');
-    const cols = prompt('Enter number of columns:', '4');
-    if (rows && cols) {
-      const numRows = parseInt(rows);
-      const numCols = parseInt(cols);
-      if (numRows > 0 && numCols > 0) {
-        let tableHtml = `
-          <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%; margin: 16px 0; background: white;">
-            <thead>
-              <tr>
-                ${Array(numCols).fill('<th style="border: 1px solid #ddd; padding: 8px; background: #f5f5f5; font-weight: bold;">Header</th>').join('')}
-              </tr>
-            </thead>
-            <tbody>
-              ${Array(numRows).fill(`
-                <tr>
-                  ${Array(numCols).fill('<td style="border: 1px solid #ddd; padding: 8px;"><br></td>').join('')}
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        `;
-        insertHtml(tableHtml);
-      }
-    }
-  };
-
-  const insertImageFromUrl = () => {
-    const url = prompt('Enter image URL:');
-    if (url) {
-      setEditingImageUrl(url);
-      setShowImageEditor(true);
-    }
-  };
-
-  const openImageEditor = (url) => {
-    setEditingImageUrl(url);
-    setShowImageEditor(true);
-  };
-
-  const insertEditedImage = (imgHtml) => {
-    insertHtml(imgHtml);
-  };
-
-  const handleInput = () => {
-    if (editorElementRef.current && onChange) {
-      onChange(editorElementRef.current.innerHTML);
-    }
-  };
-
-  const toggleHtmlMode = () => {
-    if (!editorElementRef.current) return;
-    if (!isHtmlMode) {
-      setHtmlContent(editorElementRef.current.innerHTML);
-      setIsHtmlMode(true);
-    } else {
-      setIsHtmlMode(false);
-    }
-  };
-
-  const handleHtmlChange = (e) => {
-    setHtmlContent(e.target.value);
-  };
-
-  // ✅ SIMPLE FIX: Apply HTML without complex logic
-  const applyHtml = () => {
-    // Editor reference exists in HTML mode because we added ref to textarea
-    if (!editorElementRef.current) {
-      console.error('❌ Editor ref is null');
-      return;
-    }
-    
-    try {
-      // Update content
-      editorElementRef.current.innerHTML = htmlContent;
-      
-      // Exit HTML mode
-      setIsHtmlMode(false);
-      
-      // Notify parent
-      if (onChange) {
-        onChange(htmlContent);
-      }
-      
-      console.log('✅ HTML applied successfully');
-      
-    } catch (error) {
-      console.error('❌ Apply HTML error:', error);
-      alert('Invalid HTML detected. Please check your code.');
-    }
-  };
-
-  const cancelHtmlMode = () => {
-    setIsHtmlMode(false);
-  };
-
-  const insertImageFromUpload = (imageUrl) => {
-    openImageEditor(imageUrl);
-  };
-
-  const openColorPicker = (type) => {
-    setColorPickerType(type);
-    setShowColorPicker(true);
-  };
-
-  const handleColorSelect = (color) => {
-    setCurrentColor(color);
-    if (colorPickerType === 'text') {
-      document.execCommand('foreColor', false, color);
-    } else if (colorPickerType === 'background') {
-      document.execCommand('hiliteColor', false, color);
-    }
-    if (onChange && editorElementRef.current) {
-      onChange(editorElementRef.current.innerHTML);
-    }
-  };
-
-  const ToolbarButton = ({ onClick, icon, title, isActive = false }) => (
-    <button
-      onClick={onClick}
-      className={`p-2 rounded-lg transition ${
-        isActive ? 'bg-green-100 text-green-600' : 'text-gray-600 hover:bg-gray-100'
-      }`}
-      title={title}
-      type="button"
-    >
-      {icon}
-    </button>
-  );
-
-  const checkActive = (command) => {
-    try {
-      return document.queryCommandState(command);
-    } catch (e) {
-      return false;
-    }
-  };
-
-  const checkFormatBlock = (tag) => {
-    try {
-      return document.queryCommandValue('formatBlock') === tag;
-    } catch (e) {
-      return false;
-    }
-  };
-
-  // ✅ HTML Mode View with ref
-  if (isHtmlMode) {
-    return (
-      <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
-        <div className="flex items-center gap-1 p-2 border-b border-gray-200 bg-gray-50">
-          <button 
-            onClick={cancelHtmlMode}
-            className="p-2 rounded-lg text-gray-600 hover:bg-gray-100"
-            title="Back to Editor"
-          >
-            📝
-          </button>
-          <span className="text-sm text-gray-500 ml-2">HTML Mode - Edit raw HTML</span>
-          
-          <button
-            onClick={applyHtml}
-            className="ml-auto px-4 py-1.5 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 transition"
-          >
-            ✅ Apply & Preview
-          </button>
-        </div>
-        <textarea
-          ref={setEditorRef} // ✅ IMPORTANT: Reference store karo
-          value={htmlContent}
-          onChange={handleHtmlChange}
-          className="w-full h-[500px] p-4 font-mono text-sm border-none outline-none resize-none"
-          placeholder="Enter HTML directly..."
-        />
-        <div className="p-2 bg-gray-50 border-t border-gray-200 text-xs text-gray-500">
-          💡 Click <strong>"Apply & Preview"</strong> to see changes in the editor.
-        </div>
-      </div>
-    );
-  }
-
-  // WYSIWYG Editor View
-  return (
-    <>
-      <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
-        {/* Toolbar */}
-        <div className="flex flex-wrap gap-1 p-2 border-b border-gray-200 bg-white sticky top-0 z-10">
-          {/* Text Formatting */}
-          <div className="flex items-center gap-1 pr-2 border-r border-gray-200">
-            <ToolbarButton onClick={() => execCommand('bold')} icon="<b>B</b>" title="Bold (Ctrl+B)" isActive={checkActive('bold')} />
-            <ToolbarButton onClick={() => execCommand('italic')} icon="<i>I</i>" title="Italic (Ctrl+I)" isActive={checkActive('italic')} />
-            <ToolbarButton onClick={() => execCommand('underline')} icon="<u>U</u>" title="Underline" isActive={checkActive('underline')} />
-            <ToolbarButton onClick={() => execCommand('strikeThrough')} icon="<s>S</s>" title="Strikethrough" />
-          </div>
-
-          {/* Color Picker */}
-          <div className="flex items-center gap-1 pr-2 border-r border-gray-200">
-            <ToolbarButton 
-              onClick={() => openColorPicker('text')} 
-              icon={<span style={{ color: currentColor }}>A</span>} 
-              title="Text Color" 
-            />
-            <ToolbarButton 
-              onClick={() => openColorPicker('background')} 
-              icon={<span style={{ backgroundColor: currentColor, padding: '0 4px' }}>A</span>} 
-              title="Background Color" 
-            />
-          </div>
-
-          {/* Headings */}
-          <div className="flex items-center gap-1 pr-2 border-r border-gray-200">
-            <ToolbarButton onClick={() => formatBlock('H1')} icon="H1" title="Heading 1" isActive={checkFormatBlock('H1')} />
-            <ToolbarButton onClick={() => formatBlock('H2')} icon="H2" title="Heading 2" isActive={checkFormatBlock('H2')} />
-            <ToolbarButton onClick={() => formatBlock('H3')} icon="H3" title="Heading 3" isActive={checkFormatBlock('H3')} />
-            <ToolbarButton onClick={() => formatBlock('P')} icon="P" title="Paragraph" isActive={checkFormatBlock('P')} />
-          </div>
-
-          {/* Lists */}
-          <div className="flex items-center gap-1 pr-2 border-r border-gray-200">
-            <ToolbarButton onClick={() => execCommand('insertUnorderedList')} icon="• List" title="Bullet List" />
-            <ToolbarButton onClick={() => execCommand('insertOrderedList')} icon="1. List" title="Numbered List" />
-          </div>
-
-          {/* Alignment */}
-          <div className="flex items-center gap-1 pr-2 border-r border-gray-200">
-            <ToolbarButton onClick={() => execCommand('justifyLeft')} icon="⬅️" title="Align Left" />
-            <ToolbarButton onClick={() => execCommand('justifyCenter')} icon="⬌" title="Align Center" />
-            <ToolbarButton onClick={() => execCommand('justifyRight')} icon="➡️" title="Align Right" />
-            <ToolbarButton onClick={() => execCommand('justifyFull')} icon="☰" title="Justify" />
-          </div>
-
-          {/* Indent */}
-          <div className="flex items-center gap-1 pr-2 border-r border-gray-200">
-            <ToolbarButton onClick={() => execCommand('indent')} icon="→ Indent" title="Indent" />
-            <ToolbarButton onClick={() => execCommand('outdent')} icon="← Outdent" title="Outdent" />
-          </div>
-
-          {/* Links & Images */}
-          <div className="flex items-center gap-1 pr-2 border-r border-gray-200">
-            <ToolbarButton
-              onClick={() => {
-                const url = prompt('Enter URL:');
-                if (url) execCommand('createLink', url);
-              }}
-              icon="🔗"
-              title="Insert Link"
-            />
-            <ToolbarButton onClick={insertImageFromUrl} icon="🖼️" title="Insert Image from URL" />
-            <ToolbarButton onClick={() => setShowImageUploader(true)} icon="📤" title="Upload & Edit Image" />
-          </div>
-
-          {/* Table */}
-          <div className="flex items-center gap-1 pr-2 border-r border-gray-200">
-            <ToolbarButton onClick={insertTable} icon="⊞ Table" title="Insert Table" />
-          </div>
-
-          {/* Code & Quote */}
-          <div className="flex items-center gap-1 pr-2 border-r border-gray-200">
-            <ToolbarButton onClick={() => formatBlock('PRE')} icon="&lt;/&gt;" title="Code Block" />
-            <ToolbarButton onClick={() => formatBlock('BLOCKQUOTE')} icon="“ ”" title="Quote" />
-            <ToolbarButton onClick={() => insertHtml('<hr style="margin: 20px 0;" />')} icon="—" title="Horizontal Line" />
-          </div>
-
-          {/* Undo/Redo & HTML */}
-          <div className="flex items-center gap-1 ml-auto">
-            <ToolbarButton onClick={() => execCommand('undo')} icon="↩️" title="Undo (Ctrl+Z)" />
-            <ToolbarButton onClick={() => execCommand('redo')} icon="↪️" title="Redo (Ctrl+Y)" />
-            <ToolbarButton onClick={toggleHtmlMode} icon="&lt;&gt;" title="HTML View" />
-          </div>
-        </div>
-
-        {/* Editor Area */}
-        <div
-          ref={setEditorRef}
-          contentEditable
-          onInput={handleInput}
-          className="prose prose-sm sm:prose lg:prose-lg xl:prose-2xl max-w-none focus:outline-none min-h-[500px] p-6"
-          data-placeholder={placeholder}
-          style={{ outline: 'none' }}
-        />
-        
-        <div className="text-xs text-gray-400 border-t border-gray-100 px-4 py-2 bg-gray-50 flex justify-between items-center">
-          <span>💡 Ctrl+B (Bold) | Ctrl+I (Italic) | Ctrl+Z (Undo) | Ctrl+Y (Redo)</span>
-          <span>✅ MS Word Style Color Picker | Custom table | Image Editor</span>
-        </div>
-      </div>
-
-      {/* Image Uploader Modal */}
-      {showImageUploader && (
-        <ImageUploader 
-          onUpload={openImageEditor} 
-          onClose={() => setShowImageUploader(false)} 
-        />
-      )}
-
-      {/* Image Editor Modal */}
-      {showImageEditor && (
-        <ImageEditorModal
-          imageUrl={editingImageUrl}
-          onSave={insertEditedImage}
-          onClose={() => setShowImageEditor(false)}
-        />
-      )}
-
-      {/* Color Picker Modal */}
-      {showColorPicker && (
-        <ColorPicker
-          type={colorPickerType}
-          initialColor={currentColor}
-          onSelect={handleColorSelect}
-          onClose={() => setShowColorPicker(false)}
-        />
-      )}
-    </>
-  );
-};
-
-export default HtmlEditor;
+    if (!instance.current || content === emitted.current || content === latest.current) return;
+    applying.current = true; instance.current.value = sanitizeHtml(content); latest.current = instance.current.value; emitted.current = content; applying.current = false;
+  }, [content]);
+  useEffect(() => {
+    if (!editorRef) return;
+    editorRef.current = {
+      getContent: () => sanitizeHtml(instance.current?.value ?? latest.current),
+      markSaved: () => { dirty.current = false; setChanged(false); clearTimeout(timer.current); try { if (draftKey) localStorage.removeItem(draftKey); } catch {} }
+    };
+    return () => { editorRef.current = null; };
+  }, [editorRef, draftKey]);
+  useEffect(() => {
+    if (!draftKey) return;
+    try { const raw = localStorage.getItem(draftKey); if (raw) { const draft = JSON.parse(raw); if (draft.html !== latest.current) setRecovery(draft); } } catch { setNotice('Draft recovery unavailable.'); }
+    const id = setInterval(() => { if (dirty.current) { backup(); setSaved(new Date().toLocaleTimeString()); } }, 2000);
+    const unload = event => { if (dirty.current) { backup(); event.preventDefault(); event.returnValue = ''; } };
+    window.addEventListener('beforeunload', unload);
+    return () => { clearInterval(id); window.removeEventListener('beforeunload', unload); backup(); };
+  }, [draftKey]);
+  return <section className="min-w-0 bg-white text-gray-900 rounded border">
+    {notice && <div role="alert" className="p-2 bg-amber-100">{notice} <button type="button" onClick={() => setNotice('')}>Dismiss</button></div>}
+    {recovery && <div className="p-3 bg-blue-100">Recover local draft from {recovery.time}? <button type="button" onClick={() => { if (instance.current) { instance.current.value = sanitizeHtml(recovery.html); latest.current = instance.current.value; dirty.current = true; setChanged(true); emitted.current = latest.current; callbacks.current.onChange?.(latest.current); } setRecovery(null); }}>Recover</button> / <button type="button" onClick={() => { try { localStorage.removeItem(draftKey); } catch {} setRecovery(null); }}>Discard</button></div>}
+    <div className="min-w-0"><textarea ref={host} aria-label="Article content" /></div>
+    <div className="px-3 py-2 text-xs text-gray-600">{changed ? 'Unsaved changes' : 'No unsaved editor changes'}{saved && ` · Local backup attempted at ${saved}`}</div>
+  </section>;
+}

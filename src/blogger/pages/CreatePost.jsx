@@ -1,6 +1,6 @@
 // src/blogger/pages/CreatePost.jsx
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import HtmlEditor from '../components/HtmlEditor';
@@ -12,7 +12,8 @@ function CreatePost() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [title, setTitle] = useState('');
-  const [content, setContent] = useState('');
+  const [contentState, setContent] = useState('');
+  const editorRef = useRef(null);
   const [isSaving, setIsSaving] = useState(false);
   const [meta, setMeta] = useState({
     title: '',
@@ -23,6 +24,7 @@ function CreatePost() {
   });
 
   const handlePublish = async (postData) => {
+    const content = editorRef.current?.getContent() ?? contentState;
     if (!user) {
       alert('Please login first');
       navigate('/login');
@@ -49,12 +51,13 @@ function CreatePost() {
         content: content,
         slug: finalSlug,
         meta: {
+          slug: finalSlug,
           title: meta.title || title,
           description: meta.description || content.replace(/<[^>]*>/g, '').substring(0, 160),
           ogImage: meta.ogImage || '',
           tags: meta.tags || '',
         },
-        readingTime: { text: `${readingTime} min read`, minutes: readingTime },
+        readingTime,
         authorId: user.uid,
         authorName: user.displayName || user.email?.split('@')[0] || 'Anonymous',
         authorEmail: user.email,
@@ -66,6 +69,7 @@ function CreatePost() {
       const result = await createBlogPost(newPost);
 
       if (result.success) {
+        editorRef.current?.markSaved();
         alert('✅ Post published successfully!');
         navigate('/blog/dashboard');
       } else {
@@ -80,6 +84,7 @@ function CreatePost() {
   };
 
   const handleSaveDraft = async (draftData) => {
+    const content = editorRef.current?.getContent() ?? contentState;
     if (!title.trim()) {
       alert('Please enter a title');
       return;
@@ -95,12 +100,13 @@ function CreatePost() {
         content: content,
         slug: finalSlug,
         meta: {
+          slug: finalSlug,
           title: meta.title || title,
           description: meta.description || content.replace(/<[^>]*>/g, '').substring(0, 160),
           ogImage: meta.ogImage || '',
           tags: meta.tags || '',
         },
-        readingTime: { text: `${readingTime} min read`, minutes: readingTime },
+        readingTime,
         authorId: user.uid,
         authorName: user.displayName || user.email?.split('@')[0] || 'Anonymous',
         authorEmail: user.email,
@@ -111,6 +117,7 @@ function CreatePost() {
       const result = await createBlogPost(draftPost);
 
       if (result.success) {
+        editorRef.current?.markSaved();
         alert('✅ Draft saved successfully!');
         navigate('/blog/dashboard');
       } else {
@@ -151,12 +158,12 @@ function CreatePost() {
       <div className="max-w-7xl mx-auto px-4">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2">
-            <HtmlEditor content={content} onChange={setContent} placeholder="Write your blog post here..." />
+            <HtmlEditor editorRef={editorRef} draftKey={`onlibry-editor:${user?.uid || "guest"}:new`} onSaveDraft={()=>handleSaveDraft({status:"draft"})} content={contentState} onChange={setContent} placeholder="Write your blog post here..." />
           </div>
           <div className="space-y-6">
             <SeoPanel meta={meta} onUpdate={setMeta} previewUrl="https://onlibry.in/blog/" />
             <PublishPanel
-              post={{ title, content, status: 'draft' }}
+              post={{ title, content: contentState, status: 'draft' }}
               onPublish={handlePublish}
               onSaveDraft={handleSaveDraft}
               isSaving={isSaving}

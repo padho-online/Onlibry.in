@@ -1,6 +1,6 @@
 // src/blogger/pages/EditPost.jsx
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { getBlogPostById, updateBlogPost, formatDate } from '../services/blogService';
@@ -14,7 +14,8 @@ function EditPost() {
   const navigate = useNavigate();
   const [post, setPost] = useState(null);
   const [title, setTitle] = useState('');
-  const [content, setContent] = useState('');
+  const [contentState, setContent] = useState('');
+  const editorRef = useRef(null);
   const [meta, setMeta] = useState({});
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -53,6 +54,7 @@ function EditPost() {
   };
 
   const handleUpdate = async (postData) => {
+    const content = editorRef.current?.getContent() ?? contentState;
     if (!title.trim()) {
       alert('Please enter a title');
       return;
@@ -77,6 +79,7 @@ function EditPost() {
       console.log('📝 Update result:', result);
 
       if (result.success) {
+        editorRef.current?.markSaved();
         alert('✅ Post updated successfully!');
         navigate('/blog/dashboard');
       } else {
@@ -152,7 +155,7 @@ function EditPost() {
       <div className="max-w-7xl mx-auto px-4">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2">
-            <HtmlEditor content={content} onChange={setContent} />
+            <HtmlEditor editorRef={editorRef} draftKey={`onlibry-editor:${user?.uid || "guest"}:${id}`} onSaveDraft={()=>handleUpdate({status:post?.status || "draft"})} content={contentState} onChange={setContent} />
           </div>
           <div className="space-y-6">
             <SeoPanel meta={meta} onUpdate={setMeta} previewUrl="https://onlibry.in/blog/" />
