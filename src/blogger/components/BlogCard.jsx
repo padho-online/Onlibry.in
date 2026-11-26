@@ -1,33 +1,9 @@
-// src/blogger/components/BlogCard.jsx
-
-import React from 'react';
-import { Link } from 'react-router-dom';
-import { Calendar, Clock, Eye } from 'lucide-react';
-import { formatDate } from '../utils/readingTime';
-
-const BlogCard = ({ post }) => {
-  return (
-    <Link to={`/blog/${post.slug}`} className="block group">
-      <article className="bg-white rounded-xl shadow-sm hover:shadow-md transition border border-gray-200 overflow-hidden">
-        {post.meta?.ogImage && (
-          <img src={post.meta.ogImage} alt={post.title} loading="lazy" decoding="async" className="w-full h-48 object-cover" />
-        )}
-        <div className="p-4">
-          <h3 className="text-lg font-semibold text-gray-800 group-hover:text-green-600 transition line-clamp-2">
-            {post.title}
-          </h3>
-          <p className="text-sm text-gray-500 mt-2 line-clamp-3">
-            {post.meta?.description || post.content?.replace(/<[^>]*>/g, '').substring(0, 150)}...
-          </p>
-          <div className="flex items-center gap-4 mt-4 text-xs text-gray-400">
-            <span className="flex items-center gap-1"><Calendar size={12} /> {formatDate(post.publishedAt || post.createdAt)}</span>
-            <span className="flex items-center gap-1"><Clock size={12} /> {post.readingTime?.text || ''}</span>
-            <span className="flex items-center gap-1"><Eye size={12} /> {post.views || 0}</span>
-          </div>
-        </div>
-      </article>
-    </Link>
-  );
-};
-
-export default BlogCard;
+import React,{useLayoutEffect,useRef,useState} from 'react';
+import {Link} from 'react-router-dom';
+import {formatDate} from '../utils/readingTime';
+import '../styles/blogger.css';
+export default function BlogCard({post}){
+ const title=useRef(null),[lines,setLines]=useState(2),[failed,setFailed]=useState(false);
+ useLayoutEffect(()=>{const el=title.current; if(!el)return; const measure=()=>setLines(el.getBoundingClientRect().height>21?2:1);measure();const ro=new ResizeObserver(measure);ro.observe(el);return()=>ro.disconnect();},[post.title]);
+ return <Link to={`/blog/${post.slug}`} className="blog-card"><div className="blog-card-copy"><h3 ref={title}>{post.title}</h3><p style={{WebkitLineClamp:4-lines}}>{post.meta?.description||post.excerpt||post.content?.replace(/<[^>]*>/g,' ')}</p><footer><span>{formatDate(post.publishedAt||post.createdAt)}</span><span>{post.views||0} views</span></footer></div>{post.meta?.ogImage&&!failed&&<img src={post.meta.ogImage} alt="" loading="lazy" onError={()=>setFailed(true)}/>}</Link>;
+}

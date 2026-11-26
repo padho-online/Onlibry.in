@@ -4,7 +4,8 @@ import Header from '../components/Header';
 import Footer from '../components/Footer';
 
 function MainLayout({ children }) {
-  const isHome = useLocation().pathname === '/';
+  const pathname = useLocation().pathname;
+  const isHome = pathname === '/' || pathname === '/blog' || pathname.startsWith('/blog/');
   return (
     <div className="flex flex-col min-h-screen">
       <Header />

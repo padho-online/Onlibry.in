@@ -154,9 +154,7 @@
 /* src/blogger/styles/blogger.css - Professional White Mode */
 
 /* Base white background */
-body {
-  background-color: #ffffff;
-}
+
 
 /* Blog content professional styling */
 .blog-content {
@@ -282,3 +280,65 @@ body {
   border: 0;
   border-top: 1px solid #e5e7eb;
 }
+/* Responsive Blogger layout; scoped to blog components. */
+.blog-shell{width:100%;max-width:none;margin:0 auto;padding:0 clamp(12px,2vw,32px);box-sizing:border-box}
+.blog-layout{display:grid;grid-template-columns:minmax(0,7fr) minmax(0,3fr);gap:20px;align-items:start}
+.blog-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.blog-sidebar{display:grid;grid-template-rows:repeat(2,minmax(0,1fr));gap:16px;min-width:0}
+.blog-sidebar>section{border:1px solid #e5e7eb;border-radius:10px;padding:12px;min-width:0;overflow-wrap:anywhere}
+.blog-sidebar h2{font-size:1.1rem;font-weight:700;margin-bottom:12px;color:#1f2937}
+.blog-sidebar .blog-card{margin-bottom:8px;height:120px}
+.blog-card{display:flex;gap:8px;height:174px;padding:10px;border:1px solid #e5e7eb;border-radius:10px;background:white;min-width:0;overflow:hidden;color:#1f2937;transition:border-color .15s;text-decoration:none}
+.blog-card:hover{border-color:#16a34a}
+.blog-card-copy{flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden}
+.blog-card h3,.blog-card p{display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.blog-card h3{font-size:14px;font-weight:700;line-height:1.35;-webkit-line-clamp:3}
+.blog-card p{font-size:12px;color:#6b7280;line-height:1.4;-webkit-line-clamp:3;margin-top:6px}
+.blog-card footer{margin-top:auto;display:flex;flex-wrap:wrap;gap:4px 8px;font-size:10px;color:#6b7280;padding-top:6px}
+.blog-card>img{width:30%;flex:0 0 30%;height:100%;object-fit:cover;border-radius:6px;min-width:0}
+.blog-reading-layout{padding-top:24px;padding-bottom:32px}
+.blog-reading{min-width:0;padding:clamp(8px,2vw,24px);overflow-wrap:anywhere}
+.blog-featured{display:block;width:100%;max-width:640px;aspect-ratio:16/9;object-fit:contain;margin:12px auto;border-radius:8px;background:#f8fafc}
+.blog-content,.jodit-wysiwyg{line-height:1.75;overflow-wrap:anywhere}
+.blog-content ul,.jodit-wysiwyg ul{list-style:disc outside!important;padding-left:1.75rem;margin:1rem 0}
+.blog-content ol,.jodit-wysiwyg ol{list-style:decimal outside!important;padding-left:1.75rem;margin:1rem 0}
+.blog-content li,.jodit-wysiwyg li{display:list-item;margin:.35rem 0}
+.blog-content ul ul,.jodit-wysiwyg ul ul{list-style-type:circle!important}
+.blog-content table,.jodit-wysiwyg table{border-collapse:collapse;width:100%;margin:1rem 0}
+.blog-content td,.blog-content th,.jodit-wysiwyg td,.jodit-wysiwyg th{border:1px solid #cbd5e1;padding:8px;vertical-align:top}
+.blog-content img,.jodit-wysiwyg img{display:inline-block;max-width:100%;height:auto;vertical-align:middle}
+.blog-content img{margin:12px 0}
+.blog-content{overflow-x:auto}
+@media(max-width:1199px){.blog-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:767px){.blog-layout{grid-template-columns:minmax(0,1fr)}.blog-grid{grid-template-columns:minmax(0,1fr)}.blog-sidebar{grid-template-rows:auto auto}.blog-reading{padding:0}.blog-card{height:148px}}
+
+.blog-content img:not([width]):not([style*="width"]),.jodit-wysiwyg img:not([width]):not([style*="width"]){width:auto;max-width:min(100%,640px)}
+/* Keep grid tracks and sidebar rows independent of intrinsic content sizes. */
+.blog-layout,.blog-grid,.blog-sidebar,.blog-layout>main,.blog-sidebar>section{min-width:0;max-width:100%;box-sizing:border-box}
+.blog-sidebar{grid-template-rows:repeat(2,minmax(min-content,1fr));align-items:stretch}
+.blog-sidebar>section{overflow:hidden}
+.blog-card,.blog-sidebar .blog-card{box-sizing:border-box;width:100%;max-width:100%;height:122px;min-height:122px;display:flex;align-items:stretch;gap:8px;padding:10px;margin-bottom:0}
+.blog-sidebar .blog-card+.blog-card{margin-top:8px}
+.blog-card-copy{flex:1 1 0;min-width:0;max-width:100%}
+.blog-card h3,.blog-card p{margin:0;padding:0;line-height:20px;word-break:normal;overflow-wrap:anywhere;text-overflow:ellipsis;display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden}
+.blog-card h3{-webkit-line-clamp:2;font-size:14px;flex:none}
+.blog-card p{font-size:12px;flex:none}
+.blog-card footer{height:20px;line-height:20px;padding:0;flex:none;flex-wrap:nowrap;white-space:nowrap;overflow:hidden;justify-content:space-between;gap:4px}
+.blog-card footer span{overflow:hidden;text-overflow:ellipsis;min-width:0}
+.blog-card>img{flex:0 0 30%;width:30%;max-width:30%;height:100%;object-fit:contain;align-self:center}
+.blog-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+@media(max-width:1100px){.blog-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:767px){.blog-grid{grid-template-columns:minmax(0,1fr)}.blog-sidebar{grid-template-rows:auto auto}}
+.jodit-wysiwyg img,.blog-content img{height:auto;max-width:100%}
+.jodit-wysiwyg table{max-width:100%}
+.blog-object-tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px;border-bottom:1px solid #ddd;font-size:12px}
+.blog-object-tools input,.blog-object-tools select,.blog-object-tools button{border:1px solid #ccc;border-radius:4px;padding:4px;max-width:100%}
+/* V3: isolate homepage layout from global main/aside styles. */
+.blog-shell .blog-home-layout{display:grid;grid-template-columns:minmax(0,7fr) minmax(0,3fr);gap:20px;width:100%;min-width:0;align-items:start;container-type:inline-size}
+.blog-home-layout>.blog-home-main,.blog-home-layout>.blog-sidebar{position:relative;inset:auto;float:none;width:100%;min-width:0;max-width:100%;margin:0;box-sizing:border-box;overflow:hidden}
+.blog-home-layout .blog-grid{width:100%;grid-template-columns:repeat(3,minmax(0,1fr));min-width:0}
+.blog-home-layout .blog-card{min-width:0;max-width:100%;overflow:hidden}
+@container (max-width:1100px){.blog-home-layout .blog-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@container (max-width:650px){.blog-home-layout .blog-grid{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:900px){.blog-shell .blog-home-layout{grid-template-columns:minmax(0,1fr)}}
+.jodit-wysiwyg img[style*="height"],.blog-content img[style*="height"]{object-fit:contain}

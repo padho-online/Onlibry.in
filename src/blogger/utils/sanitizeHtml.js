@@ -1,5 +1,5 @@
 import DOMPurify from 'dompurify';
-const properties = new Set('color background-color font-size font-family font-weight font-style text-decoration text-decoration-line text-align width height max-width margin margin-top margin-bottom padding border border-collapse vertical-align line-height float border-radius box-shadow'.split(' '));
+const properties = new Set('color background-color font-size font-family font-weight font-style text-decoration text-decoration-line text-align width height object-fit max-width margin margin-top margin-bottom padding border border-top border-right border-bottom border-left border-width border-color border-style border-collapse vertical-align line-height list-style-type list-style-position padding-left margin-left margin-right float border-radius box-shadow'.split(' '));
 export function sanitizeHtml(html='') {
  const clean=DOMPurify.sanitize(String(html),{USE_PROFILES:{html:true},FORBID_TAGS:['form','input','button','iframe','style','object','embed'],ADD_ATTR:['target','colwidth']});
  const doc=new DOMParser().parseFromString(clean,'text/html');

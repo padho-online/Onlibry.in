@@ -1,3 +1,4 @@
+import '../styles/blogger.css';
 // src/blogger/components/SeoPanel.jsx
 
 import React, { useState } from 'react';
@@ -102,6 +103,7 @@ const SeoPanel = ({ meta, onUpdate, previewUrl }) => {
             className="w-full px-3 py-2 border rounded-lg text-sm"
             placeholder="https://onlibry.in/images/og-image.jpg"
           />
+          {meta.ogImage && <img src={meta.ogImage} alt="OG image preview" className="blog-featured" />}
         </div>
 
         {/* Tags */}

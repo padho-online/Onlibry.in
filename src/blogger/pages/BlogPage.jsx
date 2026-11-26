@@ -1,3 +1,5 @@
+import '../styles/blogger.css';
+import BlogCard from '../components/BlogCard';
 import { sanitizeHtml } from '../utils/sanitizeHtml';
 // src/blogger/pages/BlogPage.jsx
 // Professional White Mode with Native Share API
@@ -16,7 +18,7 @@ function BlogPage() {
   const [related,setRelated]=useState([]);
   const [progress,setProgress]=useState(0);
   const [headings,setHeadings]=useState([]);
-  useEffect(()=>{let active=true;getAllBlogPosts(50).then(items=>{if(active)setRelated(items.filter(p=>p.slug!==slug));});return()=>{active=false}},[slug]);
+  useEffect(()=>{let active=true;getAllBlogPosts(500).then(items=>{if(active)setRelated(items.filter(p=>p.slug!==slug));});return()=>{active=false}},[slug]);
   useEffect(()=>{if(!post||loading)return;const root=document.getElementById('onlibry-article-body');if(!root)return;setHeadings(Array.from(root.querySelectorAll('h2,h3,h4')).map((el,i)=>{el.id='article-section-'+i;return {id:el.id,text:el.textContent};}));const update=()=>{const r=root.getBoundingClientRect();setProgress(Math.max(0,Math.min(100,100*(window.innerHeight-r.top)/Math.max(1,r.height))));};update();window.addEventListener('scroll',update,{passive:true});return()=>window.removeEventListener('scroll',update);},[post,loading]);
 
   useEffect(() => {
@@ -112,7 +114,7 @@ function BlogPage() {
       {/* Professional White Background */}
       <div className="min-h-screen bg-white">
         <div className="sticky top-0 z-10 h-1 bg-gray-100"><div className="h-full bg-green-600" style={{width:progress+'%'}}/></div>
-        <article className="max-w-4xl mx-auto px-4 py-12 md:py-16">
+        <div className="blog-shell blog-layout blog-reading-layout"><article className="blog-reading">
           
           <Link to="/blog" className="text-green-700 text-sm">← All articles</Link>
           {/* Title */}
@@ -126,7 +128,7 @@ function BlogPage() {
               <img 
                 src={post.meta.ogImage} 
                 alt={post.title} 
-                className="w-full rounded-xl shadow-sm border border-gray-100" 
+                className="blog-featured" 
               />
             </div>
           )}
@@ -134,7 +136,7 @@ function BlogPage() {
           {headings.length>0 && <nav aria-label="Table of contents" className="border rounded-xl p-4 mb-6"><h2 className="font-bold mb-2">Contents</h2>{headings.map(h=><a key={h.id} href={'#'+h.id} className="block text-green-700 py-1">{h.text}</a>)}</nav>}
           {/* Content - Professional Typography */}
           <div 
-            id="onlibry-article-body" className="prose prose-lg max-w-none break-words overflow-x-auto [&_img]:max-w-full [&_img]:h-auto [&_pre]:overflow-x-auto 
+            id="onlibry-article-body" className="blog-content prose prose-lg max-w-none break-words overflow-x-auto [&_img]:max-w-full [&_img]:h-auto [&_pre]:overflow-x-auto 
                        prose-headings:text-gray-900 
                        prose-headings:font-bold 
                        prose-p:text-gray-700 
@@ -196,8 +198,7 @@ function BlogPage() {
               ))}
             </div>
           )}
-        <section className="border-t mt-10 pt-6"><h2 className="text-xl font-bold mb-4">More articles</h2>{related.slice(0,4).map(p=><Link key={p.id} to={'/blog/'+p.slug} className="block py-3 border-b text-green-700">{p.title}</Link>)}</section>
-        </article>
+        </article><aside className="blog-sidebar"><section><h2>Popular articles</h2>{[...related].sort((a,b)=>(b.views||0)-(a.views||0)).slice(0,4).map(post=><BlogCard key={post.id} post={post}/>)}</section><section><h2>Latest articles</h2>{[...related].sort((a,b)=>new Date(b.publishedAt||b.createdAt)-new Date(a.publishedAt||a.createdAt)).slice(0,4).map(post=><BlogCard key={post.id} post={post}/>)}</section></aside></div>
       </div>
     </>
   );
