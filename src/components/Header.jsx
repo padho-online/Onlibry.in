@@ -6,8 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
 
 import {
-  Home,
-  FileText,
+  Globe,
   SquareLibrary,
   Folder,
   SquarePen,
@@ -78,12 +77,12 @@ function Header() {
 
   return (
     <header className="bg-white shadow-md sticky top-0 z-50 border-b border-gray-200">
-      <div className="container mx-auto px-3 py-3 max-w-7xl">
+      <div className="container mx-auto px-2 sm:px-3 py-3 max-w-7xl">
         <div className="flex items-center justify-between">
 
           {/* LEFT SECTION - Logo */}
           <div className="flex items-center gap-2">
-            <Link to="/" className="flex items-center gap-2">
+            <Link to="/" aria-label="Onlibry Home" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-2">
               <img src={logo} alt="Onlibry" className="h-8 w-auto" />
               <span className="text-xl font-bold text-green-600 hidden sm:inline">
                 Onlibry
@@ -92,9 +91,8 @@ function Header() {
           </div>
 
           {/* DESKTOP NAVIGATION */}
-          <nav className="hidden md:flex min-w-0 flex-1 items-center gap-1 overflow-x-auto mx-2">
-            <NavLink to="/" icon={Home} label="Home" />
-            <NavLink to="/blog" icon={FileText} label="Posts" />
+          <nav className="hidden md:flex min-w-0 items-center gap-1 overflow-x-auto mx-2">
+            <NavLink to="/blog" icon={Globe} label="Posts" />
             <NavLink to="/exam-updates" icon={BellRing} label="Exam Updates" />
             <NavLink to="/files" icon={SquareLibrary} label="Files" />
             <NavLink to="/folders" icon={Folder} label="Folders" />
@@ -109,10 +107,22 @@ function Header() {
           <div className="flex shrink-0 items-center gap-1">
 
             {/* MOBILE QUICK NAV ICONS */}
-            <div className="md:hidden flex items-center gap-0.5">
+            <div className="md:hidden flex items-center gap-0 sm:gap-0.5">
+              <Link
+                to="/blog"
+                aria-label="Posts"
+                title="Posts"
+                onClick={() => setMobileMenuOpen(false)}
+                className={`p-1 sm:p-2 rounded-lg transition ${
+                  isActive('/blog') ? 'bg-green-50 text-green-600' : 'text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                <Globe size={20} />
+              </Link>
+
               <Link
                 to="/files"
-                className={`p-2 rounded-lg transition ${
+                className={`p-1 sm:p-2 rounded-lg transition ${
                   isActive('/files') ? 'bg-green-50 text-green-600' : 'text-gray-700 hover:bg-gray-100'
                 }`}
               >
@@ -121,7 +131,7 @@ function Header() {
 
               <Link
                 to="/folders"
-                className={`p-2 rounded-lg transition ${
+                className={`p-1 sm:p-2 rounded-lg transition ${
                   isActive('/folders') ? 'bg-green-50 text-green-600' : 'text-gray-700 hover:bg-gray-100'
                 }`}
               >
@@ -130,7 +140,7 @@ function Header() {
 
               <Link
                 to="/mock-tests"
-                className={`p-2 rounded-lg transition ${
+                className={`p-1 sm:p-2 rounded-lg transition ${
                   isActive('/mock-tests') ? 'bg-green-50 text-green-600' : 'text-gray-700 hover:bg-gray-100'
                 }`}
               >
@@ -139,7 +149,7 @@ function Header() {
 
               <Link
                 to="/quizzes"
-                className={`p-2 rounded-lg transition ${
+                className={`p-1 sm:p-2 rounded-lg transition ${
                   isActive('/quizzes') ? 'bg-green-50 text-green-600' : 'text-gray-700 hover:bg-gray-100'
                 }`}
               >
@@ -148,11 +158,11 @@ function Header() {
 
               <Link
                 to="/notifications"
-                className={`p-2 rounded-lg transition ${
+                className={`p-1 sm:p-2 rounded-lg transition ${
                   isActive('/notifications') ? 'bg-green-50 text-green-600' : 'text-gray-700 hover:bg-gray-100'
                 }`}
               >
-                <BellRing size={20} className={isActive('/quizzes') ? 'text-green-600' : 'text-gray-700'} />
+                <BellRing size={20} className={isActive('/notifications') ? 'text-green-600' : 'text-gray-700'} />
               </Link> 
             </div>
 
@@ -160,7 +170,7 @@ function Header() {
             <Link
               to="/pricing"
               state={{ activeTab: 'cart' }}
-              className={`relative p-2 rounded-lg transition ${
+              className={`relative p-1 sm:p-2 rounded-lg transition ${
                 isActive('/pricing') ? 'bg-green-50 text-green-600' : 'text-gray-700 hover:bg-gray-100'
               }`}
             >
@@ -206,7 +216,7 @@ function Header() {
             {/* MOBILE MENU BUTTON */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden p-2 rounded-lg hover:bg-gray-100 transition"
+              className="md:hidden p-1 sm:p-2 rounded-lg hover:bg-gray-100 transition"
             >
               {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
             </button>
@@ -217,8 +227,6 @@ function Header() {
         {mobileMenuOpen && (
           <div className="md:hidden mt-4 pt-4 border-t border-gray-200">
             <nav className="flex flex-col gap-1">
-              <NavLink to="/" icon={Home} label="Home" onClick={() => setMobileMenuOpen(false)} />
-              <NavLink to="/blog" icon={FileText} label="Posts" onClick={() => setMobileMenuOpen(false)} />
               {user && (
                 <NavLink to="/saved-files" icon={Bookmark} label="Saved Files" onClick={() => setMobileMenuOpen(false)} />
               )}
