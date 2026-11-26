@@ -21,7 +21,7 @@ export default function RecentPosts() {
         <div role="region" aria-labelledby="recent-posts-heading" tabIndex={0} className="min-h-0 overflow-y-auto overflow-x-hidden divide-y divide-gray-100 pr-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-green-600">
           {posts.map(post => (
             <Link key={post.id} to={`/blog/${post.slug}`} className="group flex items-start gap-3 py-3">
-              {post.meta?.ogImage ? <img src={post.meta.ogImage} alt="" loading="lazy" className="h-16 w-20 shrink-0 rounded-md object-cover" /> : <div className="flex h-16 w-20 shrink-0 items-center justify-center rounded-md bg-green-50 text-green-600"><FileText size={22} /></div>}
+              {post.meta?.ogImage ? <img src={post.meta.ogImage} alt="" loading="lazy" className="h-16 w-20 shrink-0 rounded-md bg-gray-50 object-contain object-center" /> : <div className="flex h-16 w-20 shrink-0 items-center justify-center rounded-md bg-green-50 text-green-600"><FileText size={22} /></div>}
               <div className="min-w-0"><h3 className="break-words [overflow-wrap:anywhere] text-sm font-semibold text-gray-800 group-hover:text-green-700">{post.title}</h3><p className="mt-1 text-xs text-gray-500">{formatDate(post.publishedAt || post.createdAt)}</p></div>
             </Link>
           ))}

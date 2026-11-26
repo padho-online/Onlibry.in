@@ -7,6 +7,7 @@ import { useCart } from '../contexts/CartContext';
 
 import {
   Home,
+  FileText,
   SquareLibrary,
   Folder,
   SquarePen,
@@ -65,7 +66,7 @@ function Header() {
       <Link
         to={to}
         onClick={onClick}
-        className={`nav-link flex items-center gap-2 transition py-2 px-3 rounded-lg hover:bg-gray-100 ${
+        className={`nav-link flex shrink-0 whitespace-nowrap items-center gap-2 transition py-2 px-3 rounded-lg hover:bg-gray-100 ${
           active ? 'bg-green-50 text-green-600' : 'text-gray-700 hover:text-green-600 hover:bg-gray-100'
         }`}
       >
@@ -91,8 +92,9 @@ function Header() {
           </div>
 
           {/* DESKTOP NAVIGATION */}
-          <nav className="hidden md:flex items-center gap-1">
+          <nav className="hidden md:flex min-w-0 flex-1 items-center gap-1 overflow-x-auto mx-2">
             <NavLink to="/" icon={Home} label="Home" />
+            <NavLink to="/blog" icon={FileText} label="Posts" />
             <NavLink to="/exam-updates" icon={BellRing} label="Exam Updates" />
             <NavLink to="/files" icon={SquareLibrary} label="Files" />
             <NavLink to="/folders" icon={Folder} label="Folders" />
@@ -104,7 +106,7 @@ function Header() {
           </nav>
 
           {/* RIGHT SECTION */}
-          <div className="flex items-center gap-1">
+          <div className="flex shrink-0 items-center gap-1">
 
             {/* MOBILE QUICK NAV ICONS */}
             <div className="md:hidden flex items-center gap-0.5">
@@ -216,6 +218,7 @@ function Header() {
           <div className="md:hidden mt-4 pt-4 border-t border-gray-200">
             <nav className="flex flex-col gap-1">
               <NavLink to="/" icon={Home} label="Home" onClick={() => setMobileMenuOpen(false)} />
+              <NavLink to="/blog" icon={FileText} label="Posts" onClick={() => setMobileMenuOpen(false)} />
               {user && (
                 <NavLink to="/saved-files" icon={Bookmark} label="Saved Files" onClick={() => setMobileMenuOpen(false)} />
               )}
