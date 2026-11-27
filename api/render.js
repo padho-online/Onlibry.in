@@ -254,7 +254,7 @@ export default async function handler(req, res) {
     // /index.html must remain outside RenderX routing.
 
     const templateResponse = await fetch(
-      `${DOMAIN}/index.html`,
+      `${DOMAIN}/renderx-template.html`,
       {
         signal: AbortSignal.timeout(8000)
       }

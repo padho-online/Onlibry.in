@@ -10,6 +10,10 @@
       "destination": "/api/$1"
     },
     {
+      "source": "/renderx-template.html",
+      "destination": "/renderx-template.html"
+    },
+    {
       "source": "/habibul.html",
       "destination": "/habibul.html"
     },
@@ -19,15 +23,15 @@
     },
     {
       "source": "/blog/dashboard",
-      "destination": "/index.html"
+      "destination": "/renderx-template.html"
     },
     {
       "source": "/blog/create",
-      "destination": "/index.html"
+      "destination": "/renderx-template.html"
     },
     {
       "source": "/blog/edit/:path*",
-      "destination": "/index.html"
+      "destination": "/renderx-template.html"
     },
     {
       "source": "/",
@@ -43,7 +47,7 @@
     },
     {
       "source": "/(.*)",
-      "destination": "/index.html"
+      "destination": "/renderx-template.html"
     }
   ],
   "headers": [
@@ -156,6 +160,15 @@
     },
     {
       "source": "/quiz-results",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow"
+        }
+      ]
+    },
+    {
+      "source": "/renderx-template.html",
       "headers": [
         {
           "key": "X-Robots-Tag",
