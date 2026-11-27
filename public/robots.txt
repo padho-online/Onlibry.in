@@ -1,0 +1,9 @@
+# Onlibry Search Engine Configuration
+
+User-agent: *
+Allow: /
+
+Disallow: /api/
+Disallow: /files/search/
+
+Sitemap: https://onlibry.in/sitemap.xml

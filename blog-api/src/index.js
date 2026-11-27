@@ -46,6 +46,53 @@ export default {
       return new Response(null, { status: 204, headers: corsHeaders });
     }
     
+// ============================================
+// SITEMAPX - Published Blog URLs
+// ============================================
+
+if (method === 'GET' && url.pathname === '/api/sitemap') {
+  try {
+    const result = await env.DB.prepare(`
+      SELECT slug, updated_at, published_at
+      FROM posts
+      WHERE status = 'published'
+      ORDER BY published_at DESC
+    `).all();
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        posts: result.results
+      }),
+      {
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json',
+          'Cache-Control': 'public, max-age=60',
+          'X-Robots-Tag': 'noindex'
+        }
+      }
+    );
+
+  } catch (error) {
+    console.error('SitemapX:', error);
+
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: 'Sitemap unavailable'
+      }),
+      {
+        status: 500,
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+  }
+}
+
     // GET /api/posts - All published posts
     if (method === 'GET' && url.pathname === '/api/posts') {
       const limit = parseInt(url.searchParams.get('limit') || '20');
