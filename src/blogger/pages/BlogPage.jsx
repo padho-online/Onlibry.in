@@ -1,3 +1,4 @@
+import useBlogPanels from '../hooks/useBlogPanels';
 import PageSkeleton from '../../components/PageSkeleton';
 import ShareDialog from '../components/ShareDialog';
 import '../styles/blogger.css';
@@ -21,8 +22,32 @@ function BlogPage() {
   const [related,setRelated]=useState([]);
   const [progress,setProgress]=useState(0);
   const [headings,setHeadings]=useState([]);
+  const panels = useBlogPanels(!loading && !!post && !error);
   useEffect(()=>{let active=true;getAllBlogPosts(500).then(items=>{if(active)setRelated(items.filter(p=>p.slug!==slug));});return()=>{active=false}},[slug]);
-  useEffect(()=>{if(!post||loading)return;const root=document.getElementById('onlibry-article-body');if(!root)return;setHeadings(Array.from(root.querySelectorAll('h2,h3,h4')).map((el,i)=>{el.id='article-section-'+i;return {id:el.id,text:el.textContent};}));const update=()=>{const r=root.getBoundingClientRect();setProgress(Math.max(0,Math.min(100,100*(window.innerHeight-r.top)/Math.max(1,r.height))));};update();window.addEventListener('scroll',update,{passive:true});return()=>window.removeEventListener('scroll',update);},[post,loading]);
+  useEffect(() => {
+    if (!post || loading || error) return;
+    const root = document.getElementById('onlibry-article-body');
+    const panel = panels.current?.querySelector('.blog-reading');
+    if (!root || !panel) return;
+    panel.scrollTop = 0;
+    setHeadings(Array.from(root.querySelectorAll('h2,h3,h4')).map((el,i) => {
+      el.id = 'article-section-' + i;
+      return {id:el.id,text:el.textContent};
+    }));
+    const update = () => {
+      const r = root.getBoundingClientRect();
+      const bottom = window.matchMedia('(min-width: 901px)').matches
+        ? panel.getBoundingClientRect().bottom : window.innerHeight;
+      setProgress(Math.max(0, Math.min(100, 100 * (bottom-r.top)/Math.max(1,r.height))));
+    };
+    update();
+    panel.addEventListener('scroll', update, {passive:true});
+    window.addEventListener('scroll', update, {passive:true});
+    window.addEventListener('resize', update);
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(update) : null;
+    observer?.observe(root);
+    return () => {panel.removeEventListener('scroll',update);window.removeEventListener('scroll',update);window.removeEventListener('resize',update);observer?.disconnect();};
+  }, [post,loading,error,panels]);
 
   useEffect(() => {
     loadPost();
@@ -84,7 +109,7 @@ function BlogPage() {
       {/* Professional White Background */}
       <div className="min-h-screen bg-white">
         <div className="sticky top-0 z-10 h-1 bg-gray-100"><div className="h-full bg-green-600" style={{width:progress+'%'}}/></div>
-        <div className="blog-shell blog-layout blog-reading-layout"><article className="blog-reading">
+        <div ref={panels} className="blog-shell blog-layout blog-reading-layout blog-independent-panels"><article className="blog-reading" tabIndex={0} aria-label="Article content">
           
           <Link to="/blog" className="text-green-700 text-sm">← All articles</Link>
           {/* Title */}
@@ -168,7 +193,7 @@ function BlogPage() {
               ))}
             </div>
           )}
-        </article><aside className="blog-sidebar"><section><h2>Popular articles</h2>{[...related].sort((a,b)=>(b.views||0)-(a.views||0)).slice(0,4).map(post=><BlogCard key={post.id} post={post}/>)}</section><section><h2>Latest articles</h2>{[...related].sort((a,b)=>new Date(b.publishedAt||b.createdAt)-new Date(a.publishedAt||a.createdAt)).slice(0,4).map(post=><BlogCard key={post.id} post={post}/>)}</section></aside></div>
+        </article><aside className="blog-sidebar" tabIndex={0} aria-label="Popular and latest articles"><section><h2>Popular articles</h2>{[...related].sort((a,b)=>(b.views||0)-(a.views||0)).slice(0,4).map(post=><BlogCard key={post.id} post={post}/>)}</section><section><h2>Latest articles</h2>{[...related].sort((a,b)=>new Date(b.publishedAt||b.createdAt)-new Date(a.publishedAt||a.createdAt)).slice(0,4).map(post=><BlogCard key={post.id} post={post}/>)}</section></aside></div>
       </div>
     </>
   );

@@ -1,3 +1,4 @@
+import useBlogPanels from '../hooks/useBlogPanels';
 import PageSkeleton from '../../components/PageSkeleton';
 import '../styles/blogger.css';
 // src/blogger/pages/BlogHome.jsx
@@ -8,9 +9,9 @@ import BlogCard from '../components/BlogCard';
 import { Search } from 'lucide-react';
 
 function BlogHome() {
+  const panels = useBlogPanels();
   const [posts, setPosts] = useState([]);
   const [filteredPosts, setFilteredPosts] = useState([]);
-  const [collapsed,setCollapsed]=useState(true);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [tag,setTag]=useState('');
@@ -67,7 +68,7 @@ function BlogHome() {
           </div>
         </div>
 
-        <div className="blog-layout blog-home-layout"><div className="blog-home-main">
+        <div ref={panels} className="blog-layout blog-home-layout blog-independent-panels"><div className="blog-home-main" tabIndex={0} aria-label="Articles">
         {loading ? (
           <div className="flex justify-center py-12"><PageSkeleton /></div>
         ) : results.length > 0 ? (
@@ -80,7 +81,7 @@ function BlogHome() {
           </div>
         )}
         {!loading && results.length>visible && <button className="block mx-auto my-8 border rounded px-6 py-2" onClick={()=>setVisible(v=>v+12)}>Load more</button>}
-      </div><aside className="blog-sidebar"><section><h2>Most viewed</h2><div className="blog-sidebar-scroll">{[...posts].sort((a,b)=>(b.views||0)-(a.views||0)).slice(0,10).map(post=><BlogCard key={post.id} post={post}/>)}</div></section><section><h2><button type="button" aria-expanded={!collapsed} onClick={()=>setCollapsed(v=>!v)} className="w-full text-left">Browse tags {collapsed?'▾':'▴'}</button></h2><div hidden={collapsed} className="blog-sidebar-scroll blog-tag-scroll flex flex-wrap gap-2">{["",...tags.slice(0,80)].map(t=><button key={t} onClick={()=>setTag(t)} className={"border rounded-full px-3 py-1 text-sm "+(tag===t?"bg-green-700 text-white":"")}>{t||"All posts"}</button>)}</div></section></aside></div>
+      </div><aside className="blog-sidebar" tabIndex={0} aria-label="Most viewed and tags"><section><h2>Most viewed</h2><div className="blog-sidebar-scroll">{[...posts].sort((a,b)=>(b.views||0)-(a.views||0)).slice(0,10).map(post=><BlogCard key={post.id} post={post}/>)}</div></section><section><h2>Browse tags</h2><div className="blog-sidebar-scroll blog-tag-scroll flex flex-wrap gap-2">{["",...tags.slice(0,80)].map(t=><button key={t} onClick={()=>setTag(t)} className={"border rounded-full px-3 py-1 text-sm "+(tag===t?"bg-green-700 text-white":"")}>{t||"All posts"}</button>)}</div></section></aside></div>
       </div>
     </div>
   );
