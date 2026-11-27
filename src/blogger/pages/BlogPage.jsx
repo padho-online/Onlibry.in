@@ -11,60 +11,104 @@ import { sanitizeHtml } from '../utils/sanitizeHtml';
 
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { getBlogPostBySlug, getAllBlogPosts, calculateReadingTime } from '../services/blogService';
+import {
+  getBlogPostBySlug,
+  getAllBlogPosts,
+  calculateReadingTime
+} from '../services/blogService';
 import { formatDate } from '../services/blogService';
 import { Calendar, Clock, User, Share2 } from 'lucide-react';
+
+// SEO Engines
 import MetaX from '../../seo/MetaX';
+import SchemaX from '../../seo/SchemaX';
 
 function BlogPage() {
   const { slug } = useParams();
-  const [sharing,setSharing]=useState(false);
+
+  const [sharing, setSharing] = useState(false);
   const [post, setPost] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [related,setRelated]=useState([]);
-  const [progress,setProgress]=useState(0);
-  const [headings,setHeadings]=useState([]);
+  const [related, setRelated] = useState([]);
+  const [progress, setProgress] = useState(0);
+  const [headings, setHeadings] = useState([]);
+
   const panels = useBlogPanels(!loading && !!post && !error);
 
-  useEffect(()=>{let active=true;getAllBlogPosts(500).then(items=>{if(active)setRelated(items.filter(p=>p.slug!==slug));});return()=>{active=false}},[slug]);
+  useEffect(() => {
+    let active = true;
+
+    getAllBlogPosts(500).then(items => {
+      if (active) {
+        setRelated(items.filter(p => p.slug !== slug));
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [slug]);
 
   useEffect(() => {
     if (!post || loading || error) return;
+
     const root = document.getElementById('onlibry-article-body');
     const panel = panels.current?.querySelector('.blog-reading');
+
     if (!root || !panel) return;
+
     panel.scrollTop = 0;
 
-    setHeadings(Array.from(root.querySelectorAll('h2,h3,h4')).map((el,i) => {
-      el.id = 'article-section-' + i;
-      return {id:el.id,text:el.textContent};
-    }));
+    setHeadings(
+      Array.from(root.querySelectorAll('h2,h3,h4')).map((el, i) => {
+        el.id = 'article-section-' + i;
+
+        return {
+          id: el.id,
+          text: el.textContent
+        };
+      })
+    );
 
     const update = () => {
       const r = root.getBoundingClientRect();
-      const bottom = window.matchMedia('(min-width: 901px)').matches
-        ? panel.getBoundingClientRect().bottom : window.innerHeight;
 
-      setProgress(Math.max(0, Math.min(100, 100 * (bottom-r.top)/Math.max(1,r.height))));
+      const bottom = window.matchMedia('(min-width: 901px)').matches
+        ? panel.getBoundingClientRect().bottom
+        : window.innerHeight;
+
+      setProgress(
+        Math.max(
+          0,
+          Math.min(
+            100,
+            100 * (bottom - r.top) / Math.max(1, r.height)
+          )
+        )
+      );
     };
 
     update();
 
-    panel.addEventListener('scroll', update, {passive:true});
-    window.addEventListener('scroll', update, {passive:true});
+    panel.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('scroll', update, { passive: true });
     window.addEventListener('resize', update);
 
-    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(update) : null;
+    const observer =
+      typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(update)
+        : null;
+
     observer?.observe(root);
 
     return () => {
-      panel.removeEventListener('scroll',update);
-      window.removeEventListener('scroll',update);
-      window.removeEventListener('resize',update);
+      panel.removeEventListener('scroll', update);
+      window.removeEventListener('scroll', update);
+      window.removeEventListener('resize', update);
       observer?.disconnect();
     };
-  }, [post,loading,error,panels]);
+  }, [post, loading, error, panels]);
 
   useEffect(() => {
     loadPost();
@@ -90,22 +134,28 @@ function BlogPage() {
     }
   };
 
-  const handleShare=async()=>{
-    if(navigator.share&&/Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)){
-      try{
+  const handleShare = async () => {
+    if (
+      navigator.share &&
+      /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+    ) {
+      try {
         await navigator.share({
-          title:post.title,
-          text:post.meta?.description||post.excerpt||'',
-          url:window.location.href
+          title: post.title,
+          text: post.meta?.description || post.excerpt || '',
+          url: window.location.href
         });
-        return
-      }catch(e){
-        if(e.name==='AbortError')return
+
+        return;
+      } catch (e) {
+        if (e.name === 'AbortError') return;
       }
     }
-    setSharing(true)
+
+    setSharing(true);
   };
 
+  // Loading State
   if (loading) {
     return (
       <div className="min-h-screen bg-white flex justify-center py-20">
@@ -114,9 +164,11 @@ function BlogPage() {
     );
   }
 
+  // Error State
   if (error || !post) {
     return (
       <div className="min-h-screen bg-white text-center py-20">
+
         <h1 className="text-2xl font-bold text-gray-800 mb-4">
           Post Not Found
         </h1>
@@ -131,17 +183,29 @@ function BlogPage() {
         >
           Back to Blog
         </Link>
+
       </div>
     );
   }
 
   return (
     <>
-      {sharing&&<ShareDialog post={post} onClose={()=>setSharing(false)}/>}
+
+      {/* Share Dialog */}
+      {sharing && (
+        <ShareDialog
+          post={post}
+          onClose={() => setSharing(false)}
+        />
+      )}
 
       {/* MetaX SEO Engine */}
       <MetaX post={post} />
 
+      {/* SchemaX Structured Data Engine */}
+      <SchemaX post={post} />
+
+      {/* Canonical URL */}
       <link
         rel="canonical"
         href={`https://onlibry.in/blog/${encodeURIComponent(post.slug)}`}
@@ -150,29 +214,37 @@ function BlogPage() {
       {/* Professional White Background */}
       <div className="min-h-screen bg-white">
 
+        {/* Reading Progress Bar */}
         <div className="sticky top-0 z-10 h-1 bg-gray-100">
+
           <div
             className="h-full bg-green-600"
-            style={{width:progress+'%'}}
+            style={{ width: progress + '%' }}
           />
+
         </div>
 
+        {/* Independent Reading Panels */}
         <div
           ref={panels}
           className="blog-shell blog-layout blog-reading-layout blog-independent-panels"
         >
 
+          {/* Main Article */}
           <article
             className="blog-reading"
             tabIndex={0}
             aria-label="Article content"
           >
 
-            <Link to="/blog" className="text-green-700 text-sm">
+            <Link
+              to="/blog"
+              className="text-green-700 text-sm"
+            >
               ← All articles
             </Link>
 
-            {/* Title */}
+            {/* Article Title */}
             <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-gray-900 mb-8 text-center md:text-left leading-tight">
               {post.title}
             </h1>
@@ -180,31 +252,37 @@ function BlogPage() {
             {/* Featured Image */}
             {post.meta?.ogImage && (
               <div className="mb-10">
+
                 <img
                   src={post.meta.ogImage}
                   alt={post.title}
                   className="blog-featured"
                 />
+
               </div>
             )}
 
             {/* Table of Contents */}
-            {headings.length>0 && (
+            {headings.length > 0 && (
               <nav
                 aria-label="Table of contents"
                 className="border rounded-xl p-4 mb-6"
               >
-                <h2 className="font-bold mb-2">Contents</h2>
 
-                {headings.map(h=>(
+                <h2 className="font-bold mb-2">
+                  Contents
+                </h2>
+
+                {headings.map(h => (
                   <a
                     key={h.id}
-                    href={'#'+h.id}
+                    href={'#' + h.id}
                     className="block text-green-700 py-1"
                   >
                     {h.text}
                   </a>
                 ))}
+
               </nav>
             )}
 
@@ -241,28 +319,49 @@ function BlogPage() {
 
               <div className="flex flex-wrap items-center gap-5 text-sm text-gray-500">
 
+                {/* Author */}
                 <div className="flex items-center gap-2">
-                  <User size={15} className="text-gray-400" />
+
+                  <User
+                    size={15}
+                    className="text-gray-400"
+                  />
 
                   <span className="text-gray-700">
                     {post.authorName || 'Onlibry Team'}
                   </span>
+
                 </div>
 
+                {/* Published Date */}
                 <div className="flex items-center gap-2">
-                  <Calendar size={15} className="text-gray-400" />
+
+                  <Calendar
+                    size={15}
+                    className="text-gray-400"
+                  />
 
                   <span className="text-gray-700">
                     {formatDate(post.publishedAt || post.createdAt)}
                   </span>
+
                 </div>
 
+                {/* Reading Time */}
                 <div className="flex items-center gap-2">
-                  <Clock size={15} className="text-gray-400" />
+
+                  <Clock
+                    size={15}
+                    className="text-gray-400"
+                  />
 
                   <span className="text-gray-700">
-                    {post.readingTime?.text || calculateReadingTime(post.content||'').text}
+                    {
+                      post.readingTime?.text ||
+                      calculateReadingTime(post.content || '').text
+                    }
                   </span>
+
                 </div>
 
               </div>
@@ -273,13 +372,18 @@ function BlogPage() {
                 className="flex items-center gap-2 px-4 py-2 bg-gray-50 hover:bg-gray-100 rounded-lg transition text-gray-600 hover:text-gray-800 border border-gray-200"
                 title="Share this post"
               >
+
                 <Share2 size={16} />
-                <span className="text-sm">Share</span>
+
+                <span className="text-sm">
+                  Share
+                </span>
+
               </button>
 
             </div>
 
-            {/* Tags */}
+            {/* Article Tags */}
             {post.meta?.tags && (
               <div className="flex flex-wrap gap-2 mt-4 pt-2">
 
@@ -308,32 +412,50 @@ function BlogPage() {
             aria-label="Popular and latest articles"
           >
 
+            {/* Popular Articles */}
             <section>
+
               <h2>Popular articles</h2>
 
               {[...related]
-                .sort((a,b)=>(b.views||0)-(a.views||0))
-                .slice(0,4)
-                .map(post=>(
-                  <BlogCard key={post.id} post={post}/>
+                .sort((a, b) => (b.views || 0) - (a.views || 0))
+                .slice(0, 4)
+                .map(post => (
+                  <BlogCard
+                    key={post.id}
+                    post={post}
+                  />
                 ))}
+
             </section>
 
+            {/* Latest Articles */}
             <section>
+
               <h2>Latest articles</h2>
 
               {[...related]
-                .sort((a,b)=>new Date(b.publishedAt||b.createdAt)-new Date(a.publishedAt||a.createdAt))
-                .slice(0,4)
-                .map(post=>(
-                  <BlogCard key={post.id} post={post}/>
+                .sort(
+                  (a, b) =>
+                    new Date(b.publishedAt || b.createdAt) -
+                    new Date(a.publishedAt || a.createdAt)
+                )
+                .slice(0, 4)
+                .map(post => (
+                  <BlogCard
+                    key={post.id}
+                    post={post}
+                  />
                 ))}
+
             </section>
 
           </aside>
 
         </div>
+
       </div>
+
     </>
   );
 }
