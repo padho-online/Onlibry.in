@@ -16,7 +16,7 @@ function InfoHub() {
   const { tab } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState(tab || 'privacy');
+  const [activeTab, setActiveTab] = useState(tab || 'about');
   const [feedbackRating, setFeedbackRating] = useState(0);
   const [feedbackHoverRating, setFeedbackHoverRating] = useState(0);
   const [feedbackText, setFeedbackText] = useState('');
@@ -147,61 +147,42 @@ function InfoHub() {
 ];
 
   return (
-    <div className="py-6 md:py-10 max-w-6xl mx-auto px-4">
+    <div className="py-4 md:py-8 max-w-5xl mx-auto px-3 sm:px-4 text-sm">
       {/* Back Button */}
       <Link to="/" className="inline-flex items-center gap-1 text-green-600 hover:text-green-700 mb-6 text-sm">
         <FaArrowLeft size={14} /> Back to Home
       </Link>
 
-      {/* Header */}
-<div className="text-center mb-8">
-  <div className="flex items-center justify-center gap-3 mb-2">
-    <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
-      <FaHome size={32} className="text-green-600" />
-    </div>
-    <h1 className="text-2xl md:text-3xl font-bold text-gray-800">Help & Information Center</h1>
-  </div>
-  <p className="text-sm text-gray-500">Privacy policy, terms, contact info & feedback</p>
-</div>
-
-            {/* Tabs with Links - Horizontal Scrollable for Mobile */}
-      <div className="flex gap-2 mb-8 border-b border-gray-200 pb-3 overflow-x-auto scrollbar-thin">
-        {tabs.map((tabItem) => {
-          const Icon = tabItem.icon;
-          const isActive = activeTab === tabItem.id;
-          return (
-            <Link
-              key={tabItem.id}
-              to={tabItem.path}
-              onClick={() => handleTabChange(tabItem.id)}
-              className={`px-5 py-2.5 rounded-lg text-sm font-medium transition flex items-center gap-2 whitespace-nowrap ${
-                isActive
-                  ? 'bg-green-600 text-white shadow-md'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              <Icon size={16} />
-              {tabItem.label}
-            </Link>
-          );
-        })}
-      </div>
+      <header className="rounded-2xl border border-green-200 bg-green-50 px-5 py-6 md:py-9 text-center mb-6">
+        <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-white text-green-700"><FaInfoCircle size={22} /></div>
+        <p className="text-xs font-semibold uppercase tracking-widest text-green-700 mb-2">Onlibry Support</p>
+        <h1 className="text-xl md:text-3xl font-bold text-gray-900">Help &amp; Information Center</h1>
+        <p className="mt-2 text-sm text-gray-600">Learn about Onlibry, review our policies, contact us or share your feedback.</p>
+      </header>
+      <nav aria-label="Information sections" className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 mb-6 rounded-xl border border-gray-200 bg-white p-2">
+        {tabs.map(({id, label, icon: Icon, path}) => (
+          <Link key={id} to={path} aria-current={activeTab === id ? 'page' : undefined}
+            className={`flex items-center justify-center gap-2 rounded-lg px-2 py-3 text-xs md:text-sm font-medium transition focus-visible:ring-2 focus-visible:ring-green-500 ${activeTab === id ? 'bg-green-600 text-white' : 'text-gray-700 hover:bg-green-50 hover:text-green-700'}`}>
+            <Icon className="shrink-0" size={15} /><span>{label}</span>
+          </Link>
+        ))}
+      </nav>
 
   {/* ============================================ */}
 {/* ABOUT US TAB */}
 {/* ============================================ */}
 {activeTab === 'about' && (
-  <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 md:p-8">
+  <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 md:p-8">
     <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-200">
-      <FaInfoCircle size={28} className="text-green-600" />
-      <h2 className="text-xl md:text-2xl font-bold text-gray-800">About Onlibry</h2>
+      <FaInfoCircle size={22} className="text-green-600" />
+      <h2 className="text-lg md:text-2xl font-bold text-gray-800">About Onlibry</h2>
     </div>
     
     <div className="space-y-6">
       {/* Mission Section */}
       <section>
-        <h3 className="text-lg font-semibold text-green-600 mb-2">Our Mission</h3>
-        <p className="text-gray-600 leading-relaxed">
+        <h3 className="text-base md:text-lg font-semibold text-green-600 mb-2">Our Mission</h3>
+        <p className="text-gray-700 leading-relaxed break-words">
           Onlibry's mission is to provide every student with most affordable, quality educational materials. 
           We believe that money should never be a barrier to learning and education.
         </p>
@@ -209,7 +190,7 @@ function InfoHub() {
 
       {/* What We Offer */}
       <section>
-        <h3 className="text-lg font-semibold text-green-600 mb-2">What We Offer</h3>
+        <h3 className="text-base md:text-lg font-semibold text-green-600 mb-2">What We Offer</h3>
         <ul className="space-y-2 text-gray-600">
           <li className="flex items-start gap-2">
             <FaCheckCircle className="text-green-500 mt-1 flex-shrink-0" size={14} />
@@ -236,8 +217,8 @@ function InfoHub() {
 
       {/* Our Story */}
       <section>
-        <h3 className="text-lg font-semibold text-green-600 mb-2">Our Story</h3>
-        <p className="text-gray-600 leading-relaxed">
+        <h3 className="text-base md:text-lg font-semibold text-green-600 mb-2">Our Story</h3>
+        <p className="text-gray-700 leading-relaxed break-words">
           Onlibry was created by a group of passionate educators and developers. We noticed that 
           many students lack access to quality study materials or cannot afford expensive courses. 
           That's why we built Onlibry - a free and affordable digital library where any student can find the 
@@ -247,13 +228,13 @@ function InfoHub() {
 
       {/* Our Team */}
       <section>
-        <h3 className="text-lg font-semibold text-green-600 mb-2">Our Team</h3>
-        <p className="text-gray-600 leading-relaxed">
+        <h3 className="text-base md:text-lg font-semibold text-green-600 mb-2">Our Team</h3>
+        <p className="text-gray-700 leading-relaxed break-words">
           We are a small but dedicated team constantly working to improve the website and add 
           new materials. If you'd like to contribute or have any suggestions, please feel free 
           to reach out to us.
         </p>
-        <p className="text-gray-600 leading-relaxed">
+        <p className="text-gray-700 leading-relaxed break-words">
           Our intention is not to raise money from this website, It is the server charges that forces us to keep price tag on some resources.
           We are providing resources for most affordable price and most of the resources are free. Still if you feel you can't afford please contact Us we will give access to the resource.
         </p>
@@ -261,7 +242,7 @@ function InfoHub() {
 
       {/* Why Onlibry */}
       <section>
-        <h3 className="text-lg font-semibold text-green-600 mb-2">Why Choose Onlibry?</h3>
+        <h3 className="text-base md:text-lg font-semibold text-green-600 mb-2">Why Choose Onlibry?</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
           <div className="bg-gray-50 rounded-lg p-3 text-center">
             <div className="text-2xl mb-1">💰</div>
@@ -288,7 +269,7 @@ function InfoHub() {
 
       {/* Contact CTA */}
       <section className="bg-green-50 rounded-lg p-4 text-center">
-        <h3 className="text-lg font-semibold text-gray-800 mb-2">Have Questions?</h3>
+        <h3 className="text-base md:text-lg font-semibold text-gray-800 mb-2">Have Questions?</h3>
         <p className="text-sm text-gray-600 mb-3">
           We'd love to hear from you. Feel free to reach out to us.
         </p>
@@ -309,16 +290,16 @@ function InfoHub() {
       {/* PRIVACY POLICY TAB */}
       {/* ============================================ */}
       {activeTab === 'privacy' && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 md:p-8">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 md:p-8">
           <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-200">
-            <FaShieldAlt size={28} className="text-green-600" />
-            <h2 className="text-xl md:text-2xl font-bold text-gray-800">Privacy Policy</h2>
+            <FaShieldAlt size={22} className="text-green-600" />
+            <h2 className="text-lg md:text-2xl font-bold text-gray-800">Privacy Policy</h2>
           </div>
           
           <div className="space-y-6">
             <section>
-              <h3 className="text-lg font-semibold text-gray-800 mb-2">1. Information We Collect</h3>
-              <p className="text-gray-600 leading-relaxed">
+              <h3 className="text-base md:text-lg font-semibold text-gray-800 mb-2">1. Information We Collect</h3>
+              <p className="text-gray-700 leading-relaxed break-words">
                 We collect information you provide directly to us, such as when you create an account, 
                 save files, or contact us. This may include your name, email address, and any other 
                 information you choose to provide.
@@ -326,8 +307,8 @@ function InfoHub() {
             </section>
 
             <section>
-              <h3 className="text-lg font-semibold text-gray-800 mb-2">2. How We Use Your Information</h3>
-              <p className="text-gray-600 leading-relaxed">
+              <h3 className="text-base md:text-lg font-semibold text-gray-800 mb-2">2. How We Use Your Information</h3>
+              <p className="text-gray-700 leading-relaxed break-words">
                 We use the information we collect to provide, maintain, and improve our services, 
                 to process your transactions, to communicate with you, and to protect against fraud 
                 and abuse.
@@ -335,8 +316,8 @@ function InfoHub() {
             </section>
 
             <section>
-              <h3 className="text-lg font-semibold text-gray-800 mb-2">3. Sharing of Information</h3>
-              <p className="text-gray-600 leading-relaxed">
+              <h3 className="text-base md:text-lg font-semibold text-gray-800 mb-2">3. Sharing of Information</h3>
+              <p className="text-gray-700 leading-relaxed break-words">
                 We do not share your personal information with third parties except as necessary to 
                 provide our services (e.g., payment processing), to comply with the law, or to protect 
                 our rights.
@@ -344,24 +325,24 @@ function InfoHub() {
             </section>
 
             <section>
-              <h3 className="text-lg font-semibold text-gray-800 mb-2">4. Data Security</h3>
-              <p className="text-gray-600 leading-relaxed">
+              <h3 className="text-base md:text-lg font-semibold text-gray-800 mb-2">4. Data Security</h3>
+              <p className="text-gray-700 leading-relaxed break-words">
                 We take reasonable measures to protect your personal information from loss, theft, 
                 misuse, and unauthorized access. However, no internet transmission is completely secure.
               </p>
             </section>
 
             <section>
-              <h3 className="text-lg font-semibold text-gray-800 mb-2">5. Your Rights</h3>
-              <p className="text-gray-600 leading-relaxed">
+              <h3 className="text-base md:text-lg font-semibold text-gray-800 mb-2">5. Your Rights</h3>
+              <p className="text-gray-700 leading-relaxed break-words">
                 You may access, update, or delete your account information at any time by logging 
                 into your account settings. You may also contact us for assistance.
               </p>
             </section>
 
             <section>
-              <h3 className="text-lg font-semibold text-gray-800 mb-2">6. Contact Us</h3>
-              <p className="text-gray-600 leading-relaxed">
+              <h3 className="text-base md:text-lg font-semibold text-gray-800 mb-2">6. Contact Us</h3>
+              <p className="text-gray-700 leading-relaxed break-words">
                 If you have any questions about this Privacy Policy, please contact us at:
                 <br />
                 <a href="mailto:eduweb0123@gmail.com?subject=Hello&body=I%20want%20to%20contact%20you." className="text-green-600 hover:underline">eduweb0123@gmail.com</a>
@@ -379,24 +360,24 @@ function InfoHub() {
       {/* TERMS & CONDITIONS TAB */}
       {/* ============================================ */}
       {activeTab === 'terms' && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 md:p-8">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 md:p-8">
           <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-200">
-            <FaFileAlt size={28} className="text-green-600" />
-            <h2 className="text-xl md:text-2xl font-bold text-gray-800">Terms & Conditions</h2>
+            <FaFileAlt size={22} className="text-green-600" />
+            <h2 className="text-lg md:text-2xl font-bold text-gray-800">Terms & Conditions</h2>
           </div>
           
           <div className="space-y-6">
             <section>
-              <h3 className="text-lg font-semibold text-gray-800 mb-2">1. Acceptance of Terms</h3>
-              <p className="text-gray-600 leading-relaxed">
+              <h3 className="text-base md:text-lg font-semibold text-gray-800 mb-2">1. Acceptance of Terms</h3>
+              <p className="text-gray-700 leading-relaxed break-words">
                 By accessing or using Onlibry, you agree to be bound by these Terms & Conditions. 
                 If you do not agree to these terms, please do not use our services.
               </p>
             </section>
 
             <section>
-              <h3 className="text-lg font-semibold text-gray-800 mb-2">2. User Accounts</h3>
-              <p className="text-gray-600 leading-relaxed">
+              <h3 className="text-base md:text-lg font-semibold text-gray-800 mb-2">2. User Accounts</h3>
+              <p className="text-gray-700 leading-relaxed break-words">
                 To access certain features, you must create an account. You are responsible for 
                 maintaining the confidentiality of your account and for all activities that occur 
                 under your account.
@@ -404,8 +385,8 @@ function InfoHub() {
             </section>
 
             <section>
-              <h3 className="text-lg font-semibold text-gray-800 mb-2">3. Subscription & Payments</h3>
-              <p className="text-gray-600 leading-relaxed">
+              <h3 className="text-base md:text-lg font-semibold text-gray-800 mb-2">3. Subscription & Payments</h3>
+              <p className="text-gray-700 leading-relaxed break-words">
                 Some features require a paid subscription. By purchasing a subscription, you agree 
                 to pay the applicable fees. Subscriptions auto-renew unless cancelled before the 
                 renewal date.
@@ -413,40 +394,40 @@ function InfoHub() {
             </section>
 
             <section>
-              <h3 className="text-lg font-semibold text-gray-800 mb-2">4. Intellectual Property</h3>
-              <p className="text-gray-600 leading-relaxed">
+              <h3 className="text-base md:text-lg font-semibold text-gray-800 mb-2">4. Intellectual Property</h3>
+              <p className="text-gray-700 leading-relaxed break-words">
                 All content on Onlibry, including text, graphics, logos, and software, is the property 
                 of Onlibry or its content suppliers and is protected by copyright laws.
               </p>
             </section>
 
             <section>
-              <h3 className="text-lg font-semibold text-gray-800 mb-2">5. Prohibited Conduct</h3>
-              <p className="text-gray-600 leading-relaxed">
+              <h3 className="text-base md:text-lg font-semibold text-gray-800 mb-2">5. Prohibited Conduct</h3>
+              <p className="text-gray-700 leading-relaxed break-words">
                 You may not use our services for any illegal purpose, to distribute malware, to harass 
                 others, or to infringe on intellectual property rights.
               </p>
             </section>
 
             <section>
-              <h3 className="text-lg font-semibold text-gray-800 mb-2">6. Termination</h3>
-              <p className="text-gray-600 leading-relaxed">
+              <h3 className="text-base md:text-lg font-semibold text-gray-800 mb-2">6. Termination</h3>
+              <p className="text-gray-700 leading-relaxed break-words">
                 We may terminate or suspend your account immediately, without prior notice, for conduct 
                 that violates these terms or is harmful to other users.
               </p>
             </section>
 
             <section>
-              <h3 className="text-lg font-semibold text-gray-800 mb-2">7. Limitation of Liability</h3>
-              <p className="text-gray-600 leading-relaxed">
+              <h3 className="text-base md:text-lg font-semibold text-gray-800 mb-2">7. Limitation of Liability</h3>
+              <p className="text-gray-700 leading-relaxed break-words">
                 Onlibry shall not be liable for any indirect, incidental, or consequential damages 
                 arising from your use of our services.
               </p>
             </section>
 
             <section>
-              <h3 className="text-lg font-semibold text-gray-800 mb-2">8. Changes to Terms</h3>
-              <p className="text-gray-600 leading-relaxed">
+              <h3 className="text-base md:text-lg font-semibold text-gray-800 mb-2">8. Changes to Terms</h3>
+              <p className="text-gray-700 leading-relaxed break-words">
                 We may modify these terms at any time. Continued use of our services after changes 
                 constitutes acceptance of the new terms.
               </p>
@@ -465,41 +446,41 @@ function InfoHub() {
       {activeTab === 'contact' && (
         <div>
           {/* Contact Options Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-6 mb-5">
             {/* Email Card */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 text-center hover:shadow-md transition">
-              <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                <FaEnvelope size={28} className="text-green-600" />
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 md:p-6 text-center hover:shadow-md transition">
+              <div className="w-11 h-11 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                <FaEnvelope size={22} className="text-green-600" />
               </div>
-              <h3 className="text-lg font-semibold text-gray-800 mb-2">Email Us</h3>
+              <h3 className="text-base md:text-lg font-semibold text-gray-800 mb-2">Email Us</h3>
               <p className="text-sm text-gray-500 mb-3">For general inquiries & support</p>
-              <a href="mailto:eduweb0123@gmail.com?subject=Hello&body=I%20want%20to%20contact%20you." className="text-green-600 hover:underline font-medium">
+              <a href="mailto:eduweb0123@gmail.com?subject=Hello&body=I%20want%20to%20contact%20you." className="text-green-700 hover:underline font-medium break-all">
                 eduweb0123@gmail.com
               </a>
             </div>
 
             {/* Phone Card */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 text-center hover:shadow-md transition">
-              <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                <FaWhatsapp size={28} className="text-green-600" />
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 md:p-6 text-center hover:shadow-md transition">
+              <div className="w-11 h-11 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                <FaWhatsapp size={22} className="text-green-600" />
               </div>
-              <h3 className="text-lg font-semibold text-gray-800 mb-2">Message Us</h3>
+              <h3 className="text-base md:text-lg font-semibold text-gray-800 mb-2">Message Us</h3>
               <p className="text-sm text-gray-500 mb-3">Mon-Fri, 10 AM - 6 PM</p>
-              <a href="https://api.whatsapp.com/send?phone=918985363932&text=Hi%2C%20I%27m%20an%20Onlibry%20user%20I%20want%20to%20contact%20you." className="text-green-600 hover:underline font-medium">
+              <a href="https://api.whatsapp.com/send?phone=918985363932&text=Hi%2C%20I%27m%20an%20Onlibry%20user%20I%20want%20to%20contact%20you." className="text-green-700 hover:underline font-medium break-all">
                 Only Whatsapp
               </a>
             </div>
           </div>
 
           {/* Office Address
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 md:p-6 mb-5">
             <div className="flex items-start gap-4">
-              <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
-                <FaMapMarkerAlt size={28} className="text-green-600" />
+              <div className="w-11 h-11 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+                <FaMapMarkerAlt size={22} className="text-green-600" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-gray-800 mb-2">Office Address</h3>
-                <p className="text-gray-600 leading-relaxed">
+                <h3 className="text-base md:text-lg font-semibold text-gray-800 mb-2">Office Address</h3>
+                <p className="text-gray-700 leading-relaxed break-words">
                   Onlibry Educational Services,<br />
                   123, Knowledge Park,<br />
                   Hyderabad - 500001,<br />
@@ -510,13 +491,13 @@ function InfoHub() {
           </div> */}
 
           {/* Business Hours */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 md:p-6 mb-5">
             <div className="flex items-start gap-4">
-              <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
-                <FaClock size={28} className="text-green-600" />
+              <div className="w-11 h-11 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+                <FaClock size={22} className="text-green-600" />
               </div>
               <div className="flex-1">
-                <h3 className="text-lg font-semibold text-gray-800 mb-2">Business Hours</h3>
+                <h3 className="text-base md:text-lg font-semibold text-gray-800 mb-2">Business Hours</h3>
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   <span className="text-gray-600">Monday - Friday:</span>
                   <span className="text-gray-800">01:00 PM - 6:00 PM</span>
@@ -532,11 +513,11 @@ function InfoHub() {
           {/* Social Links */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <div className="flex items-start gap-4">
-              <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
-                <FaGlobe size={28} className="text-green-600" />
+              <div className="w-11 h-11 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+                <FaGlobe size={22} className="text-green-600" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-gray-800 mb-2">Join our community groups</h3>
+                <h3 className="text-base md:text-lg font-semibold text-gray-800 mb-2">Join our community groups</h3>
                 <div className="flex flex-wrap gap-4 mt-2">
                   <a href="https://t.me/onlibry" className="flex items-center gap-2 text-gray-600 hover:text-green-600 transition">
                     <FaTelegram size={18} /> Telegram
@@ -579,10 +560,10 @@ function InfoHub() {
             </div>
           )}
 
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 md:p-8">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 md:p-8">
             <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-200">
-              <FaCommentDots size={28} className="text-green-600" />
-              <h2 className="text-xl md:text-2xl font-bold text-gray-800">Share Your Feedback</h2>
+              <FaCommentDots size={22} className="text-green-600" />
+              <h2 className="text-lg md:text-2xl font-bold text-gray-800">Share Your Feedback</h2>
             </div>
 
             <form onSubmit={handleFeedbackSubmit}>
@@ -730,7 +711,7 @@ function InfoHub() {
           {/* Coffee Support
           <div className="mt-8 text-center">
             <div className="bg-amber-50 rounded-xl p-6 border border-amber-200">
-              <h3 className="text-lg font-semibold text-gray-800 mb-2">☕ Support Our Work</h3>
+              <h3 className="text-base md:text-lg font-semibold text-gray-800 mb-2">☕ Support Our Work</h3>
               <p className="text-sm text-gray-600 mb-3">
                 If you like our work and want to keep Onlibry free, consider supporting us.
               </p>

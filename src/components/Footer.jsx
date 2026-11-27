@@ -18,13 +18,13 @@ import { FaFacebook, FaInstagram, FaTelegram, FaTwitter, FaWhatsapp, FaYoutube }
 
 function Footer() {
   return (
-    <footer className="bg-white border-t border-gray-200 mt-auto">
-      <div className="container mx-auto px-4 py-5 max-w-7xl">
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-5 mb-5">
+    <footer className="bg-white border-t border-gray-200 mt-auto text-center">
+      <div className="container mx-auto px-4 py-7 max-w-6xl">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-5 mb-5">
           {/* Brand */}
           <div className="col-span-2 md:col-span-1">
-            <h3 className="text-sm font-bold text-green-600 mb-2">Onlibry</h3>
-            <p className="text-[11px] text-gray-500 leading-relaxed">
+            <h3 className="text-lg font-bold text-green-600 mb-2">Onlibry</h3>
+            <p className="text-xs text-gray-500 leading-relaxed">
               Your one-stop platform for educational resources, mock tests, and study materials.
             </p>
           </div>
@@ -33,11 +33,11 @@ function Footer() {
           <div>
             <h3 className="text-xs font-semibold text-gray-800 mb-2">Explore</h3>
             <ul className="space-y-1.5">
-              <li><Link to="/" className="text-[11px] text-gray-500 hover:text-green-600 flex items-center gap-1"><Home size={11} /> Home</Link></li>
-              <li><Link to="/files" className="text-[11px] text-gray-500 hover:text-green-600 flex items-center gap-1"><FileText size={11} /> Files</Link></li>
-              <li><Link to="/folders" className="text-[11px] text-gray-500 hover:text-green-600 flex items-center gap-1"><Folder size={11} /> Folders</Link></li>
-              <li><Link to="/mock-tests" className="text-[11px] text-gray-500 hover:text-green-600 flex items-center gap-1"><SquarePen size={11} /> Mock Tests</Link></li>
-              <li><Link to="/quizzes" className="text-[11px] text-gray-500 hover:text-green-600 flex items-center gap-1"><NotebookPen size={11} /> Quiz</Link></li>
+              <li><Link to="/" className="text-xs text-gray-500 hover:text-green-600 flex items-center justify-center gap-1"><Home size={11} /> Home</Link></li>
+              <li><Link to="/files" className="text-xs text-gray-500 hover:text-green-600 flex items-center justify-center gap-1"><FileText size={11} /> Files</Link></li>
+              <li><Link to="/folders" className="text-xs text-gray-500 hover:text-green-600 flex items-center justify-center gap-1"><Folder size={11} /> Folders</Link></li>
+              <li><Link to="/mock-tests" className="text-xs text-gray-500 hover:text-green-600 flex items-center justify-center gap-1"><SquarePen size={11} /> Mock Tests</Link></li>
+              <li><Link to="/quizzes" className="text-xs text-gray-500 hover:text-green-600 flex items-center justify-center gap-1"><NotebookPen size={11} /> Quiz</Link></li>
             </ul>
           </div>
 
@@ -45,18 +45,18 @@ function Footer() {
           <div>
             <h3 className="text-xs font-semibold text-gray-800 mb-2">Support & Info</h3>
             <ul className="space-y-1.5">
-              <li><a href="/info" className="text-[11px] text-gray-500 hover:text-green-600 flex items-center gap-1"><Mail size={11} /> Info Hub</a></li>
-              <li><a href="/info/contact" className="text-[11px] text-gray-500 hover:text-green-600 flex items-center gap-1"><House size={11} /> Contact Us</a></li>
-              <li><a href="/info/feedback" className="text-[11px] text-gray-500 hover:text-green-600 flex items-center gap-1"><MessageSquareHeart size={11} /> Feedback</a></li>
-              <li><Link to="/pricing" className="text-[11px] text-gray-500 hover:text-green-600 flex items-center gap-1"><CreditCard size={11} /> Pricing</Link></li>
-              <li><Link to="https://md-habibul.vercel.app" className="text-[11px] text-gray-500 hover:text-green-600 flex items-center gap-1"><CircleUserRound size={11} /> Developer Info</Link></li>
+              <li><a href="/info" className="text-xs text-gray-500 hover:text-green-600 flex items-center justify-center gap-1"><Mail size={11} /> Info Hub</a></li>
+              <li><a href="/info/contact" className="text-xs text-gray-500 hover:text-green-600 flex items-center justify-center gap-1"><House size={11} /> Contact Us</a></li>
+              <li><a href="/info/feedback" className="text-xs text-gray-500 hover:text-green-600 flex items-center justify-center gap-1"><MessageSquareHeart size={11} /> Feedback</a></li>
+              <li><Link to="/pricing" className="text-xs text-gray-500 hover:text-green-600 flex items-center justify-center gap-1"><CreditCard size={11} /> Pricing</Link></li>
+              <li><a href="https://md-habibul.vercel.app" className="text-xs text-gray-500 hover:text-green-600 flex items-center justify-center gap-1"><CircleUserRound size={11} /> Developer Info</a></li>
             </ul>
           </div>
 
           {/* Follow Us */} 
           <div>
             <h3 className="text-xs font-semibold text-gray-800 mb-2">Follow</h3>
-            <div className="flex gap-3">
+            <div className="flex flex-wrap justify-center gap-3">
               <a href="https://chat.whatsapp.com/CoSssFN5KtLEKLxCCafQAV" className="w-7 h-7 bg-gray-100 rounded-full flex items-center justify-center hover:bg-green-100 transition">
                 <FaWhatsapp size={14} className="text-gray-600" />
               </a>
@@ -71,15 +71,15 @@ function Footer() {
         </div>
 
         {/* Bottom Bar */}
-        <div className="pt-4 border-t border-gray-200 flex flex-col md:flex-row justify-between items-center gap-2">
-          <p className="text-[10px] text-gray-400">
+        <div className="pt-4 border-t border-gray-200 flex flex-col justify-center items-center gap-2">
+          <p className="text-xs text-gray-500">
             © {new Date().getFullYear()} Onlibry. All rights reserved.
           </p>
-          <div className="flex gap-4">
-             <a href="/info/about" className="text-[10px] text-gray-400 hover:text-green-600">About Us</a>
-            <a href="/info/terms" className="text-[10px] text-gray-400 hover:text-green-600">Terms & Conditions</a>
-            <a href="/info/privacy" className="text-[10px] text-gray-400 hover:text-green-600">Privacy Policy</a>
-            <a href="/info/feedback" className="text-[10px] text-gray-400 hover:text-green-600">Feedback</a>
+          <div className="flex flex-wrap justify-center gap-x-4 gap-y-2">
+             <a href="/info/about" className="text-xs text-gray-500 hover:text-green-600">About Us</a>
+            <a href="/info/terms" className="text-xs text-gray-500 hover:text-green-600">Terms & Conditions</a>
+            <a href="/info/privacy" className="text-xs text-gray-500 hover:text-green-600">Privacy Policy</a>
+            <a href="/info/feedback" className="text-xs text-gray-500 hover:text-green-600">Feedback</a>
           </div>
         </div>
       </div>
