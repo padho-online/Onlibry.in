@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { LayoutDashboard, Upload, Files, CreditCard, Users, Calendar, Tag, Home, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Upload, Files, Calendar, Tag, Home, Menu, X } from 'lucide-react';
 import HomeEditor from './HomeEditor';
 
 function AdminDashboard() {
@@ -15,8 +15,6 @@ function AdminDashboard() {
     { id: 'upload', name: 'Upload', icon: Upload, path: '/admin/upload' },
     { id: 'files', name: 'Files', icon: Files, path: '/admin/files' },
     { id: 'home', name: 'Home Editor', icon: Home, path: '/admin/home' },
-    { id: 'logs', name: 'Payments', icon: CreditCard, path: '/admin/logs' },
-    { id: 'users', name: 'Users', icon: Users, path: '/admin/users' },
     { id: 'plans', name: 'Plans', icon: Tag, path: '/admin/plans' }
   ];
 

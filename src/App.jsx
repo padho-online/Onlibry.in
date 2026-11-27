@@ -49,8 +49,6 @@ import InfoHub from './Info/InfoHub';
 
 // Admin Pages
 import AdminDashboard from './pages/admin/AdminDashboard';
-import PaymentLogs from './pages/admin/PaymentLogs';
-import UsersManagement from './pages/admin/UsersManagement';
 import PlansEditor from './pages/admin/PlansEditor';
 import FilesManager from './pages/admin/FilesManager';
 import FileUploadManager from './pages/admin/FileUploadManager';
@@ -167,8 +165,6 @@ function App() {
                   <Route path="upload" element={<FileUploadManager />} />
                   <Route path="files" element={<FilesManager />} />
                   <Route path="home" element={<HomeEditor />} />
-                  <Route path="logs" element={<PaymentLogs />} />
-                  <Route path="users" element={<UsersManagement />} />
                   <Route path="plans" element={<PlansEditor />} />
                 </Route>
 
