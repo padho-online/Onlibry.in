@@ -19,6 +19,7 @@ import { CartProvider } from './contexts/CartContext';
 
 // SEO Engine
 import CanonicalX from './seo/CanonicalX';
+import MetaX from './seo/MetaX';
 
 // Analytics and Logging
 import {
@@ -103,7 +104,7 @@ function App() {
 
             {/* CanonicalX SEO Engine */}
             <CanonicalX />
-
+            <MetaX />
             <MainLayout>
 
               {/* Page View Tracking */}
