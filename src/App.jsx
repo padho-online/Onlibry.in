@@ -67,6 +67,7 @@ import InfoHub from './Info/InfoHub';
 // Admin Pages
 import AdminDashboard from './pages/admin/AdminDashboard';
 import PlansEditor from './pages/admin/PlansEditor';
+import IndexXDashboard from './pages/admin/IndexXDashboard';
 import FilesManager from './pages/admin/FilesManager';
 import FileUploadManager from './pages/admin/FileUploadManager';
 import HomeEditor from './pages/admin/HomeEditor';
@@ -342,6 +343,7 @@ function App() {
                     path="plans"
                     element={<PlansEditor />}
                   />
+                  <Route path="seo" element={<IndexXDashboard />} />
 
                 </Route>
 

@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { LayoutDashboard, Upload, Files, Calendar, Tag, Home, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Upload, Files, Calendar, Tag, Home, Menu, X, BarChart3 } from 'lucide-react';
 import HomeEditor from './HomeEditor';
 
 function AdminDashboard() {
@@ -15,7 +15,8 @@ function AdminDashboard() {
     { id: 'upload', name: 'Upload', icon: Upload, path: '/admin/upload' },
     { id: 'files', name: 'Files', icon: Files, path: '/admin/files' },
     { id: 'home', name: 'Home Editor', icon: Home, path: '/admin/home' },
-    { id: 'plans', name: 'Plans', icon: Tag, path: '/admin/plans' }
+    { id: 'plans', name: 'Plans', icon: Tag, path: '/admin/plans' },
+    { id: 'seo', name: 'IndexX SEO', icon: BarChart3, path: '/admin/seo' }
   ];
 
   useEffect(() => {
@@ -89,7 +90,7 @@ function AdminDashboard() {
         </div>
 
         {/* Main Content */}
-        <div className="flex-1">
+        <div className="flex-1 min-w-0">
           <div className="bg-white rounded-xl shadow-md p-4 md:p-6 border border-gray-200">
             <Outlet />
           </div>
