@@ -18,6 +18,30 @@
       "destination": "/habibul.html"
     },
     {
+      "source": "/blog/dashboard",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/blog/create",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/blog/edit/:path*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/",
+      "destination": "/api/render?path=/"
+    },
+    {
+      "source": "/:page(pricing|files|folders|mock-tests|quizzes|blog|exam-updates|notifications|info)",
+      "destination": "/api/render?path=/:page"
+    },
+    {
+      "source": "/blog/:slug",
+      "destination": "/api/render?path=/blog/:slug"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
