@@ -1,3 +1,4 @@
+import PageSkeleton from '../components/PageSkeleton';
 // src/pages/SavedFilesPage.jsx - Complete with responsive grid
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -342,7 +343,7 @@ function SavedFilesPage() {
         <>
           {loadingSaved ? (
             <div className="flex justify-center py-12">
-              <div className="w-8 h-8 border-3 border-green-500 border-t-transparent rounded-full animate-spin"></div>
+              <PageSkeleton />
             </div>
           ) : savedFiles.length > 0 ? (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 md:gap-4">
@@ -365,7 +366,7 @@ function SavedFilesPage() {
         <>
           {loadingPurchased ? (
             <div className="flex justify-center py-12">
-              <div className="w-8 h-8 border-3 border-green-500 border-t-transparent rounded-full animate-spin"></div>
+              <PageSkeleton />
             </div>
           ) : totalPurchased > 0 ? (
             <div className="space-y-6 md:space-y-8">

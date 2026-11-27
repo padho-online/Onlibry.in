@@ -1,3 +1,4 @@
+import PageSkeleton from '../../components/PageSkeleton';
 // src/blogger/pages/EditPost.jsx
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -96,7 +97,7 @@ function EditPost() {
   if (loading) {
     return (
       <div className="flex justify-center py-20">
-        <div className="w-8 h-8 border-3 border-green-500 border-t-transparent rounded-full animate-spin"></div>
+        <PageSkeleton />
       </div>
     );
   }

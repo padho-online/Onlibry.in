@@ -1,12 +1,16 @@
+import { uploadImage } from '../services/blogService';
 import '../styles/blogger.css';
 // src/blogger/components/SeoPanel.jsx
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Globe, Search, Image as ImageIcon, Hash, Eye } from 'lucide-react';
 
 const SeoPanel = ({ meta, onUpdate, previewUrl }) => {
   const [showPreview, setShowPreview] = useState(false);
 
+  const latest=useRef(meta);latest.current=meta;
+  const busy=useRef(false);const [uploading,setUploading]=useState(false),[uploadError,setUploadError]=useState('');
+  const upload=async(file)=>{if(!file||busy.current)return;if(!/^image\/(png|jpeg|gif|webp|avif)$/.test(file.type)||file.size>5*1024*1024){setUploadError('Choose a supported image up to 5 MB.');return}busy.current=true;setUploading(true);setUploadError('');try{const result=await uploadImage(file);if(!result.success||!/^https:\/\//i.test(result.url||''))throw Error(result.error||'Upload failed');onUpdate({...latest.current,ogImage:result.url})}catch(e){setUploadError(e.message)}finally{busy.current=false;setUploading(false)}};
   const handleChange = (field, value) => {
     onUpdate({ ...meta, [field]: value });
   };
@@ -99,10 +103,12 @@ const SeoPanel = ({ meta, onUpdate, previewUrl }) => {
           <input
             type="text"
             value={meta.ogImage || ''}
+            onPaste={e=>{const file=Array.from(e.clipboardData.items).find(i=>i.kind==='file'&&i.type.startsWith('image/'))?.getAsFile();if(file){e.preventDefault();upload(file)}}}
             onChange={(e) => handleChange('ogImage', e.target.value)}
             className="w-full px-3 py-2 border rounded-lg text-sm"
             placeholder="https://onlibry.in/images/og-image.jpg"
           />
+          <div className="flex flex-wrap gap-2 mt-2"><label className="border rounded px-3 py-2 text-sm cursor-pointer">Upload image<input type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/avif" disabled={uploading} className="sr-only" onChange={e=>{upload(e.target.files?.[0]);e.target.value=''}}/></label><button type="button" disabled={uploading} className="border rounded px-3 py-2 text-sm" onClick={async()=>{try{const items=await navigator.clipboard.read();for(const item of items){const type=item.types.find(t=>t.startsWith('image/'));if(type){const blob=await item.getType(type);await upload(new File([blob],'clipboard-image',{type}));return}}setUploadError('No image in clipboard.')}catch{setUploadError('Clipboard permission unavailable. Focus the URL field and paste directly.')}}}>Paste image</button></div><p role="status" className="text-xs">{uploading?'Uploading image…':uploadError}</p>
           {meta.ogImage && <img src={meta.ogImage} alt="OG image preview" className="blog-featured" />}
         </div>
 

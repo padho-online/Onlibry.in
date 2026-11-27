@@ -1,3 +1,4 @@
+import PageSkeleton from './PageSkeleton';
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, FileText } from 'lucide-react';
@@ -17,7 +18,7 @@ export default function RecentPosts() {
     <section aria-labelledby="recent-posts-heading" className="min-w-0 max-h-[50vh] flex flex-col overflow-hidden rounded-xl border border-gray-200 bg-white p-4">
       <h2 id="recent-posts-heading" className="shrink-0 text-lg font-bold text-gray-800">Recent Posts</h2>
       <Link to="/blog" className="shrink-0 self-start mt-1 mb-3 inline-flex items-center gap-1 text-sm font-medium text-green-700 hover:underline">See all posted articles <ArrowRight size={14} /></Link>
-      {loading ? <p role="status" className="py-4 text-sm text-gray-500">Loading recent posts...</p> : posts.length === 0 ? <p className="py-4 text-sm text-gray-500">No recent posts available.</p> : (
+      {loading ? <PageSkeleton/> : posts.length === 0 ? <p className="py-4 text-sm text-gray-500">No recent posts available.</p> : (
         <div role="region" aria-labelledby="recent-posts-heading" tabIndex={0} className="min-h-0 overflow-y-auto overflow-x-hidden divide-y divide-gray-100 pr-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-green-600">
           {posts.map(post => (
             <Link key={post.id} to={`/blog/${post.slug}`} className="group flex items-start gap-3 py-3">

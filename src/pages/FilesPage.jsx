@@ -1,3 +1,4 @@
+import PageSkeleton from '../components/PageSkeleton';
 // src/pages/FilesPage.jsx - with Exact/Subpage/Basic Search + URL Routes
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
@@ -300,9 +301,10 @@ function FilesPage() {
         <div className="flex-1 relative">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
-            type="text"
             value={searchInputValue}
             onChange={(e) => setSearchInputValue(e.target.value)}
+            aria-label="Search files"
+            type="search"
             placeholder={getPlaceholder()}
             className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
           />
@@ -331,7 +333,7 @@ function FilesPage() {
 
       {loading ? (
         <div className="flex justify-center py-12">
-          <div className="w-8 h-8 border-3 border-green-500 border-t-transparent rounded-full animate-spin"></div>
+          <PageSkeleton />
         </div>
       ) : files.length > 0 ? (
         <>

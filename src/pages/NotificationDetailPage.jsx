@@ -1,3 +1,4 @@
+import PageSkeleton from '../components/PageSkeleton';
 // src/pages/NotificationDetailPage.jsx
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -50,7 +51,7 @@ function NotificationDetailPage() {
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-[60vh]">
-        <div className="w-10 h-10 border-4 border-green-500 border-t-transparent rounded-full animate-spin"></div>
+        <PageSkeleton />
       </div>
     );
   }

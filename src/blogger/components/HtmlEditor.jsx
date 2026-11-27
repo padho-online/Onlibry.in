@@ -25,9 +25,9 @@ export default function HtmlEditor({ content = '', onChange, placeholder = 'Writ
     const api = import.meta.env.VITE_BLOG_API_URL;
     const editor = Jodit.make(host.current, {
       height: 580, minHeight: 350, width: '100%', theme: 'default',
-      placeholder, toolbarAdaptive: false, buttons: ['source','undo','redo','bold','italic','underline','strikethrough','paragraph','fontsize','brush','ul','ol','outdent','indent','align','link','image','table','hr','fullsize'], defaultImageWidth: 250, toolbarSticky: true, spellcheck: true,
+      placeholder, toolbarAdaptive: false, toolbarButtonSize: 'small', buttons: ['undo','redo','bold','italic','underline','strikethrough','paragraph','fontsize','outdent','indent','align','link','table','hr','fullsize'], defaultImageWidth: 250, toolbarSticky: true, spellcheck: true,
       showCharsCounter: true, showWordsCounter: true, showXPathInStatusbar: false,
-      enter: 'p', useNativeTooltip: true, allowResizeX: true, allowResizeY: true,
+      enter: 'p', useNativeTooltip: true, allowResizeX: false, allowResizeY: true,
       askBeforePasteHTML: true, askBeforePasteFromWord: true,
       uploader: {
         url: api ? `${api.replace(/\/$/, '')}/api/upload` : '',

@@ -1,3 +1,4 @@
+import PageSkeleton from '../components/PageSkeleton';
 // src/pages/ExamResultsPage.jsx - Mobile optimized
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
@@ -43,7 +44,7 @@ function ExamResultsPage() {
   };
 
   if (loading) {
-    return <div className="flex justify-center py-12"><div className="w-8 h-8 border-3 border-green-500 border-t-transparent rounded-full animate-spin"></div></div>;
+    return <div className="flex justify-center py-12"><PageSkeleton /></div>;
   }
 
   if (!results) {

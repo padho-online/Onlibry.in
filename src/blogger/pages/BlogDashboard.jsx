@@ -1,3 +1,4 @@
+import PageSkeleton from '../../components/PageSkeleton';
 // src/blogger/pages/BlogDashboard.jsx
 // Fixed - Working edit navigation with debug
 
@@ -5,11 +6,15 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { getUserPosts, deleteBlogPost } from '../services/blogService';
-import { Plus, Edit, Trash2, Eye, Globe } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, Share2, BarChart2 } from 'lucide-react';
 
+import ShareDialog from '../components/ShareDialog';
+import '../styles/blogger.css';
 function BlogDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [status,setStatus]=useState('published');
+  const [sharing,setSharing]=useState(null);
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -60,13 +65,13 @@ function BlogDashboard() {
     total: posts.length,
     published: publishedPosts.length,
     drafts: draftPosts.length,
-    totalViews: posts.reduce((sum, p) => sum + (p.views || 0), 0),
+    totalViews: posts.reduce((sum, p) => sum + (Number(p.views) || 0), 0),
   };
 
   if (loading) {
     return (
       <div className="flex justify-center py-20">
-        <div className="w-8 h-8 border-3 border-green-500 border-t-transparent rounded-full animate-spin"></div>
+        <PageSkeleton />
       </div>
     );
   }
@@ -105,72 +110,10 @@ function BlogDashboard() {
           </div>
         </div>
 
-        {/* Published Posts */}
-        {publishedPosts.length > 0 && (
-          <div className="mb-6">
-            <h2 className="text-lg font-semibold mb-3">Published</h2>
-            <div className="space-y-3">
-              {publishedPosts.map((post) => (
-                <div
-                  key={post.id}
-                  className="bg-white rounded-lg border border-gray-200 p-4 flex flex-wrap items-center justify-between gap-3"
-                >
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-gray-800">{post.title}</h3>
-                    <p className="text-xs text-gray-400 mt-1">Slug: {post.slug}</p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <Link to={`/blog/${post.slug}`} target="_blank" className="p-2 text-gray-500 hover:text-green-600">
-                      <Eye size={16} />
-                    </Link>
-                    <button onClick={() => handleEdit(post.id)} className="p-2 text-gray-500 hover:text-blue-600">
-                      <Edit size={16} />
-                    </button>
-                    <button onClick={() => handleDelete(post.id)} className="p-2 text-gray-500 hover:text-red-600">
-                      <Trash2 size={16} />
-                    </button>
-                    <Globe size={14} className="text-green-500" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Drafts */}
-        {draftPosts.length > 0 && (
-          <div>
-            <h2 className="text-lg font-semibold mb-3">Drafts</h2>
-            <div className="space-y-3">
-              {draftPosts.map((post) => (
-                <div
-                  key={post.id}
-                  className="bg-white rounded-lg border border-gray-200 p-4 flex flex-wrap items-center justify-between gap-3"
-                >
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-gray-800">{post.title}</h3>
-                    <p className="text-xs text-gray-400 mt-1">Last updated: {new Date(post.updatedAt).toLocaleDateString()}</p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button onClick={() => handleEdit(post.id)} className="p-2 text-gray-500 hover:text-blue-600">
-                      <Edit size={16} />
-                    </button>
-                    <button onClick={() => handleDelete(post.id)} className="p-2 text-gray-500 hover:text-red-600">
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Empty State */}
-        {posts.length === 0 && (
-          <div className="text-center py-12 bg-gray-50 rounded-lg">
-            <p className="text-gray-500">No posts yet. Click "New Post" to create your first blog!</p>
-          </div>
-        )}
+        <div className="flex items-center justify-between mb-3"><label htmlFor="post-status">Posts</label><select id="post-status" className="border rounded-lg px-3 py-2 text-sm" value={status} onChange={e=>setStatus(e.target.value)}><option value="published">Published ({publishedPosts.length})</option><option value="draft">Drafts ({draftPosts.length})</option></select></div>
+        <div className="space-y-2">{posts.filter(p=>p.status===status).map(post=><div key={post.id} className="blog-dashboard-card"><h3>{post.title}</h3><div className="blog-dashboard-actions"><span title="Views"><BarChart2 size={16}/>{Number(post.views||0).toLocaleString()}</span><Link aria-label="View post" title={status==='draft'?'Open draft editor':'View post'} to={status==='published'?`/blog/${post.slug}`:`/blog/edit/${post.id}`}><Eye size={17}/></Link><button title="Edit" aria-label="Edit" onClick={()=>handleEdit(post.id)}><Edit size={17}/></button><button title="Delete" aria-label="Delete" onClick={()=>handleDelete(post.id)}><Trash2 size={17}/></button><button title="Share" aria-label="Share" disabled={status!=='published'} onClick={()=>setSharing(post)}><Share2 size={17}/></button></div></div>)}</div>
+        {!posts.some(p=>p.status===status)&&<p className="text-center py-8 text-gray-500">No {status} posts.</p>}
+        {sharing&&<ShareDialog post={sharing} onClose={()=>setSharing(null)}/>}
       </div>
     </div>
   );

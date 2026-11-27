@@ -1,3 +1,4 @@
+import PageSkeleton from '../components/PageSkeleton';
 import React, { useEffect, useMemo, useState } from 'react';
 import { getExamUpdates, rankExamUpdates, recentExamUpdates } from '../services/examFetchService';
 import ExamUpdateCard from '../components/ExamUpdateCard';
@@ -10,6 +11,7 @@ export default function ExamUpdatesPage() {
     <h1 className="text-3xl font-bold text-gray-800">Exam Updates</h1>
     <div className="flex items-center gap-2 border rounded-lg bg-white p-3"><Search size={18} className="text-gray-500"/><input type="search" aria-label="Search exam notices" className="w-full min-w-0 outline-none" placeholder="Search by keywords, e.g. MBA Osmania December" value={q} onChange={e=>{setQ(e.target.value);setLimit(30);}}/></div>
     <p role="status" className="text-sm text-gray-600">{status||`Showing ${Math.min(limit,list.length)} of ${list.length} notices`}</p>
+    {status==='Loading…'&&<PageSkeleton/>}
     {status&&status!=='Loading…'&&<button onClick={()=>setAttempt(a=>a+1)}>Retry</button>}
     {!status&&!list.length&&<p>No matching notices found.</p>}
     {list.slice(0,limit).map(r=><ExamUpdateCard key={r.id} record={r}/>)}

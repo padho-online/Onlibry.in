@@ -1,3 +1,5 @@
+import PageSkeleton from '../../components/PageSkeleton';
+import ShareDialog from '../components/ShareDialog';
 import '../styles/blogger.css';
 import BlogCard from '../components/BlogCard';
 import { sanitizeHtml } from '../utils/sanitizeHtml';
@@ -12,6 +14,7 @@ import { Calendar, Clock, User, Share2 } from 'lucide-react';
 
 function BlogPage() {
   const { slug } = useParams();
+  const [sharing,setSharing]=useState(false);
   const [post, setPost] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -44,45 +47,11 @@ function BlogPage() {
     }
   };
 
-  // Native Share Function - Mobile friendly
-  const handleShare = async () => {
-    const shareData = {
-      title: post?.title || 'Onlibry Blog',
-      text: post?.meta?.description || post?.excerpt || 'Check out this post on Onlibry Blog',
-      url: window.location.href,
-    };
-
-    // Check if Web Share API is supported (mobile devices)
-    if (navigator.share && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
-      try {
-        await navigator.share(shareData);
-        console.log('Shared successfully');
-      } catch (error) {
-        console.log('Share cancelled or failed:', error);
-        // Fallback to copy on error
-        fallbackCopy();
-      }
-    } else {
-      // Desktop fallback - copy to clipboard
-      fallbackCopy();
-    }
-  };
-
-  // Fallback for desktop or when native share fails
-  const fallbackCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(window.location.href);
-      alert('✅ Link copied to clipboard!');
-    } catch (err) {
-      console.error('Copy failed:', err);
-      alert('Press Ctrl+C to copy the link');
-    }
-  };
-
+  const handleShare=async()=>{if(navigator.share&&/Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)){try{await navigator.share({title:post.title,text:post.meta?.description||post.excerpt||'',url:window.location.href});return}catch(e){if(e.name==='AbortError')return}}setSharing(true)};
   if (loading) {
     return (
       <div className="min-h-screen bg-white flex justify-center py-20">
-        <div className="w-8 h-8 border-3 border-green-500 border-t-transparent rounded-full animate-spin"></div>
+        <PageSkeleton />
       </div>
     );
   }
@@ -101,6 +70,7 @@ function BlogPage() {
 
   return (
     <>
+      {sharing&&<ShareDialog post={post} onClose={()=>setSharing(false)}/>}
       <title>{post.meta?.title || post.title} | Onlibry Blog</title>
       <meta name="description" content={post.meta?.description || post.content?.substring(0, 160)} />
       <meta name="keywords" content={post.meta?.tags} />

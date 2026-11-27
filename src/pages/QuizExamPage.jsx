@@ -1,3 +1,4 @@
+import PageSkeleton from '../components/PageSkeleton';
 // src/pages/QuizExamPage.jsx - Mobile optimized
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
@@ -282,7 +283,7 @@ function QuizExamPage() {
   }
 
   if (loading || checkingAccess) {
-    return <div className="flex justify-center py-12"><div className="w-8 h-8 border-3 border-purple-500 border-t-transparent rounded-full animate-spin"></div></div>;
+    return <div className="flex justify-center py-12"><PageSkeleton /></div>;
   }
 
   if (error || !quizData.questions || quizData.questions.length === 0) {

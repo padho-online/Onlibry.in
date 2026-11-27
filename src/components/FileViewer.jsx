@@ -1,3 +1,4 @@
+import PageSkeleton from './PageSkeleton';
 // src/components/FileViewer.jsx
 // UPDATED - Handles preview mode from URL params + Ad Gate for free files
 
@@ -247,7 +248,7 @@ setCanView(hasAccess);
   if (loading || checkingAccess) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh]">
-        <div className="w-12 h-12 border-4 border-green-500 border-t-transparent rounded-full animate-spin"></div>
+        <PageSkeleton/>
         <p className="mt-4 text-gray-600">Loading file...</p>
       </div>
     );

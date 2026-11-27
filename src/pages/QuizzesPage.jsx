@@ -1,3 +1,4 @@
+import PageSkeleton from '../components/PageSkeleton';
 // src/pages/QuizzesPage.jsx - with Search Logs to Sheet + Debounce + Page Path + URL Params
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
@@ -200,7 +201,7 @@ function QuizzesPage() {
   };
 
   if (loading) {
-    return <div className="flex justify-center py-12"><div className="w-8 h-8 border-3 border-purple-500 border-t-transparent rounded-full animate-spin"></div></div>;
+    return <div className="flex justify-center py-12"><PageSkeleton /></div>;
   }
 
   return (
