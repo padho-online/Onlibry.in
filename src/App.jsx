@@ -1,17 +1,32 @@
 // src/App.jsx
-// UPDATED - Added Blog CMS Routes + Notification Routes + Home Editor Admin Route
-// 🔥 FIXED: Page view logging with React Router
-// 🆕 ADDED: Files search routes with mode and query parameters
+// Onlibry Application
+// CanonicalX V1 - Dynamic SEO Canonical Integration
+// Blog CMS + Notifications + Admin Dashboard
+// Page View Logging + Protected Routes
 
 import React, { useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  useLocation
+} from 'react-router-dom';
 
+// Context Providers
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider } from './contexts/AuthContext';
 import { CartProvider } from './contexts/CartContext';
 
-import { initPageViewLogger, logCurrentPageView } from './services/loggerService';
+// SEO Engine
+import CanonicalX from './seo/CanonicalX';
 
+// Analytics and Logging
+import {
+  initPageViewLogger,
+  logCurrentPageView
+} from './services/loggerService';
+
+// Layout and Route Protection
 import MainLayout from './layouts/MainLayout';
 import ProtectedRoute from './components/ProtectedRoute';
 import AdminGuard from './components/AdminGuard';
@@ -44,7 +59,7 @@ import ExamUpdatesPage from './pages/ExamUpdatesPage';
 import NotificationsPage from './pages/NotificationsPage';
 import NotificationDetailPage from './pages/NotificationDetailPage';
 
-// Import Info Pages
+// Information Pages
 import InfoHub from './Info/InfoHub';
 
 // Admin Pages
@@ -54,21 +69,29 @@ import FilesManager from './pages/admin/FilesManager';
 import FileUploadManager from './pages/admin/FileUploadManager';
 import HomeEditor from './pages/admin/HomeEditor';
 
-// 🔥 NEW: Component to track route changes for page views
+
+// ========================================
+// PAGE VIEW TRACKER
+// ========================================
+
 function RouteChangeTracker() {
   const location = useLocation();
 
   useEffect(() => {
-    // Log page view on every route change
     logCurrentPageView();
   }, [location.pathname]);
 
   return null;
 }
 
+
+// ========================================
+// MAIN APPLICATION
+// ========================================
+
 function App() {
+
   useEffect(() => {
-    // Initialize logger (for popstate and beforeunload)
     initPageViewLogger();
   }, []);
 
@@ -77,42 +100,153 @@ function App() {
       <AuthProvider>
         <CartProvider>
           <Router>
+
+            {/* CanonicalX SEO Engine */}
+            <CanonicalX />
+
             <MainLayout>
-              {/* 🔥 Route change tracker - logs every page view */}
+
+              {/* Page View Tracking */}
               <RouteChangeTracker />
+
               <Routes>
-                {/* Public Routes */}
+
+                {/* =========================
+                    PUBLIC ROUTES
+                ========================= */}
+
                 <Route path="/" element={<HomePage />} />
-                <Route path="/login" element={<LoginPage />} />
-                <Route path="/pricing" element={<PricingPage />} />
-                
-                {/* Files Routes - Support search with mode and query */}
-                <Route path="/files" element={<FilesPage />} />
-                <Route path="/files/search/:mode/:query*" element={<FilesPage />} />
-                <Route path="/files/search/:query*" element={<FilesPage />} />
-                
-                <Route path="/folders" element={<FoldersPage />} />
-                <Route path="/mock-tests" element={<MockTestsPage />} />
-                <Route path="/mock-test/:examName" element={<ExamPage />} />
-                <Route path="/mock-test-results" element={<ExamResultsPage />} />
-                <Route path="/quizzes" element={<QuizzesPage />} />
-                <Route path="/quiz/:quizName" element={<QuizExamPage />} />
-                <Route path="/quiz-results" element={<QuizResultsPage />} />
 
-                {/* Blog Routes */}
-                <Route path="/blog" element={<BlogHome />} />
-                <Route path="/blog/:slug" element={<BlogPage />} />
+                <Route
+                  path="/login"
+                  element={<LoginPage />}
+                />
 
-                {/* Notification Routes */}
-                <Route path="/exam-updates" element={<ExamUpdatesPage />} />
-                <Route path="/notifications" element={<NotificationsPage />} />
-                <Route path="/notification/:id" element={<NotificationDetailPage />} />
+                <Route
+                  path="/pricing"
+                  element={<PricingPage />}
+                />
 
-                {/* Info Pages */}
-                <Route path="/info" element={<InfoHub />} />
-                <Route path="/info/:tab" element={<InfoHub />} />
 
-                {/* Protected Blog Routes */}
+                {/* =========================
+                    FILES AND FOLDERS
+                ========================= */}
+
+                <Route
+                  path="/files"
+                  element={<FilesPage />}
+                />
+
+                <Route
+                  path="/files/search/:mode/:query*"
+                  element={<FilesPage />}
+                />
+
+                <Route
+                  path="/files/search/:query*"
+                  element={<FilesPage />}
+                />
+
+                <Route
+                  path="/folders"
+                  element={<FoldersPage />}
+                />
+
+
+                {/* =========================
+                    MOCK TESTS
+                ========================= */}
+
+                <Route
+                  path="/mock-tests"
+                  element={<MockTestsPage />}
+                />
+
+                <Route
+                  path="/mock-test/:examName"
+                  element={<ExamPage />}
+                />
+
+                <Route
+                  path="/mock-test-results"
+                  element={<ExamResultsPage />}
+                />
+
+
+                {/* =========================
+                    QUIZZES
+                ========================= */}
+
+                <Route
+                  path="/quizzes"
+                  element={<QuizzesPage />}
+                />
+
+                <Route
+                  path="/quiz/:quizName"
+                  element={<QuizExamPage />}
+                />
+
+                <Route
+                  path="/quiz-results"
+                  element={<QuizResultsPage />}
+                />
+
+
+                {/* =========================
+                    PUBLIC BLOG ROUTES
+                ========================= */}
+
+                <Route
+                  path="/blog"
+                  element={<BlogHome />}
+                />
+
+                <Route
+                  path="/blog/:slug"
+                  element={<BlogPage />}
+                />
+
+
+                {/* =========================
+                    EXAM AND NOTIFICATIONS
+                ========================= */}
+
+                <Route
+                  path="/exam-updates"
+                  element={<ExamUpdatesPage />}
+                />
+
+                <Route
+                  path="/notifications"
+                  element={<NotificationsPage />}
+                />
+
+                <Route
+                  path="/notification/:id"
+                  element={<NotificationDetailPage />}
+                />
+
+
+                {/* =========================
+                    INFORMATION ROUTES
+                ========================= */}
+
+                <Route
+                  path="/info"
+                  element={<InfoHub />}
+                />
+
+                <Route
+                  path="/info/:tab"
+                  element={<InfoHub />}
+                />
+
+
+                {/* =========================
+                    PROTECTED BLOG ROUTES
+                ========================= */}
+
                 <Route
                   path="/blog/dashboard"
                   element={
@@ -121,6 +255,7 @@ function App() {
                     </ProtectedRoute>
                   }
                 />
+
                 <Route
                   path="/blog/create"
                   element={
@@ -129,6 +264,7 @@ function App() {
                     </ProtectedRoute>
                   }
                 />
+
                 <Route
                   path="/blog/edit/:id"
                   element={
@@ -138,7 +274,11 @@ function App() {
                   }
                 />
 
-                {/* Protected Routes */}
+
+                {/* =========================
+                    PROTECTED USER ROUTES
+                ========================= */}
+
                 <Route
                   path="/saved-files"
                   element={
@@ -148,11 +288,26 @@ function App() {
                   }
                 />
 
-                {/* Viewer */}
-                <Route path="/viewer/:fileId" element={<ViewerPage />} />
-                <Route path="/viewer" element={<ViewerPage />} />
 
-                {/* Admin Routes */}
+                {/* =========================
+                    FILE VIEWER
+                ========================= */}
+
+                <Route
+                  path="/viewer/:fileId"
+                  element={<ViewerPage />}
+                />
+
+                <Route
+                  path="/viewer"
+                  element={<ViewerPage />}
+                />
+
+
+                {/* =========================
+                    ADMIN ROUTES
+                ========================= */}
+
                 <Route
                   path="/admin"
                   element={
@@ -161,17 +316,48 @@ function App() {
                     </AdminGuard>
                   }
                 >
-                  <Route index element={<FileUploadManager />} />
-                  <Route path="upload" element={<FileUploadManager />} />
-                  <Route path="files" element={<FilesManager />} />
-                  <Route path="home" element={<HomeEditor />} />
-                  <Route path="plans" element={<PlansEditor />} />
+
+                  <Route
+                    index
+                    element={<FileUploadManager />}
+                  />
+
+                  <Route
+                    path="upload"
+                    element={<FileUploadManager />}
+                  />
+
+                  <Route
+                    path="files"
+                    element={<FilesManager />}
+                  />
+
+                  <Route
+                    path="home"
+                    element={<HomeEditor />}
+                  />
+
+                  <Route
+                    path="plans"
+                    element={<PlansEditor />}
+                  />
+
                 </Route>
 
-                {/* 404 */}
-                <Route path="*" element={<NotFoundPage />} />
+
+                {/* =========================
+                    404 NOT FOUND
+                ========================= */}
+
+                <Route
+                  path="*"
+                  element={<NotFoundPage />}
+                />
+
               </Routes>
+
             </MainLayout>
+
           </Router>
         </CartProvider>
       </AuthProvider>
