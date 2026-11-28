@@ -31,7 +31,7 @@ function NotificationsPage() {
   const [loading, setLoading] = useState(true);
   const [pagination, setPagination] = useState({
     page: 1,
-    limit: 10,
+    limit: 15,
     total: 0,
     totalPages: 0
   });
