@@ -52,7 +52,7 @@ function NotificationCard({ notification, compact = false }) {
       >
         <div className="flex items-start gap-2">
           <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${dotColor}`}></div>
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
               <CategoryIcon size={12} className="text-gray-500" />
               <h4 className="text-sm font-semibold text-gray-800">
@@ -77,7 +77,7 @@ function NotificationCard({ notification, compact = false }) {
   return (
     <Link
       to={detailUrl}
-      className={`bg-white rounded-xl shadow-sm p-4 mb-3 hover:shadow-md transition border border-gray-200 `}
+      className={`manual-notice bg-white rounded-xl shadow-sm p-4 mb-3 hover:shadow-md transition border border-gray-200 `}
       style={{ cursor: 'pointer', display: 'block' }}
     >
       <div className="flex items-start gap-3">
@@ -85,7 +85,7 @@ function NotificationCard({ notification, compact = false }) {
           <div className={`w-3 h-3 rounded-full ${dotColor}`}></div>
           <CategoryIcon size={16} className="text-gray-500" />
         </div>
-        <div className="flex-1">
+        <div className="flex-1 min-w-0">
           <h3 className="text-base font-bold text-gray-800 mb-2">
             {notification.title}
           </h3>

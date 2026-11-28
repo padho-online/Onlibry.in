@@ -77,11 +77,11 @@ function Header() {
 
   return (
     <header className="bg-white shadow-md sticky top-0 z-50 border-b border-gray-200">
-      <div className="container mx-auto px-2 sm:px-3 py-3 max-w-7xl">
-        <div className="flex items-center justify-between">
+      <div className="w-full min-w-0 mx-auto px-2 sm:px-3 py-3 max-w-7xl">
+        <div className="flex min-w-0 items-center justify-between">
 
           {/* LEFT SECTION - Logo */}
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             <Link to="/" aria-label="Onlibry Home" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-2">
               <img src={logo} alt="Onlibry" className="h-8 w-auto" />
               <span className="text-xl font-bold text-green-600 hidden sm:inline">
@@ -104,10 +104,10 @@ function Header() {
           </nav>
 
           {/* RIGHT SECTION */}
-          <div className="flex shrink-0 items-center gap-1">
+          <div className="flex min-w-0 items-center gap-1">
 
             {/* MOBILE QUICK NAV ICONS */}
-            <div className="md:hidden flex items-center gap-0 sm:gap-0.5">
+            <div className="ol-header-quick md:hidden flex items-center gap-0 sm:gap-0.5">
               <Link
                 to="/blog"
                 aria-label="Posts"
@@ -170,7 +170,7 @@ function Header() {
             <Link
               to="/pricing"
               state={{ activeTab: 'cart' }}
-              className={`relative p-1 sm:p-2 rounded-lg transition ${
+              className={`relative shrink-0 p-1 sm:p-2 rounded-lg transition ${
                 isActive('/pricing') ? 'bg-green-50 text-green-600' : 'text-gray-700 hover:bg-gray-100'
               }`}
             >
@@ -216,7 +216,7 @@ function Header() {
             {/* MOBILE MENU BUTTON */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden p-1 sm:p-2 rounded-lg hover:bg-gray-100 transition"
+              className="md:hidden shrink-0 p-1 sm:p-2 rounded-lg hover:bg-gray-100 transition"
             >
               {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
             </button>

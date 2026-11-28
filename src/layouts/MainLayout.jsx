@@ -5,11 +5,11 @@ import Footer from '../components/Footer';
 
 function MainLayout({ children }) {
   const pathname = useLocation().pathname;
-  const isHome = pathname === '/' || pathname === '/blog' || pathname.startsWith('/blog/');
+  const isHome = ['/exam-updates','/notifications'].includes(pathname) || pathname === '/' || pathname === '/blog' || pathname.startsWith('/blog/');
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="flex flex-col min-h-screen w-full min-w-0">
       <Header />
-      <main className={isHome ? "flex-1 w-full min-w-0 px-3 lg:px-3 py-6" : "flex-1 container mx-auto px-4 py-6 max-w-7xl"}>
+      <main className={isHome ? "flex-1 w-full min-w-0 px-3 lg:px-3 py-6" : "flex-1 w-full min-w-0 container mx-auto px-4 py-6 max-w-7xl"}>
         {children}
       </main>
       <Footer />

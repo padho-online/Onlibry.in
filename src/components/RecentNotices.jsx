@@ -15,7 +15,7 @@ export default function RecentNotices() {
       try {
         const [manual, exams] = await Promise.allSettled([getLatestNotificationsFromD1(10), getExamUpdates()]);
         const data = manual.status === 'fulfilled' && Array.isArray(manual.value) ? manual.value : [];
-        const automatic = exams.status === 'fulfilled' ? exams.value.filter(confirmedPublished).map(r => ({id:'examfetch:'+r.id, title:r.title, published_at:r.published, detailUrl:examDetailUrl(r)})) : [];
+        const automatic = exams.status === 'fulfilled' ? exams.value.filter(confirmedPublished).map(r => ({id:'examfetch:'+r.id, title:r.title, university:r.university, published_at:r.published, detailUrl:examDetailUrl(r)})) : [];
         const merged = [...data, ...automatic].sort((a,b) => (Date.parse(b.published_at)||0)-(Date.parse(a.published_at)||0));
         if (active) { setNotices(merged.slice(0,10)); setError(manual.status==='rejected' && exams.status==='rejected'); }
       } catch {
@@ -38,7 +38,7 @@ export default function RecentNotices() {
               <Bell size={18} className="mt-1 shrink-0 text-green-600" />
               <div className="min-w-0">
                 <h3 className="break-words [overflow-wrap:anywhere] text-sm font-semibold text-gray-800 group-hover:text-green-700">{notice.title}</h3>
-                {notice.published_at && <p className="mt-1 text-xs text-gray-500">{new Date(notice.published_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</p>}
+                {notice.published_at && <p className="mt-1 text-xs text-gray-500">{new Date(notice.published_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}{notice.university && ` - ${notice.university}`}</p>}
               </div>
             </Link>
           ))}

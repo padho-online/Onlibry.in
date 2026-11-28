@@ -84,7 +84,7 @@ function NotificationsPage() {
   };
 
   return (
-    <div className="py-4 md:py-6 max-w-4xl mx-auto px-4">
+    <div className="py-4 md:py-6 w-full min-w-0 mx-auto px-4">
       {/* Header */}
       <div className="text-center mb-6">
         <h1 className="text-2xl md:text-3xl font-bold text-gray-800 mb-2">
@@ -141,7 +141,7 @@ function NotificationsPage() {
 
       {/* Loading State */}
       {loading ? (
-        <div className="space-y-3">
+        <div className="notice-grid space-y-3 md:space-y-0">
           {[1, 2, 3, 4, 5].map((i) => (
             <div key={i} className="bg-white rounded-xl p-4 animate-pulse border border-gray-200">
               <div className="flex gap-3">
@@ -171,7 +171,7 @@ function NotificationsPage() {
           )}
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="notice-grid space-y-3 md:space-y-0">
           {notifications.map((notification) => (
             notification.examRecord ? <ExamUpdateCard key={notification.id} record={notification.examRecord}/> : <NotificationCard key={notification.id} notification={notification} compact={false} />
           ))}
